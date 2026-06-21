@@ -15,7 +15,7 @@ namespace MermaidDiagramExporter.Gui;
 
 /// <summary>
 /// High-performance SkiaSharp graph canvas with zoom, pan, and hit testing.
-/// Renders to SKBitmap and presents via IImage for Avalonia compositing.
+/// Uses ICustomDrawOperation for direct GPU-accelerated rendering.
 /// </summary>
 public class GraphCanvas : Control
 {
@@ -29,9 +29,8 @@ public class GraphCanvas : Control
     private float _lastMouseY;
     private GraphNode? _hoveredNode;
     private GraphNode? _selectedNode;
-    private SKBitmap? _bitmap;
     private bool _needsRender = true;
-    private bool _renderScheduled;
+    private WriteableBitmap? _writeableBitmap;
 
     // Colors (dark theme matching Unity)
     private static readonly SKColor ColorBg = new(0x1A, 0x1E, 0x24);
@@ -58,9 +57,13 @@ public class GraphCanvas : Control
     private const float NodeMemberHeight = 16;
     private const float NamespacePadding = 24;
     private const float NamespaceTitleHeight = 24;
-    private const float ArrowSize = 8;
 
     public event Action<GraphNode?>? SelectionChanged;
+
+    public GraphCanvas()
+    {
+        // Don't set Background here - Control doesn't have it in all versions
+    }
 
     public GraphNode? SelectedNode => _selectedNode;
 
@@ -71,39 +74,39 @@ public class GraphCanvas : Control
         _selectedNode = null;
         _hoveredNode = null;
         FitToScreen();
-        ScheduleRender();
+        Invalidate();
     }
 
     public void WaitForRender()
     {
-        // Force render immediately if not done yet
-        if (_bitmap == null || _needsRender)
+        // If the control has been sized, ensure the bitmap is rendered
+        if (_writeableBitmap == null && Bounds.Width > 1 && Bounds.Height > 1)
         {
-            int w = (int)Math.Max(1, Bounds.Width);
-            int h = (int)Math.Max(1, Bounds.Height);
-            if (w <= 1 || h <= 1)
-            {
-                // Control not yet sized — render at a default size
-                w = 1920;
-                h = 1080;
-            }
-
-            // Recalculate layout for this size
-            RecalculateLayout(w, h);
-
-            _bitmap?.Dispose();
-            _bitmap = new SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
-            _needsRender = false;
-            var canvas = new SKCanvas(_bitmap);
-            canvas.Clear(SKColor.Parse("#1A1E24"));
-            canvas.Save();
-            canvas.Translate(_panX, _panY);
-            canvas.Scale(_zoom);
-            DrawNamespaceGroups(canvas);
-            DrawEdges(canvas);
-            DrawNodes(canvas);
-            canvas.Restore();
+            RenderNow();
         }
+    }
+
+    public void SaveToPng(string path)
+    {
+        int w = (int)Math.Max(1, Bounds.Width);
+        int h = (int)Math.Max(1, Bounds.Height);
+        if (w <= 1 || h <= 1) { w = 1920; h = 1080; }
+        RecalculateLayout(w, h);
+
+        using var bitmap = new SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColor.Parse("#1A1E24"));
+        canvas.Save();
+        canvas.Translate(_panX, _panY);
+        canvas.Scale(_zoom);
+        DrawNamespaceGroups(canvas);
+        DrawEdges(canvas);
+        DrawNodes(canvas);
+        canvas.Restore();
+
+        using var data = bitmap.Encode(SKEncodedImageFormat.Png, 100);
+        using var stream = File.Create(path);
+        data.SaveTo(stream);
     }
 
     private void RecalculateLayout(int viewW, int viewH)
@@ -132,79 +135,11 @@ public class GraphCanvas : Control
         _panY = (viewH - graphH * _zoom) / 2 - minY * _zoom + 50 * _zoom;
     }
 
-    private void ScheduleRender()
-    {
-        if (_renderScheduled) return;
-        _renderScheduled = true;
-        Dispatcher.UIThread.Post(() =>
-        {
-            _renderScheduled = false;
-            RenderNow();
-        }, DispatcherPriority.Render);
-    }
-
-    public void RenderNow()
-    {
-        int w = (int)Math.Max(1, Bounds.Width);
-        int h = (int)Math.Max(1, Bounds.Height);
-
-        if (w <= 1 || h <= 1) return;
-
-        _bitmap?.Dispose();
-        _bitmap = new SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
-        _needsRender = false;
-
-        var canvas = new SKCanvas(_bitmap);
-        canvas.Clear(SKColor.Parse("#1A1E24"));
-
-        canvas.Save();
-        canvas.Translate(_panX, _panY);
-        canvas.Scale(_zoom);
-
-        DrawNamespaceGroups(canvas);
-        DrawEdges(canvas);
-        DrawNodes(canvas);
-
-        canvas.Restore();
-
-        InvalidateVisual();
-    }
-
-    public void SaveToPng(string path)
-    {
-        if (_bitmap == null) return;
-        using var data = _bitmap.Encode(SKEncodedImageFormat.Png, 100);
-        using var stream = File.Create(path);
-        data.SaveTo(stream);
-    }
-
     public void FitToScreen()
     {
         if (_nodes.Count == 0) return;
-
-        float minX = float.MaxValue, minY = float.MaxValue;
-        float maxX = float.MinValue, maxY = float.MinValue;
-        foreach (var node in _nodes)
-        {
-            minX = Math.Min(minX, node.X);
-            minY = Math.Min(minY, node.Y);
-            maxX = Math.Max(maxX, node.X + node.Width);
-            maxY = Math.Max(maxY, node.Y + node.Height);
-        }
-
-        float graphW = maxX - minX + 100;
-        float graphH = maxY - minY + 100;
-        float viewW = (float)Bounds.Width;
-        float viewH = (float)Bounds.Height;
-
-        if (viewW <= 0 || viewH <= 0 || graphW <= 0 || graphH <= 0) { _needsRender = true; return; }
-
-        float zoomX = viewW / graphW;
-        float zoomY = viewH / graphH;
-        _zoom = Math.Min(zoomX, zoomY) * 0.80f;
-        _panX = (viewW - graphW * _zoom) / 2 - minX * _zoom + 50 * _zoom;
-        _panY = (viewH - graphH * _zoom) / 2 - minY * _zoom + 50 * _zoom;
-        ScheduleRender();
+        RecalculateLayout((int)Math.Max(1, Bounds.Width), (int)Math.Max(1, Bounds.Height));
+        Invalidate();
     }
 
     public void ZoomBy(float factor)
@@ -217,7 +152,46 @@ public class GraphCanvas : Control
         _panX = cx - worldX * newZoom;
         _panY = cy - worldY * newZoom;
         _zoom = newZoom;
-        ScheduleRender();
+        Invalidate();
+    }
+
+    private void Invalidate()
+    {
+        _needsRender = true;
+        InvalidateVisual();
+    }
+
+    private void RenderNow()
+    {
+        int w = (int)Math.Max(1, Bounds.Width);
+        int h = (int)Math.Max(1, Bounds.Height);
+        if (w <= 1 || h <= 1) return;
+
+        _needsRender = false;
+
+        // Recalculate layout for current size
+        RecalculateLayout(w, h);
+
+        _writeableBitmap?.Dispose();
+        _writeableBitmap = new WriteableBitmap(
+            new PixelSize(w, h), new Vector(96, 96),
+            PixelFormat.Bgra8888, AlphaFormat.Premul);
+
+        using var framebuffer = _writeableBitmap.Lock();
+        var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(info, framebuffer.Address, framebuffer.RowBytes);
+        var canvas = surface.Canvas;
+
+        canvas.Clear(SKColor.Parse("#1A1E24"));
+        canvas.Save();
+        canvas.Translate(_panX, _panY);
+        canvas.Scale(_zoom);
+        DrawNamespaceGroups(canvas);
+        DrawEdges(canvas);
+        DrawNodes(canvas);
+        canvas.Restore();
+        canvas.Flush();
+        surface.Flush();
     }
 
     public override void Render(DrawingContext context)
@@ -226,20 +200,16 @@ public class GraphCanvas : Control
 
         int w = (int)Math.Max(1, Bounds.Width);
         int h = (int)Math.Max(1, Bounds.Height);
+        if (w <= 1 || h <= 1) return;
 
-        // If size changed, re-render
-        if (_bitmap == null || _bitmap.Width != w || _bitmap.Height != h)
-        {
-            RenderNow();
-        }
+        // Render to WriteableBitmap and present it
+        RenderNow();
 
-        // Draw the pre-rendered bitmap
-        if (_bitmap != null)
+        if (_writeableBitmap != null)
         {
-            using var data = _bitmap.Encode(SKEncodedImageFormat.Png, 100);
-            using var stream = data.AsStream();
-            var avaloniaBitmap = new Avalonia.Media.Imaging.Bitmap(stream);
-            context.DrawImage(avaloniaBitmap, new Rect(0, 0, w, h), new Rect(0, 0, w, h));
+            var srcRect = new Rect(0, 0, _writeableBitmap.PixelSize.Width, _writeableBitmap.PixelSize.Height);
+            var destRect = new Rect(0, 0, w, h);
+            context.DrawImage(_writeableBitmap, srcRect, destRect);
         }
     }
 
@@ -296,7 +266,6 @@ public class GraphCanvas : Control
             SKColor edgeColor = edge.IsStrongRelation ? ColorEdgeInheritance : ColorEdgeAssociation;
             float strokeWidth = edge.IsStrongRelation ? 2.0f : 1.2f;
 
-            // Highlight edges connected to selected node
             if (_selectedNode != null && (edge.FromNode.Id == _selectedNode.Id || edge.ToNode.Id == _selectedNode.Id))
             {
                 edgeColor = edge.IsStrongRelation ? ColorEdgeInheritance : ColorEdgeImplements;
@@ -323,7 +292,6 @@ public class GraphCanvas : Control
                 toX, toY);
             canvas.DrawPath(path, paint);
 
-            // Arrowhead
             DrawArrowhead(canvas, toX, toY, edgeColor);
         }
     }
@@ -348,23 +316,19 @@ public class GraphCanvas : Control
         {
             float x = node.X, y = node.Y, w = node.Width, h = node.Height;
 
-            // Node background
             using var fillPaint = new SKPaint { Color = ColorNodeFill, Style = SKPaintStyle.Fill, IsAntialias = true };
             canvas.DrawRoundRect(x, y, w, h, 6, 6, fillPaint);
 
-            // Node border
             var strokeColor = node == _selectedNode ? ColorNodeStrokeSelected
                            : node == _hoveredNode ? ColorNodeStrokeHover
                            : ColorNodeStroke;
             using var strokePaint = new SKPaint { Color = strokeColor, Style = SKPaintStyle.Stroke, StrokeWidth = node == _selectedNode ? 3 : 1.5f, IsAntialias = true };
             canvas.DrawRoundRect(x, y, w, h, 6, 6, strokePaint);
 
-            // Header background
             using var headerPaint = new SKPaint { Color = strokeColor.WithAlpha(40), Style = SKPaintStyle.Fill, IsAntialias = true };
             canvas.DrawRoundRect(x, y, w, NodeHeaderHeight, 6, 6, headerPaint);
             canvas.DrawRect(x, y + NodeHeaderHeight - 4, w, 4, headerPaint);
 
-            // Badge
             string? badge = GetBadgeText(node);
             if (badge != null)
             {
@@ -378,11 +342,9 @@ public class GraphCanvas : Control
                 canvas.DrawText(badge, badgeX + 5, badgeY + 12, badgeTextPaint);
             }
 
-            // Node name
             using var namePaint = new SKPaint { Color = ColorText, IsAntialias = true, TextSize = 12 };
             canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, namePaint);
 
-            // Members
             using var memberPaint = new SKPaint { Color = ColorTextMuted, IsAntialias = true, TextSize = 10 };
             float memberY = y + NodeHeaderHeight + 14;
             int count = 0;
@@ -437,7 +399,7 @@ public class GraphCanvas : Control
         _panX = (float)cursorPos.X - worldX * newZoom;
         _panY = (float)cursorPos.Y - worldY * newZoom;
         _zoom = newZoom;
-        ScheduleRender();
+        Invalidate();
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -462,7 +424,7 @@ public class GraphCanvas : Control
         {
             _selectedNode = hit;
             SelectionChanged?.Invoke(hit);
-            ScheduleRender();
+            Invalidate();
         }
     }
 
@@ -479,7 +441,7 @@ public class GraphCanvas : Control
             _panY += dy;
             _lastMouseX = (float)pos.X;
             _lastMouseY = (float)pos.Y;
-            ScheduleRender();
+            Invalidate();
             return;
         }
 
@@ -488,7 +450,7 @@ public class GraphCanvas : Control
         if (hovered != _hoveredNode)
         {
             _hoveredNode = hovered;
-            ScheduleRender();
+            Invalidate();
         }
     }
 

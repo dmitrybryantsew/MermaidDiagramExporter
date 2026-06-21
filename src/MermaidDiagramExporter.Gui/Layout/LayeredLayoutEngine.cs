@@ -220,8 +220,8 @@ internal sealed class LayeredLayoutEngine
     {
         var nodes = cluster.NodeIds
             .Select(id => nodeById.TryGetValue(id, out var n) ? n : null)
-            .Where(n => n != null)
-            .ToList()!;
+            .OfType<LayoutNode>()
+            .ToList();
 
         var localRanks = AssignLocalNodeRanks(nodes, graph);
         var orderedNodes = nodes
