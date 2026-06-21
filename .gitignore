@@ -1,0 +1,8 @@
+bin/
+obj/
+*.user
+.vs/
+test-output/
+test-output-self/
+*.md
+!README.md
