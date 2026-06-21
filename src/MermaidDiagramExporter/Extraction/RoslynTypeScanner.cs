@@ -547,7 +547,7 @@ public sealed class RoslynTypeScanner
         if (type.TypeKind == TypeKind.Struct)
             return TypeNodeKind.Struct;
 
-        if (type.IsAbstract && type.IsSealed)
+        if (type.IsStatic)
             return TypeNodeKind.StaticClass;
 
         if (type.IsAbstract)
