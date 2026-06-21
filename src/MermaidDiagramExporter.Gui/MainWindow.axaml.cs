@@ -62,8 +62,16 @@ public partial class MainWindow : Window
             _navigator.Clear();
 
             GraphCanvasView.SetGraph(nodes, edges);
+            GraphCanvasView.WaitForRender();
             UpdateClassList();
             UpdateStats();
+
+            // Auto-save screenshot
+            var dir = Path.Combine(AppContext.BaseDirectory, "export");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, $"diagram_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+            GraphCanvasView.SaveToPng(path);
+            StatsText.Text += $" | Saved: {Path.GetFileName(path)}";
         }
         catch (Exception ex)
         {
@@ -107,6 +115,15 @@ public partial class MainWindow : Window
         }
 
         SelectedNodeText.Text = $"{node.Namespace}.{node.DisplayName}\nKind: {node.Kind}\nFile: {Path.GetFileName(node.AssetPath)}";
+    }
+
+    private void OnSavePng(object? sender, RoutedEventArgs e)
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, "export");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"diagram_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+        GraphCanvasView.SaveToPng(path);
+        StatsText.Text = $"Saved: {path}";
     }
 
     private void OnOpenInExplorer(object? sender, RoutedEventArgs e)

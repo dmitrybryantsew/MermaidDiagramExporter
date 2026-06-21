@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -7,13 +8,14 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Skia;
+using Avalonia.Threading;
 using SkiaSharp;
 
 namespace MermaidDiagramExporter.Gui;
 
 /// <summary>
 /// High-performance SkiaSharp graph canvas with zoom, pan, and hit testing.
-/// Uses offscreen bitmap rendering for maximum compatibility.
+/// Renders to SKBitmap and presents via IImage for Avalonia compositing.
 /// </summary>
 public class GraphCanvas : Control
 {
@@ -27,34 +29,35 @@ public class GraphCanvas : Control
     private float _lastMouseY;
     private GraphNode? _hoveredNode;
     private GraphNode? _selectedNode;
-    private WriteableBitmap? _bitmap;
+    private SKBitmap? _bitmap;
     private bool _needsRender = true;
+    private bool _renderScheduled;
 
-    // Colors
-    private static readonly SKColor ColorBg = new(0xF5, 0xF7, 0xFA);
-    private static readonly SKColor ColorNodeFill = new(0xFF, 0xFF, 0xFF);
-    private static readonly SKColor ColorNodeStroke = new(0x40, 0x80, 0xC0);
+    // Colors (dark theme matching Unity)
+    private static readonly SKColor ColorBg = new(0x1A, 0x1E, 0x24);
+    private static readonly SKColor ColorNodeFill = new(0x2D, 0x33, 0x3F);
+    private static readonly SKColor ColorNodeStroke = new(0x4A, 0x6A, 0x8A);
     private static readonly SKColor ColorNodeStrokeSelected = new(0xFF, 0x8C, 0x00);
     private static readonly SKColor ColorNodeStrokeHover = new(0x60, 0xA0, 0xE0);
-    private static readonly SKColor ColorEdgeInheritance = new(0x20, 0x60, 0xC0);
-    private static readonly SKColor ColorEdgeImplements = new(0x20, 0x90, 0x60);
-    private static readonly SKColor ColorEdgeAssociation = new(0xA0, 0xA0, 0xA0);
-    private static readonly SKColor ColorText = new(0x20, 0x20, 0x20);
-    private static readonly SKColor ColorTextMuted = new(0x80, 0x80, 0x80);
-    private static readonly SKColor ColorNamespaceBg = new(0xE8, 0xEE, 0xF4);
-    private static readonly SKColor ColorNamespaceBorder = new(0xC8, 0xD4, 0xE4);
+    private static readonly SKColor ColorEdgeInheritance = new(0x50, 0x90, 0xD0);
+    private static readonly SKColor ColorEdgeImplements = new(0x40, 0xB0, 0x70);
+    private static readonly SKColor ColorEdgeAssociation = new(0x60, 0x60, 0x60);
+    private static readonly SKColor ColorText = new(0xE0, 0xE6, 0xEC);
+    private static readonly SKColor ColorTextMuted = new(0x88, 0x90, 0x98);
+    private static readonly SKColor ColorNamespaceBg = new(0x25, 0x2A, 0x32);
+    private static readonly SKColor ColorNamespaceBorder = new(0x3A, 0x42, 0x50);
     private static readonly SKColor ColorNamespaceText = new(0x70, 0x80, 0x90);
-    private static readonly SKColor ColorBadgeInterface = new(0x60, 0xA0, 0xE0);
-    private static readonly SKColor ColorBadgeEnum = new(0xE0, 0xA0, 0x40);
-    private static readonly SKColor ColorBadgeStruct = new(0xA0, 0x60, 0xC0);
-    private static readonly SKColor ColorBadgeStatic = new(0xC0, 0x60, 0x60);
-    private static readonly SKColor ColorBadgeAbstract = new(0x40, 0xA0, 0xA0);
+    private static readonly SKColor ColorBadgeInterface = new(0x40, 0x80, 0xC0);
+    private static readonly SKColor ColorBadgeEnum = new(0xC0, 0x80, 0x30);
+    private static readonly SKColor ColorBadgeStruct = new(0x80, 0x50, 0xC0);
+    private static readonly SKColor ColorBadgeStatic = new(0xC0, 0x50, 0x50);
+    private static readonly SKColor ColorBadgeAbstract = new(0x30, 0x80, 0x80);
 
     private const float NodePaddingX = 12;
-    private const float NodeHeaderHeight = 26;
+    private const float NodeHeaderHeight = 28;
     private const float NodeMemberHeight = 16;
-    private const float NamespacePadding = 20;
-    private const float NamespaceTitleHeight = 22;
+    private const float NamespacePadding = 24;
+    private const float NamespaceTitleHeight = 24;
     private const float ArrowSize = 8;
 
     public event Action<GraphNode?>? SelectionChanged;
@@ -68,6 +71,111 @@ public class GraphCanvas : Control
         _selectedNode = null;
         _hoveredNode = null;
         FitToScreen();
+        ScheduleRender();
+    }
+
+    public void WaitForRender()
+    {
+        // Force render immediately if not done yet
+        if (_bitmap == null || _needsRender)
+        {
+            int w = (int)Math.Max(1, Bounds.Width);
+            int h = (int)Math.Max(1, Bounds.Height);
+            if (w <= 1 || h <= 1)
+            {
+                // Control not yet sized — render at a default size
+                w = 1920;
+                h = 1080;
+            }
+
+            // Recalculate layout for this size
+            RecalculateLayout(w, h);
+
+            _bitmap?.Dispose();
+            _bitmap = new SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+            _needsRender = false;
+            var canvas = new SKCanvas(_bitmap);
+            canvas.Clear(SKColor.Parse("#1A1E24"));
+            canvas.Save();
+            canvas.Translate(_panX, _panY);
+            canvas.Scale(_zoom);
+            DrawNamespaceGroups(canvas);
+            DrawEdges(canvas);
+            DrawNodes(canvas);
+            canvas.Restore();
+        }
+    }
+
+    private void RecalculateLayout(int viewW, int viewH)
+    {
+        if (_nodes.Count == 0) return;
+
+        float minX = float.MaxValue, minY = float.MaxValue;
+        float maxX = float.MinValue, maxY = float.MinValue;
+        foreach (var node in _nodes)
+        {
+            minX = Math.Min(minX, node.X);
+            minY = Math.Min(minY, node.Y);
+            maxX = Math.Max(maxX, node.X + node.Width);
+            maxY = Math.Max(maxY, node.Y + node.Height);
+        }
+
+        float graphW = maxX - minX + 100;
+        float graphH = maxY - minY + 100;
+
+        if (graphW <= 0 || graphH <= 0) return;
+
+        float zoomX = viewW / graphW;
+        float zoomY = viewH / graphH;
+        _zoom = Math.Min(zoomX, zoomY) * 0.80f;
+        _panX = (viewW - graphW * _zoom) / 2 - minX * _zoom + 50 * _zoom;
+        _panY = (viewH - graphH * _zoom) / 2 - minY * _zoom + 50 * _zoom;
+    }
+
+    private void ScheduleRender()
+    {
+        if (_renderScheduled) return;
+        _renderScheduled = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _renderScheduled = false;
+            RenderNow();
+        }, DispatcherPriority.Render);
+    }
+
+    public void RenderNow()
+    {
+        int w = (int)Math.Max(1, Bounds.Width);
+        int h = (int)Math.Max(1, Bounds.Height);
+
+        if (w <= 1 || h <= 1) return;
+
+        _bitmap?.Dispose();
+        _bitmap = new SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+        _needsRender = false;
+
+        var canvas = new SKCanvas(_bitmap);
+        canvas.Clear(SKColor.Parse("#1A1E24"));
+
+        canvas.Save();
+        canvas.Translate(_panX, _panY);
+        canvas.Scale(_zoom);
+
+        DrawNamespaceGroups(canvas);
+        DrawEdges(canvas);
+        DrawNodes(canvas);
+
+        canvas.Restore();
+
+        InvalidateVisual();
+    }
+
+    public void SaveToPng(string path)
+    {
+        if (_bitmap == null) return;
+        using var data = _bitmap.Encode(SKEncodedImageFormat.Png, 100);
+        using var stream = File.Create(path);
+        data.SaveTo(stream);
     }
 
     public void FitToScreen()
@@ -84,20 +192,19 @@ public class GraphCanvas : Control
             maxY = Math.Max(maxY, node.Y + node.Height);
         }
 
-        float graphW = maxX - minX + 80;
-        float graphH = maxY - minY + 80;
+        float graphW = maxX - minX + 100;
+        float graphH = maxY - minY + 100;
         float viewW = (float)Bounds.Width;
         float viewH = (float)Bounds.Height;
 
-        if (viewW <= 0 || viewH <= 0 || graphW <= 0 || graphH <= 0) return;
+        if (viewW <= 0 || viewH <= 0 || graphW <= 0 || graphH <= 0) { _needsRender = true; return; }
 
         float zoomX = viewW / graphW;
         float zoomY = viewH / graphH;
-        _zoom = Math.Min(zoomX, zoomY) * 0.85f;
-        _panX = (viewW - graphW * _zoom) / 2 - minX * _zoom + 40 * _zoom;
-        _panY = (viewH - graphH * _zoom) / 2 - minY * _zoom + 40 * _zoom;
-        _needsRender = true;
-        InvalidateVisual();
+        _zoom = Math.Min(zoomX, zoomY) * 0.80f;
+        _panX = (viewW - graphW * _zoom) / 2 - minX * _zoom + 50 * _zoom;
+        _panY = (viewH - graphH * _zoom) / 2 - minY * _zoom + 50 * _zoom;
+        ScheduleRender();
     }
 
     public void ZoomBy(float factor)
@@ -110,8 +217,7 @@ public class GraphCanvas : Control
         _panX = cx - worldX * newZoom;
         _panY = cy - worldY * newZoom;
         _zoom = newZoom;
-        _needsRender = true;
-        InvalidateVisual();
+        ScheduleRender();
     }
 
     public override void Render(DrawingContext context)
@@ -121,32 +227,19 @@ public class GraphCanvas : Control
         int w = (int)Math.Max(1, Bounds.Width);
         int h = (int)Math.Max(1, Bounds.Height);
 
-        if (_bitmap == null || _bitmap.PixelSize.Width != w || _bitmap.PixelSize.Height != h || _needsRender)
+        // If size changed, re-render
+        if (_bitmap == null || _bitmap.Width != w || _bitmap.Height != h)
         {
-            _bitmap?.Dispose();
-            _bitmap = new WriteableBitmap(new PixelSize(w, h), new Vector(96, 96), PixelFormat.Bgra8888);
-            _needsRender = false;
-
-            using var locked = _bitmap.Lock();
-            var info = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
-            using var surface = SKSurface.Create(info, locked.Address, locked.RowBytes);
-            var canvas = surface.Canvas;
-            canvas.Clear(ColorBg);
-
-            canvas.Save();
-            canvas.Translate(_panX, _panY);
-            canvas.Scale(_zoom);
-
-            DrawNamespaceGroups(canvas);
-            DrawEdges(canvas);
-            DrawNodes(canvas);
-
-            canvas.Restore();
+            RenderNow();
         }
 
+        // Draw the pre-rendered bitmap
         if (_bitmap != null)
         {
-            context.DrawImage(_bitmap, new Rect(0, 0, w, h), new Rect(0, 0, w, h));
+            using var data = _bitmap.Encode(SKEncodedImageFormat.Png, 100);
+            using var stream = data.AsStream();
+            var avaloniaBitmap = new Avalonia.Media.Imaging.Bitmap(stream);
+            context.DrawImage(avaloniaBitmap, new Rect(0, 0, w, h), new Rect(0, 0, w, h));
         }
     }
 
@@ -176,16 +269,16 @@ public class GraphCanvas : Control
 
             float x = minX - NamespacePadding;
             float y = minY - NamespacePadding - NamespaceTitleHeight;
-            float w = maxX - minX + NamespacePadding * 2;
-            float h = maxY - minY + NamespacePadding * 2 + NamespaceTitleHeight;
+            float ww = maxX - minX + NamespacePadding * 2;
+            float hh = maxY - minY + NamespacePadding * 2 + NamespaceTitleHeight;
 
             using var bgPaint = new SKPaint { Color = ColorNamespaceBg, Style = SKPaintStyle.Fill, IsAntialias = true };
-            using var borderPaint = new SKPaint { Color = ColorNamespaceBorder, Style = SKPaintStyle.Stroke, StrokeWidth = 1, IsAntialias = true };
-            using var textPaint = new SKPaint { Color = ColorNamespaceText, IsAntialias = true, TextSize = 12, Typeface = SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright) };
+            using var borderPaint = new SKPaint { Color = ColorNamespaceBorder, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
+            using var textPaint = new SKPaint { Color = ColorNamespaceText, IsAntialias = true, TextSize = 13 };
 
-            canvas.DrawRoundRect(x, y, w, h, 8, 8, bgPaint);
-            canvas.DrawRoundRect(x, y, w, h, 8, 8, borderPaint);
-            canvas.DrawText(ns, x + 10, y + NamespaceTitleHeight - 5, textPaint);
+            canvas.DrawRoundRect(x, y, ww, hh, 8, 8, bgPaint);
+            canvas.DrawRoundRect(x, y, ww, hh, 8, 8, borderPaint);
+            canvas.DrawText(ns, x + 12, y + NamespaceTitleHeight - 6, textPaint);
         }
     }
 
@@ -195,37 +288,32 @@ public class GraphCanvas : Control
         {
             if (edge.FromNode == null || edge.ToNode == null) continue;
 
-            var from = new SKPoint(
-                edge.FromNode.X + edge.FromNode.Width / 2,
-                edge.FromNode.Y + edge.FromNode.Height / 2);
-            var to = new SKPoint(
-                edge.ToNode.X + edge.ToNode.Width / 2,
-                edge.ToNode.Y + edge.ToNode.Height / 2);
+            float fromX = edge.FromNode.X + edge.FromNode.Width;
+            float fromY = edge.FromNode.Y + edge.FromNode.Height / 2;
+            float toX = edge.ToNode.X;
+            float toY = edge.ToNode.Y + edge.ToNode.Height / 2;
 
-            SKColor edgeColor = edge.IsStrongRelation
-                ? (edge.FromNode != null && _selectedNode != null && edge.ToNode != null &&
-                   (edge.FromNode.Id == _selectedNode.Id || edge.ToNode.Id == _selectedNode.Id)
-                    ? ColorEdgeInheritance : ColorEdgeInheritance)
-                : ColorEdgeAssociation;
-
+            SKColor edgeColor = edge.IsStrongRelation ? ColorEdgeInheritance : ColorEdgeAssociation;
             float strokeWidth = edge.IsStrongRelation ? 2.0f : 1.2f;
+
+            // Highlight edges connected to selected node
+            if (_selectedNode != null && (edge.FromNode.Id == _selectedNode.Id || edge.ToNode.Id == _selectedNode.Id))
+            {
+                edgeColor = edge.IsStrongRelation ? ColorEdgeInheritance : ColorEdgeImplements;
+                strokeWidth += 0.5f;
+            }
 
             using var paint = new SKPaint
             {
                 Color = edgeColor,
                 Style = SKPaintStyle.Stroke,
                 StrokeWidth = strokeWidth,
-                IsAntialias = true
+                IsAntialias = true,
+                StrokeCap = SKStrokeCap.Round
             };
 
-            // Draw routed edge: from right side of source to left side of target
-            float fromX = edge.FromNode.X + edge.FromNode.Width;
-            float fromY = edge.FromNode.Y + edge.FromNode.Height / 2;
-            float toX = edge.ToNode.X;
-            float toY = edge.ToNode.Y + edge.ToNode.Height / 2;
-
             float dx = toX - fromX;
-            float controlOffset = Math.Max(30, Math.Min(120, Math.Abs(dx) * 0.4f));
+            float controlOffset = Math.Max(40, Math.Min(150, Math.Abs(dx) * 0.4f));
 
             using var path = new SKPath();
             path.MoveTo(fromX, fromY);
@@ -235,12 +323,12 @@ public class GraphCanvas : Control
                 toX, toY);
             canvas.DrawPath(path, paint);
 
-            // Draw arrowhead at target
-            DrawArrowhead(canvas, toX, toY, -1, 0, edgeColor, paint);
+            // Arrowhead
+            DrawArrowhead(canvas, toX, toY, edgeColor);
         }
     }
 
-    private void DrawArrowhead(SKCanvas canvas, float x, float y, float dx, float dy, SKColor color, SKPaint linePaint)
+    private void DrawArrowhead(SKCanvas canvas, float x, float y, SKColor color)
     {
         float arrowLen = 10;
         float arrowWidth = 5;
@@ -268,36 +356,34 @@ public class GraphCanvas : Control
             var strokeColor = node == _selectedNode ? ColorNodeStrokeSelected
                            : node == _hoveredNode ? ColorNodeStrokeHover
                            : ColorNodeStroke;
-            using var strokePaint = new SKPaint { Color = strokeColor, Style = SKPaintStyle.Stroke, StrokeWidth = node == _selectedNode ? 3 : 2, IsAntialias = true };
+            using var strokePaint = new SKPaint { Color = strokeColor, Style = SKPaintStyle.Stroke, StrokeWidth = node == _selectedNode ? 3 : 1.5f, IsAntialias = true };
             canvas.DrawRoundRect(x, y, w, h, 6, 6, strokePaint);
 
             // Header background
-            using var headerPaint = new SKPaint { Color = strokeColor.WithAlpha(30), Style = SKPaintStyle.Fill, IsAntialias = true };
-            var headerRect = new SKRect(x, y, x + w, y + NodeHeaderHeight);
-            canvas.DrawRoundRect(headerRect, 6, 6, headerPaint);
-            // Cover bottom corners of header
+            using var headerPaint = new SKPaint { Color = strokeColor.WithAlpha(40), Style = SKPaintStyle.Fill, IsAntialias = true };
+            canvas.DrawRoundRect(x, y, w, NodeHeaderHeight, 6, 6, headerPaint);
             canvas.DrawRect(x, y + NodeHeaderHeight - 4, w, 4, headerPaint);
 
-            // Badge (Interface/Enum/Struct/etc.)
+            // Badge
             string? badge = GetBadgeText(node);
             if (badge != null)
             {
                 using var badgePaint = new SKPaint { Color = GetBadgeColor(node), Style = SKPaintStyle.Fill, IsAntialias = true };
-                using var badgeTextPaint = new SKPaint { Color = SKColors.White, IsAntialias = true, TextSize = 9, Typeface = SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright) };
+                using var badgeTextPaint = new SKPaint { Color = SKColors.White, IsAntialias = true, TextSize = 9 };
                 float badgeW = badgeTextPaint.MeasureText(badge) + 10;
                 float badgeH = 16;
                 float badgeX = x + w - badgeW - 6;
-                float badgeY = y + 5;
+                float badgeY = y + 6;
                 canvas.DrawRoundRect(badgeX, badgeY, badgeW, badgeH, 3, 3, badgePaint);
                 canvas.DrawText(badge, badgeX + 5, badgeY + 12, badgeTextPaint);
             }
 
             // Node name
-            using var namePaint = new SKPaint { Color = ColorText, IsAntialias = true, TextSize = 12, Typeface = SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright) };
-            canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 7, namePaint);
+            using var namePaint = new SKPaint { Color = ColorText, IsAntialias = true, TextSize = 12 };
+            canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, namePaint);
 
             // Members
-            using var memberPaint = new SKPaint { Color = ColorTextMuted, IsAntialias = true, TextSize = 10, Typeface = SKTypeface.FromFamilyName("Segoe UI") };
+            using var memberPaint = new SKPaint { Color = ColorTextMuted, IsAntialias = true, TextSize = 10 };
             float memberY = y + NodeHeaderHeight + 14;
             int count = 0;
             foreach (var member in node.Members)
@@ -351,8 +437,7 @@ public class GraphCanvas : Control
         _panX = (float)cursorPos.X - worldX * newZoom;
         _panY = (float)cursorPos.Y - worldY * newZoom;
         _zoom = newZoom;
-        _needsRender = true;
-        InvalidateVisual();
+        ScheduleRender();
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -377,8 +462,7 @@ public class GraphCanvas : Control
         {
             _selectedNode = hit;
             SelectionChanged?.Invoke(hit);
-            _needsRender = true;
-            InvalidateVisual();
+            ScheduleRender();
         }
     }
 
@@ -395,8 +479,7 @@ public class GraphCanvas : Control
             _panY += dy;
             _lastMouseX = (float)pos.X;
             _lastMouseY = (float)pos.Y;
-            _needsRender = true;
-            InvalidateVisual();
+            ScheduleRender();
             return;
         }
 
@@ -405,8 +488,7 @@ public class GraphCanvas : Control
         if (hovered != _hoveredNode)
         {
             _hoveredNode = hovered;
-            _needsRender = true;
-            InvalidateVisual();
+            ScheduleRender();
         }
     }
 
@@ -424,7 +506,6 @@ public class GraphCanvas : Control
 
     private GraphNode? HitTest(SKPoint worldPos)
     {
-        // Iterate in reverse so topmost nodes are hit first
         for (int i = _nodes.Count - 1; i >= 0; i--)
         {
             var node = _nodes[i];

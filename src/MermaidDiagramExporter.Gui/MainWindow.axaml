@@ -35,6 +35,7 @@
         <TextBlock Text="Selected" FontWeight="Bold" Margin="0,0,0,4"/>
         <TextBlock x:Name="SelectedNodeText" Text="" TextWrapping="Wrap"/>
         <Button Content="Open in Explorer" Click="OnOpenInExplorer" Margin="0,4,0,0" MinWidth="100"/>
+        <Button Content="Save PNG" Click="OnSavePng" Margin="0,4,0,0" MinWidth="100"/>
       </StackPanel>
 
       <!-- Stats -->
