@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using MermaidDiagramExporter.Core;
 using MermaidDiagramExporter.Extraction;
+using MermaidDiagramExporter.Focus;
 
 namespace MermaidDiagramExporter.Gui;
 
@@ -15,18 +16,18 @@ public partial class MainWindow : Window
 {
     private readonly RoslynTypeScanner _scanner = new();
     private readonly LayoutEngine _layoutEngine = new();
-    private readonly FocusNavigator _navigator = new();
+    private readonly FocusedGraphNavigationController _focusNavigationController = new();
 
     private List<GraphNode> _allNodes = new();
     private List<GraphEdge> _allEdges = new();
     private Dictionary<string, GraphNode> _nodeMap = new();
     private TypeGraph? _currentGraph;
+    private bool _updatingClassList;
 
     public MainWindow()
     {
         InitializeComponent();
         GraphCanvasView.SelectionChanged += OnCanvasSelectionChanged;
-        _navigator.FocusChanged += OnFocusChanged;
     }
 
     private async void OnBrowse(object? sender, RoutedEventArgs e)
@@ -55,16 +56,11 @@ public partial class MainWindow : Window
         try
         {
             _currentGraph = _scanner.ScanFolder(folder);
-            var (nodes, edges) = _layoutEngine.Layout(_currentGraph);
-            _allNodes = nodes;
-            _allEdges = edges;
-            _nodeMap = nodes.ToDictionary(n => n.Id);
-            _navigator.Clear();
+            _focusNavigationController.SetRootGraph(_currentGraph, folder);
 
-            GraphCanvasView.SetGraph(nodes, edges);
+            SetDisplayedGraph(_currentGraph);
             GraphCanvasView.WaitForRender();
-            UpdateClassList();
-            UpdateStats();
+            UpdateStats(_currentGraph);
 
             // Auto-save screenshot
             var dir = Path.Combine(AppContext.BaseDirectory, "export");
@@ -79,31 +75,78 @@ public partial class MainWindow : Window
         }
     }
 
-    private void UpdateClassList()
+    private void SetDisplayedGraph(TypeGraph? graph, string selectedNodeId = "")
     {
-        var items = _allNodes
+        if (graph == null)
+        {
+            _allNodes = new List<GraphNode>();
+            _allEdges = new List<GraphEdge>();
+            _nodeMap = new Dictionary<string, GraphNode>();
+            GraphCanvasView.SetGraph(_allNodes, _allEdges);
+            UpdateClassList(null);
+            UpdateNavigationButtons();
+            return;
+        }
+
+        var (nodes, edges) = _layoutEngine.Layout(graph);
+        _allNodes = nodes;
+        _allEdges = edges;
+        _nodeMap = nodes.ToDictionary(n => n.Id);
+
+        GraphCanvasView.SetGraph(nodes, edges);
+        UpdateClassList(graph);
+        UpdateStats(graph);
+
+        if (!string.IsNullOrEmpty(selectedNodeId))
+        {
+            var selectedNode = graph.Nodes.FirstOrDefault(n => n.Id == selectedNodeId);
+            if (selectedNode != null)
+                SelectedNodeText.Text = $"{selectedNode.Namespace}.{selectedNode.DisplayName}\nKind: {selectedNode.Kind}\nFile: {Path.GetFileName(selectedNode.AssetPath)}";
+        }
+
+        UpdateNavigationButtons();
+    }
+
+    private void UpdateClassList(TypeGraph? graph)
+    {
+        _updatingClassList = true;
+        var items = (graph?.Nodes ?? Array.Empty<TypeNodeData>())
             .OrderBy(n => n.Namespace)
             .ThenBy(n => n.DisplayName)
             .Select(n => $"{n.Namespace}.{n.DisplayName}")
             .ToList();
         ClassListBox.ItemsSource = items;
+        ClassListBox.SelectedItem = null;
+        _updatingClassList = false;
     }
 
-    private void UpdateStats()
+    private void UpdateStats(TypeGraph? graph)
     {
-        if (_currentGraph == null) return;
-        StatsText.Text = $"{_currentGraph.Nodes.Count} types, {_currentGraph.Edges.Count} relationships";
+        if (graph == null) return;
+        string stats = $"{graph.Nodes.Count} types, {graph.Edges.Count} relationships";
+        if (graph.Metadata.IsDerivedView && !string.IsNullOrEmpty(graph.Metadata.FocusSummary))
+            stats += $" | {graph.Metadata.FocusSummary}";
+        StatsText.Text = stats;
     }
 
     private void OnClassSelected(object? sender, SelectionChangedEventArgs e)
     {
+        if (_updatingClassList)
+            return;
+
         if (ClassListBox.SelectedItem is not string selected) return;
-        var node = _allNodes.FirstOrDefault(n => $"{n.Namespace}.{n.DisplayName}" == selected);
+        TypeGraph? graph = _focusNavigationController.CurrentGraph;
+        if (graph == null) return;
+
+        var node = graph.Nodes.FirstOrDefault(n => $"{n.Namespace}.{n.DisplayName}" == selected);
         if (node == null) return;
 
-        _navigator.FocusOn(node.Id, _nodeMap, _allEdges);
-        ApplyFocusFilter();
-        GraphCanvasView.InvalidateVisual();
+        TypeGraph? focusedGraph = _focusNavigationController.FocusSelection(
+            node.Id,
+            depth: 1,
+            GraphFocusTraversalMode.UndirectedAssociations);
+        if (focusedGraph != null)
+            SetDisplayedGraph(focusedGraph, node.Id);
     }
 
     private void OnCanvasSelectionChanged(GraphNode? node)
@@ -142,34 +185,33 @@ public partial class MainWindow : Window
         });
     }
 
-    private void OnFocusChanged()
+    private void UpdateNavigationButtons()
     {
-        BackButton.IsEnabled = _navigator.CanGoBack;
-        ForwardButton.IsEnabled = _navigator.CanGoForward;
-        ResetButton.IsEnabled = _navigator.CurrentFocus != null;
-        ApplyFocusFilter();
+        BackButton.IsEnabled = _focusNavigationController.CanGoBack();
+        ForwardButton.IsEnabled = _focusNavigationController.CanGoForward();
+        ResetButton.IsEnabled = _focusNavigationController.IsFocusedView;
     }
 
-    private void ApplyFocusFilter()
+    private void OnBack(object? sender, RoutedEventArgs e)
     {
-        var visibleIds = _navigator.GetVisibleNodeIds(_nodeMap, _allEdges);
-        if (visibleIds == null)
-        {
-            GraphCanvasView.SetGraph(_allNodes, _allEdges);
-            return;
-        }
-
-        var filteredNodes = _allNodes.Where(n => visibleIds.Contains(n.Id)).ToList();
-        var filteredEdges = _allEdges
-            .Where(ed => ed.FromNode != null && ed.ToNode != null &&
-                         visibleIds.Contains(ed.FromNode.Id) && visibleIds.Contains(ed.ToNode.Id))
-            .ToList();
-        GraphCanvasView.SetGraph(filteredNodes, filteredEdges);
+        GraphViewSnapshot? snapshot = _focusNavigationController.GoBack();
+        if (snapshot?.Graph != null)
+            SetDisplayedGraph(snapshot.Graph, snapshot.SelectedNodeId);
     }
 
-    private void OnBack(object? sender, RoutedEventArgs e) => _navigator.GoBack();
-    private void OnForward(object? sender, RoutedEventArgs e) => _navigator.GoForward();
-    private void OnReset(object? sender, RoutedEventArgs e) => _navigator.Clear();
+    private void OnForward(object? sender, RoutedEventArgs e)
+    {
+        GraphViewSnapshot? snapshot = _focusNavigationController.GoForward();
+        if (snapshot?.Graph != null)
+            SetDisplayedGraph(snapshot.Graph, snapshot.SelectedNodeId);
+    }
+
+    private void OnReset(object? sender, RoutedEventArgs e)
+    {
+        TypeGraph? rootGraph = _focusNavigationController.ResetToRoot();
+        if (rootGraph != null)
+            SetDisplayedGraph(rootGraph);
+    }
 
     private void OnFit(object? sender, RoutedEventArgs e) => GraphCanvasView.FitToScreen();
 

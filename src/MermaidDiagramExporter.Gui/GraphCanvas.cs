@@ -30,6 +30,7 @@ public class GraphCanvas : Control
     private GraphNode? _hoveredNode;
     private GraphNode? _selectedNode;
     private bool _needsRender = true;
+    private bool _fitToScreenOnNextRender;
     private WriteableBitmap? _writeableBitmap;
 
     // Colors (dark theme matching Unity)
@@ -62,7 +63,8 @@ public class GraphCanvas : Control
 
     public GraphCanvas()
     {
-        // Don't set Background here - Control doesn't have it in all versions
+        ClipToBounds = true;
+        Focusable = true;
     }
 
     public GraphNode? SelectedNode => _selectedNode;
@@ -73,6 +75,7 @@ public class GraphCanvas : Control
         _edges = edges;
         _selectedNode = null;
         _hoveredNode = null;
+        _fitToScreenOnNextRender = true;
         FitToScreen();
         Invalidate();
     }
@@ -91,7 +94,7 @@ public class GraphCanvas : Control
         int w = (int)Math.Max(1, Bounds.Width);
         int h = (int)Math.Max(1, Bounds.Height);
         if (w <= 1 || h <= 1) { w = 1920; h = 1080; }
-        RecalculateLayout(w, h);
+        FitToScreenIfNeeded(w, h);
 
         using var bitmap = new SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
@@ -138,7 +141,17 @@ public class GraphCanvas : Control
     public void FitToScreen()
     {
         if (_nodes.Count == 0) return;
-        RecalculateLayout((int)Math.Max(1, Bounds.Width), (int)Math.Max(1, Bounds.Height));
+        int w = (int)Math.Max(1, Bounds.Width);
+        int h = (int)Math.Max(1, Bounds.Height);
+        if (w <= 1 || h <= 1)
+        {
+            _fitToScreenOnNextRender = true;
+        }
+        else
+        {
+            RecalculateLayout(w, h);
+            _fitToScreenOnNextRender = false;
+        }
         Invalidate();
     }
 
@@ -168,9 +181,7 @@ public class GraphCanvas : Control
         if (w <= 1 || h <= 1) return;
 
         _needsRender = false;
-
-        // Recalculate layout for current size
-        RecalculateLayout(w, h);
+        FitToScreenIfNeeded(w, h);
 
         _writeableBitmap?.Dispose();
         _writeableBitmap = new WriteableBitmap(
@@ -202,8 +213,14 @@ public class GraphCanvas : Control
         int h = (int)Math.Max(1, Bounds.Height);
         if (w <= 1 || h <= 1) return;
 
-        // Render to WriteableBitmap and present it
-        RenderNow();
+        // Only re-render if the bitmap is stale (size changed or invalidate was called)
+        if (_writeableBitmap == null ||
+            _writeableBitmap.PixelSize.Width != w ||
+            _writeableBitmap.PixelSize.Height != h ||
+            _needsRender)
+        {
+            RenderNow();
+        }
 
         if (_writeableBitmap != null)
         {
@@ -211,6 +228,13 @@ public class GraphCanvas : Control
             var destRect = new Rect(0, 0, w, h);
             context.DrawImage(_writeableBitmap, srcRect, destRect);
         }
+    }
+
+    private void FitToScreenIfNeeded(int viewW, int viewH)
+    {
+        if (!_fitToScreenOnNextRender) return;
+        RecalculateLayout(viewW, viewH);
+        _fitToScreenOnNextRender = false;
     }
 
     private void DrawNamespaceGroups(SKCanvas canvas)
@@ -399,6 +423,7 @@ public class GraphCanvas : Control
         _panX = (float)cursorPos.X - worldX * newZoom;
         _panY = (float)cursorPos.Y - worldY * newZoom;
         _zoom = newZoom;
+        e.Handled = true;
         Invalidate();
     }
 
@@ -415,6 +440,8 @@ public class GraphCanvas : Control
             _lastMouseX = (float)pos.X;
             _lastMouseY = (float)pos.Y;
             Cursor = new Cursor(StandardCursorType.SizeAll);
+            e.Pointer.Capture(this);
+            e.Handled = true;
             return;
         }
 
@@ -426,6 +453,7 @@ public class GraphCanvas : Control
             SelectionChanged?.Invoke(hit);
             Invalidate();
         }
+        e.Handled = true;
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
@@ -441,6 +469,7 @@ public class GraphCanvas : Control
             _panY += dy;
             _lastMouseX = (float)pos.X;
             _lastMouseY = (float)pos.Y;
+            e.Handled = true;
             Invalidate();
             return;
         }
@@ -459,6 +488,8 @@ public class GraphCanvas : Control
         base.OnPointerReleased(e);
         _isPanning = false;
         Cursor = Cursor.Default;
+        e.Pointer.Capture(null);
+        e.Handled = true;
     }
 
     private SKPoint ScreenToWorld(float screenX, float screenY)
