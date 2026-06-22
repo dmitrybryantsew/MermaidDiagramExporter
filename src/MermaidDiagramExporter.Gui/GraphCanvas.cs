@@ -739,11 +739,43 @@ public class GraphCanvas : Control
         {
             _isDraggingNode = false;
             _isDraggingCluster = false;
+
+            // Only raise ManualLayoutChanged if the node actually moved
+            bool moved = false;
+            if (_draggedNode != null)
+            {
+                const float MovedEpsilon = 0.5f;
+                moved = Math.Abs(_draggedNode.X - _dragStartNodeX) > MovedEpsilon
+                     || Math.Abs(_draggedNode.Y - _dragStartNodeY) > MovedEpsilon;
+            }
+            else if (_draggedClusterId != null)
+            {
+                // Cluster drag: check if any node moved
+                const float MovedEpsilon = 0.5f;
+                foreach (var node in _nodes)
+                {
+                    if (_clusterDragStartPositions.TryGetValue(node.Id, out var startPos))
+                    {
+                        if (Math.Abs(node.X - startPos.X) > MovedEpsilon
+                         || Math.Abs(node.Y - startPos.Y) > MovedEpsilon)
+                        {
+                            moved = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
             _draggedNode = null;
             _draggedClusterId = null;
             Cursor = Cursor.Default;
             e.Pointer.Capture(null);
-            ManualLayoutChanged?.Invoke();
+
+            if (moved)
+            {
+                ManualLayoutChanged?.Invoke();
+            }
+
             e.Handled = true;
             return;
         }
