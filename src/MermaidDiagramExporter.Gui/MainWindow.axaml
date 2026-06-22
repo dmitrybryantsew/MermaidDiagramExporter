@@ -66,7 +66,7 @@
       <!-- Search -->
       <StackPanel Grid.Row="4" Margin="8,0,8,4">
         <TextBlock Text="Search" FontWeight="Bold" Margin="0,0,0,4"/>
-        <TextBox x:Name="SearchTextBox" PlaceholderText="Type to highlight..." Watermark="Type to highlight..." TextChanged="OnSearchTextChanged"/>
+        <TextBox x:Name="SearchTextBox" PlaceholderText="Type to highlight..." TextChanged="OnSearchTextChanged"/>
       </StackPanel>
 
       <!-- Semantic Search Panel -->

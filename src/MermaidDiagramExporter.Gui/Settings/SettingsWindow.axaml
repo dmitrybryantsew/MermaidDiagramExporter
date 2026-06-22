@@ -33,12 +33,12 @@
           </Grid>
           <Grid ColumnDefinitions="Auto,*,Auto">
             <TextBlock Grid.Column="0" Text="Cache folder:" VerticalAlignment="Center" Width="120" />
-            <TextBox Grid.Column="1" x:Name="CacheFolderText" Watermark="(default)" IsReadOnly="True" />
+            <TextBox Grid.Column="1" x:Name="CacheFolderText" PlaceholderText="(default)" IsReadOnly="True" />
             <Button Grid.Column="2" x:Name="BrowseCacheButton" Content="Browse..." Margin="8,0,0,0" />
           </Grid>
           <Grid ColumnDefinitions="Auto,*,Auto">
             <TextBlock Grid.Column="0" Text="Bundle folder:" VerticalAlignment="Center" Width="120" />
-            <TextBox Grid.Column="1" x:Name="BundleFolderText" Watermark="(default)" IsReadOnly="True" />
+            <TextBox Grid.Column="1" x:Name="BundleFolderText" PlaceholderText="(default)" IsReadOnly="True" />
             <Button Grid.Column="2" x:Name="BrowseBundleButton" Content="Browse..." Margin="8,0,0,0" />
           </Grid>
 
@@ -61,9 +61,9 @@
                 <ListBox.DataTemplates>
                   <DataTemplate DataType="settings:StereotypeRule">
                     <Grid ColumnDefinitions="*,100,80,Auto">
-                      <TextBox Grid.Column="0" Text="{Binding Pattern}" Watermark="Regex pattern" Margin="0,0,4,0" />
-                      <TextBox Grid.Column="1" Text="{Binding Label}" Watermark="Label" Margin="0,0,4,0" />
-                      <TextBox Grid.Column="2" Text="{Binding ColorHex}" Watermark="#RRGGBB" Margin="0,0,4,0" />
+                      <TextBox Grid.Column="0" Text="{Binding Pattern}" PlaceholderText="Regex pattern" Margin="0,0,4,0" />
+                      <TextBox Grid.Column="1" Text="{Binding Label}" PlaceholderText="Label" Margin="0,0,4,0" />
+                      <TextBox Grid.Column="2" Text="{Binding ColorHex}" PlaceholderText="#RRGGBB" Margin="0,0,4,0" />
                       <Button Grid.Column="3" Content="x" Tag="{Binding}" Click="OnRemoveStereotypeRule" />
                     </Grid>
                   </DataTemplate>
