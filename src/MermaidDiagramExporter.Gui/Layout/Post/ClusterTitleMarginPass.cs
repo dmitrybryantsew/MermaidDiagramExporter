@@ -5,6 +5,9 @@ namespace MermaidDiagramExporter.Gui.Layout;
 
 public sealed class ClusterTitleMarginPass : IPostLayoutPass
 {
+    /// <summary>Convergence threshold for float comparisons in layout passes.</summary>
+    private const float LayoutEpsilon = 0.01f;
+
     public string Name => "Cluster Title Margin";
 
     public LayoutResult Run(LayoutGraph graph, LayoutResult result, LayoutOptions options)
@@ -24,7 +27,7 @@ public sealed class ClusterTitleMarginPass : IPostLayoutPass
             float desiredInset = Mathf.Max(options.GroupTopPadding, (cluster.TitleMetrics?.TotalMargin ?? 0f) + 12f);
             float currentInset = CalculateCurrentTopInset(graph, cluster, clusterRect, nodeBounds, clusterBounds);
             float delta = desiredInset - currentInset;
-            if (delta <= 0.01f)
+            if (delta <= LayoutEpsilon)
                 continue;
 
             ShiftClusterContents(graph, cluster, delta, nodeBounds, clusterBounds);

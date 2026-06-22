@@ -5,6 +5,9 @@ namespace MermaidDiagramExporter.Gui.Layout;
 
 public sealed class ClusterOverlapResolutionPass : IPostLayoutPass
 {
+    /// <summary>Convergence threshold for float comparisons in layout passes.</summary>
+    private const float LayoutEpsilon = 0.01f;
+
     public string Name => "Cluster Overlap Resolution";
 
     public LayoutResult Run(LayoutGraph graph, LayoutResult result, LayoutOptions options)
@@ -43,7 +46,7 @@ public sealed class ClusterOverlapResolutionPass : IPostLayoutPass
                             continue;
 
                         float minimumTop = currentRect.yMax + options.ClusterSpacing;
-                        if (nextRect.yMin >= minimumTop - 0.01f)
+                        if (nextRect.yMin >= minimumTop - LayoutEpsilon)
                             continue;
 
                         float deltaY = minimumTop - nextRect.yMin;
@@ -75,7 +78,7 @@ public sealed class ClusterOverlapResolutionPass : IPostLayoutPass
 
     private static bool HasHorizontalOverlap(Rect a, Rect b)
     {
-        return a.xMin < b.xMax - 0.01f && b.xMin < a.xMax - 0.01f;
+        return a.xMin < b.xMax - LayoutEpsilon && b.xMin < a.xMax - LayoutEpsilon;
     }
 
     private static Vector2 RecalculateContentSize(

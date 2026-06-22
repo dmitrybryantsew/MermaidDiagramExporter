@@ -90,6 +90,14 @@ public class GraphCanvas : Control
     private const float NamespacePadding = 24;
     private const float NamespaceTitleHeight = 24;
 
+    // ── Named constants for magic numbers ──
+    /// <summary>Maximum number of member names shown inside a node box before truncating.</summary>
+    private const int MaxMembersShownPerNode = 6;
+    /// <summary>Length, in canvas units, of edge arrowheads.</summary>
+    private const float ArrowheadLength = 10f;
+    /// <summary>Half-width, in canvas units, of edge arrowheads.</summary>
+    private const float ArrowheadHalfWidth = 5f;
+
     // ── Cached SKPaint objects (reused across frames to reduce GC pressure) ──
     private static readonly SKPaint NamespaceBgPaint = new()
     {
@@ -560,8 +568,8 @@ public class GraphCanvas : Control
 
     private void DrawArrowhead(SKCanvas canvas, float x, float y, SKColor color)
     {
-        float arrowLen = 10;
-        float arrowWidth = 5;
+        float arrowLen = ArrowheadLength;
+        float arrowWidth = ArrowheadHalfWidth;
 
         ArrowheadPaint.Color = color;
         var path = new SKPath();
@@ -648,7 +656,7 @@ public class GraphCanvas : Control
             int count = 0;
             foreach (var member in node.Members)
             {
-                if (count >= 6) break;
+                if (count >= MaxMembersShownPerNode) break;
                 string prefix = member.Kind == "Method" ? "  " : "+ ";
                 string text = prefix + member.TypeName + " " + member.Name;
                 if (member.Kind == "Method") text += "()";

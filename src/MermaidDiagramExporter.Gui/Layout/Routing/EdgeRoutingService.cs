@@ -7,6 +7,9 @@ namespace MermaidDiagramExporter.Gui.Layout;
 
 public sealed class EdgeRoutingService
 {
+    /// <summary>Convergence threshold for float comparisons in layout passes.</summary>
+    private const float LayoutEpsilon = 0.01f;
+
     private readonly ClusterBoundaryClipper _clipper = new();
 
     public IReadOnlyList<LayoutEdgePath> BuildPaths(TypeGraph graph, LayoutResult result, LayoutOptions options)
@@ -316,13 +319,13 @@ public sealed class EdgeRoutingService
                 Vector2 d = reduced[index + 2];
 
                 bool horizontalVerticalHorizontal =
-                    Mathf.Abs(a.y - b.y) < 0.01f &&
-                    Mathf.Abs(b.x - c.x) < 0.01f &&
-                    Mathf.Abs(c.y - d.y) < 0.01f;
+                    Mathf.Abs(a.y - b.y) < LayoutEpsilon &&
+                    Mathf.Abs(b.x - c.x) < LayoutEpsilon &&
+                    Mathf.Abs(c.y - d.y) < LayoutEpsilon;
                 bool verticalHorizontalVertical =
-                    Mathf.Abs(a.x - b.x) < 0.01f &&
-                    Mathf.Abs(b.y - c.y) < 0.01f &&
-                    Mathf.Abs(c.x - d.x) < 0.01f;
+                    Mathf.Abs(a.x - b.x) < LayoutEpsilon &&
+                    Mathf.Abs(b.y - c.y) < LayoutEpsilon &&
+                    Mathf.Abs(c.x - d.x) < LayoutEpsilon;
 
                 if (!horizontalVerticalHorizontal && !verticalHorizontalVertical)
                     continue;
@@ -368,8 +371,8 @@ public sealed class EdgeRoutingService
             Vector2 current = points[index];
             Vector2 next = points[index + 1];
 
-            bool sameX = Mathf.Abs(previous.x - current.x) < 0.01f && Mathf.Abs(current.x - next.x) < 0.01f;
-            bool sameY = Mathf.Abs(previous.y - current.y) < 0.01f && Mathf.Abs(current.y - next.y) < 0.01f;
+            bool sameX = Mathf.Abs(previous.x - current.x) < LayoutEpsilon && Mathf.Abs(current.x - next.x) < LayoutEpsilon;
+            bool sameY = Mathf.Abs(previous.y - current.y) < LayoutEpsilon && Mathf.Abs(current.y - next.y) < LayoutEpsilon;
             if (sameX || sameY)
                 continue;
 
