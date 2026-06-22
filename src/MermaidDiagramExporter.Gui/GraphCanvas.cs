@@ -51,6 +51,11 @@ public class GraphCanvas : Control
     // Search highlighting
     private string _searchText = string.Empty;
 
+    // ── SKPicture caching for static content (namespace groups + non-dragged edges) ──
+    private SKPicture? _staticContentPicture;
+    private bool _staticContentDirty = true;
+    private float _staticContentMinX, _staticContentMinY, _staticContentMaxX, _staticContentMaxY;
+
     // Edge type visibility
     private bool _showInheritanceEdges = true;
     private bool _showImplementsEdges = true;
@@ -190,6 +195,7 @@ public class GraphCanvas : Control
         _selectedNode = null;
         _hoveredNode = null;
         _fitToScreenOnNextRender = true;
+        _staticContentDirty = true;
         FitToScreen();
         Invalidate();
     }
@@ -216,8 +222,21 @@ public class GraphCanvas : Control
         canvas.Save();
         canvas.Translate(_panX, _panY);
         canvas.Scale(_zoom);
-        DrawNamespaceGroups(canvas);
-        DrawEdges(canvas);
+
+        // Draw cached static content (namespace groups + edges) via SKPicture
+        if (_staticContentDirty || _staticContentPicture == null)
+        {
+            RecordStaticContent();
+        }
+        if (_staticContentPicture != null)
+        {
+            // Translate so the picture's local coords align with world coords
+            canvas.Translate(_staticContentMinX, _staticContentMinY);
+            canvas.DrawPicture(_staticContentPicture);
+            canvas.Translate(-_staticContentMinX, -_staticContentMinY);
+        }
+
+        // Draw nodes every frame (they have per-frame state: hover, selection, search match)
         DrawNodes(canvas);
         canvas.Restore();
 
@@ -265,6 +284,7 @@ public class GraphCanvas : Control
         {
             RecalculateLayout(w, h);
             _fitToScreenOnNextRender = false;
+            _staticContentDirty = true;
         }
         NotifyViewportChanged();
         Invalidate();
@@ -295,6 +315,7 @@ public class GraphCanvas : Control
         _showInheritanceEdges = inheritance;
         _showImplementsEdges = implements;
         _showAssociationEdges = associations;
+        _staticContentDirty = true;
         Invalidate();
     }
 
@@ -324,6 +345,46 @@ public class GraphCanvas : Control
         ViewportChanged?.Invoke(_zoom, _panX, _panY, (float)Bounds.Width, (float)Bounds.Height);
     }
 
+    private void ComputeContentBounds()
+    {
+        if (_nodes.Count == 0)
+        {
+            _staticContentMinX = 0; _staticContentMinY = 0;
+            _staticContentMaxX = 100; _staticContentMaxY = 100;
+            return;
+        }
+        _staticContentMinX = float.MaxValue; _staticContentMinY = float.MaxValue;
+        _staticContentMaxX = float.MinValue; _staticContentMaxY = float.MinValue;
+        foreach (var node in _nodes)
+        {
+            _staticContentMinX = Math.Min(_staticContentMinX, node.X);
+            _staticContentMinY = Math.Min(_staticContentMinY, node.Y);
+            _staticContentMaxX = Math.Max(_staticContentMaxX, node.X + node.Width);
+            _staticContentMaxY = Math.Max(_staticContentMaxY, node.Y + node.Height);
+        }
+        // Add padding for namespace groups
+        _staticContentMinX -= NamespacePadding;
+        _staticContentMinY -= NamespacePadding + NamespaceTitleHeight;
+        _staticContentMaxX += NamespacePadding;
+        _staticContentMaxY += NamespacePadding + NamespaceTitleHeight;
+    }
+
+    private void RecordStaticContent()
+    {
+        _staticContentPicture?.Dispose();
+        ComputeContentBounds();
+        float picW = Math.Max(1, _staticContentMaxX - _staticContentMinX);
+        float picH = Math.Max(1, _staticContentMaxY - _staticContentMinY);
+        using var recorder = new SKPictureRecorder();
+        var canvas = recorder.BeginRecording(SKRect.Create(0, 0, picW, picH));
+        // Offset so content is relative to (0,0) in the picture
+        canvas.Translate(-_staticContentMinX, -_staticContentMinY);
+        DrawNamespaceGroups(canvas);
+        DrawEdges(canvas);
+        _staticContentPicture = recorder.EndRecording();
+        _staticContentDirty = false;
+    }
+
     private void RenderNow()
     {
         int w = (int)Math.Max(1, Bounds.Width);
@@ -347,8 +408,21 @@ public class GraphCanvas : Control
         canvas.Save();
         canvas.Translate(_panX, _panY);
         canvas.Scale(_zoom);
-        DrawNamespaceGroups(canvas);
-        DrawEdges(canvas);
+
+        // Draw cached static content (namespace groups + edges) via SKPicture
+        if (_staticContentDirty || _staticContentPicture == null)
+        {
+            RecordStaticContent();
+        }
+        if (_staticContentPicture != null)
+        {
+            // Translate so the picture's local coords align with world coords
+            canvas.Translate(_staticContentMinX, _staticContentMinY);
+            canvas.DrawPicture(_staticContentPicture);
+            canvas.Translate(-_staticContentMinX, -_staticContentMinY);
+        }
+
+        // Draw nodes every frame (they have per-frame state: hover, selection, search match)
         DrawNodes(canvas);
         canvas.Restore();
         canvas.Flush();
@@ -813,6 +887,7 @@ public class GraphCanvas : Control
 
             if (moved)
             {
+                _staticContentDirty = true;
                 ManualLayoutChanged?.Invoke();
             }
 
