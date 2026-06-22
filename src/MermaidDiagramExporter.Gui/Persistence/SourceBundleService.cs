@@ -12,6 +12,7 @@ namespace MermaidDiagramExporter.Gui.Persistence;
 /// </summary>
 public sealed class SourceBundleService
 {
+    private const long MaxSourceFileSizeBytes = 10 * 1024 * 1024; // 10 MB
     private readonly SettingsService _settingsService = new();
 
     /// <summary>
@@ -44,6 +45,12 @@ public sealed class SourceBundleService
             sb.AppendLine($"--- FILE: {relativePath} ---");
             try
             {
+                var fileInfo = new FileInfo(file);
+                if (fileInfo.Length > MaxSourceFileSizeBytes)
+                {
+                    sb.AppendLine($"[Skipped: file exceeds {MaxSourceFileSizeBytes / (1024 * 1024)} MB limit]");
+                    continue;
+                }
                 string content = File.ReadAllText(file);
                 sb.AppendLine(content);
             }
