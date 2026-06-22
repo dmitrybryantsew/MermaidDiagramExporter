@@ -15,7 +15,7 @@ public static class ManualLayoutApplier
     /// Adjusts node bounds in the LayoutResult by applying stored manual deltas.
     /// Returns a NEW LayoutResult (immutable transform).
     /// </summary>
-    public static LayoutResult ApplyOverrides(LayoutResult result, ManualLayoutOverrides overrides)
+    public static LayoutResult ApplyOverrides(LayoutResult result, ManualLayoutOverrides overrides, LayoutOptions options)
     {
         if (overrides == null || !overrides.HasOverrides)
             return result;
@@ -34,7 +34,7 @@ public static class ManualLayoutApplier
         }
 
         // Recalculate cluster bounds to encompass moved nodes
-        RecalculateClusterBounds(clone, nodeBounds);
+        RecalculateClusterBounds(clone, nodeBounds, options);
 
         return clone;
     }
@@ -42,7 +42,7 @@ public static class ManualLayoutApplier
     /// <summary>
     /// After moving nodes, recalculate cluster bounds to ensure they still contain their nodes.
     /// </summary>
-    private static void RecalculateClusterBounds(LayoutResult result, Dictionary<string, Rect> nodeBounds)
+    private static void RecalculateClusterBounds(LayoutResult result, Dictionary<string, Rect> nodeBounds, LayoutOptions options)
     {
         var clusterBounds = (Dictionary<string, Rect>)result.ClusterBounds;
         foreach (var clusterId in clusterBounds.Keys.ToList())
@@ -71,9 +71,9 @@ public static class ManualLayoutApplier
 
             if (minX < float.MaxValue)
             {
-                // Add padding around the cluster
-                float padding = 24;
-                float titleHeight = 24;
+                // Add padding around the cluster (read from shared layout options)
+                float padding = options.ClusterTitleHorizontalPadding;
+                float titleHeight = options.ClusterTitleTopMargin + options.ClusterTitleBottomMargin;
                 clusterBounds[clusterId] = new Rect(
                     minX - padding,
                     minY - padding - titleHeight,

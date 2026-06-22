@@ -19,14 +19,20 @@ public class LayoutEngine
     /// </summary>
     public ManualLayoutOverrides? ManualOverrides { get; set; }
 
+    /// <summary>
+    /// Layout options controlling spacing, padding, and sizing.
+    /// </summary>
+    public LayoutOptions? LayoutOptions { get; set; }
+
     public (List<GraphNode> nodes, List<GraphEdge> edges) Layout(Core.TypeGraph graph)
     {
-        var result = _coordinator.CreateLayout(graph);
+        var options = LayoutOptions ?? new LayoutOptions();
+        var result = _coordinator.CreateLayout(graph, options);
 
         // Apply manual overrides if present
         if (ManualOverrides != null && ManualOverrides.HasOverrides)
         {
-            result = ManualLayoutApplier.ApplyOverrides(result, ManualOverrides);
+            result = ManualLayoutApplier.ApplyOverrides(result, ManualOverrides, options);
         }
         var nodeMap = new Dictionary<string, GraphNode>();
 
