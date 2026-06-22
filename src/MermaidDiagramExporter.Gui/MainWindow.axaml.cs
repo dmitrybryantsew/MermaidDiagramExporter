@@ -73,10 +73,27 @@ public partial class MainWindow : Window
 
     private async void OnScan(object? sender, RoutedEventArgs e)
     {
-        var folder = FolderTextBox.Text?.Trim();
-        if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
+        var rawPath = FolderTextBox.Text?.Trim();
+        if (string.IsNullOrEmpty(rawPath))
         {
-            StatsText.Text = "Invalid folder";
+            StatsText.Text = "Please select a folder.";
+            return;
+        }
+
+        string folder;
+        try
+        {
+            folder = Path.GetFullPath(rawPath);
+        }
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException or NotSupportedException)
+        {
+            StatsText.Text = "The folder path is not valid.";
+            return;
+        }
+
+        if (!Directory.Exists(folder))
+        {
+            StatsText.Text = "The selected folder does not exist.";
             return;
         }
 
