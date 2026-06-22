@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using SkiaSharp;
 using MermaidDiagramExporter.Gui.Layout;
 using LayoutRect = MermaidDiagramExporter.Gui.Layout.Rect;
@@ -143,11 +145,14 @@ public partial class MinimapControl : UserControl
             canvas.DrawRect(node.X, node.Y, node.Width, node.Height, nodeStrokePaint);
         }
 
-        // Convert to Avalonia bitmap
-        using var data = bitmap.Encode(SKEncodedImageFormat.Png, 100);
-        var ms = new System.IO.MemoryStream(data.ToArray());
-        var avaloniaBitmap = new Bitmap(ms);
-        MinimapImage.Source = avaloniaBitmap;
+        // Convert SKBitmap to Avalonia WriteableBitmap directly (no PNG round-trip)
+        var writeableBitmap = new WriteableBitmap(
+            new PixelSize(w, h), new Vector(96, 96),
+            PixelFormat.Bgra8888, AlphaFormat.Premul);
+        using var framebuffer = writeableBitmap.Lock();
+        var byteCount = bitmap.RowBytes * h;
+        Marshal.Copy(bitmap.Bytes, 0, framebuffer.Address, (int)byteCount);
+        MinimapImage.Source = writeableBitmap;
     }
 
     private void UpdateViewportRect()
