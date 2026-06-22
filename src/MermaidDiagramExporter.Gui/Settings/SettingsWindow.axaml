@@ -57,20 +57,26 @@
                 <TextBlock Grid.Column="0" Text="Rules" FontWeight="Bold" Margin="0,0,0,4" />
                 <Button Grid.Column="1" x:Name="AddStereotypeRuleButton" Content="+ Add" Padding="8,2" />
               </Grid>
-              <ListBox Grid.Row="1" x:Name="StereotypeRulesList" Height="140" BorderThickness="0" Background="Transparent">
+              <ListBox Grid.Row="1" x:Name="StereotypeRulesList" Height="160" BorderThickness="0" Background="Transparent">
                 <ListBox.DataTemplates>
                   <DataTemplate DataType="settings:StereotypeRule">
-                    <Grid ColumnDefinitions="*,100,80,Auto">
-                      <TextBox Grid.Column="0" Text="{Binding Pattern}" PlaceholderText="Regex pattern" Margin="0,0,4,0" />
-                      <TextBox Grid.Column="1" Text="{Binding Label}" PlaceholderText="Label" Margin="0,0,4,0" />
-                      <TextBox Grid.Column="2" Text="{Binding ColorHex}" PlaceholderText="#RRGGBB" Margin="0,0,4,0" />
-                      <Button Grid.Column="3" Content="x" Tag="{Binding}" Click="OnRemoveStereotypeRule" />
-                    </Grid>
+                    <StackPanel>
+                      <Grid ColumnDefinitions="*,100,80,Auto">
+                        <TextBox Grid.Column="0" Text="{Binding Pattern}" PlaceholderText="Regex pattern" Margin="0,0,4,0" />
+                        <TextBox Grid.Column="1" Text="{Binding Label}" PlaceholderText="Label" Margin="0,0,4,0" />
+                        <TextBox Grid.Column="2" Text="{Binding ColorHex}" PlaceholderText="#RRGGBB" Margin="0,0,4,0" />
+                        <Button Grid.Column="3" Content="x" Tag="{Binding}" Click="OnRemoveStereotypeRule" />
+                      </Grid>
+                      <TextBlock x:Name="PatternErrorText" FontSize="10" Foreground="#FF6040" Margin="0,2,0,0" IsVisible="False" TextWrapping="Wrap" />
+                    </StackPanel>
                   </DataTemplate>
                 </ListBox.DataTemplates>
               </ListBox>
             </Grid>
           </Border>
+
+          <!-- Stereotype validation errors -->
+          <TextBlock x:Name="StereotypeErrorText" FontSize="11" Foreground="#FF6040" Margin="0,4,0,0" IsVisible="False" TextWrapping="Wrap" />
 
           <!-- Canvas Settings -->
           <TextBlock Text="Canvas" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />

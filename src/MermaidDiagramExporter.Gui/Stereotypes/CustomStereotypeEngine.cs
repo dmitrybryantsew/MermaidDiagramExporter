@@ -72,6 +72,24 @@ public sealed class CustomStereotypeEngine
 
     public bool HasRules => _rules.Count > 0;
 
+    /// <summary>
+    /// Validates a regex pattern without throwing. Returns true if valid, false with error message if not.
+    /// </summary>
+    public static bool TryValidatePattern(string pattern, out string? errorMessage)
+    {
+        try
+        {
+            _ = new Regex(pattern);
+            errorMessage = null;
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            errorMessage = ex.Message;
+            return false;
+        }
+    }
+
     private sealed class CompiledRule
     {
         public Regex Regex;

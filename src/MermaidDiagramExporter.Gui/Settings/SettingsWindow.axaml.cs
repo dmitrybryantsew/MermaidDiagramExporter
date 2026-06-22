@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using MermaidDiagramExporter.Gui.Stereotypes;
 
 namespace MermaidDiagramExporter.Gui.Settings;
 
@@ -78,6 +80,28 @@ public partial class SettingsWindow : Window
 
     private void OnSave(object? sender, RoutedEventArgs e)
     {
+        // Validate all stereotype regex patterns before saving
+        var invalidRules = new List<(StereotypeRule Rule, string Error)>();
+        foreach (var rule in _stereotypeRules)
+        {
+            if (!CustomStereotypeEngine.TryValidatePattern(rule.Pattern, out var error))
+            {
+                invalidRules.Add((rule, error ?? "Invalid regex pattern"));
+            }
+        }
+
+        if (invalidRules.Count > 0)
+        {
+            var message = string.Join("\n", invalidRules.Select(ir => $"Pattern \"{ir.Rule.Pattern}\": {ir.Error}"));
+            StereotypeErrorText.Text = message;
+            StereotypeErrorText.IsVisible = true;
+            return;
+        }
+        else
+        {
+            StereotypeErrorText.IsVisible = false;
+        }
+
         _settings.AutoSaveCache = AutoSaveCacheCheck.IsChecked == true;
         _settings.AutoSaveSourceBundle = AutoSaveSourceBundleCheck.IsChecked == true;
         _settings.PromptToLoadCache = PromptLoadCacheCheck.IsChecked == true;
