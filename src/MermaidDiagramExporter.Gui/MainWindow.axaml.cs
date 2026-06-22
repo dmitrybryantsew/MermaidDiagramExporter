@@ -6,8 +6,11 @@ using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
 using MermaidDiagramExporter.Core;
 using MermaidDiagramExporter.Extraction;
+using MermaidDiagramExporter.Export;
 using MermaidDiagramExporter.Focus;
 
 namespace MermaidDiagramExporter.Gui;
@@ -17,12 +20,17 @@ public partial class MainWindow : Window
     private readonly RoslynTypeScanner _scanner = new();
     private readonly LayoutEngine _layoutEngine = new();
     private readonly FocusedGraphNavigationController _focusNavigationController = new();
+    private readonly GraphSeedSelectionState _seedSelectionState = new();
 
     private List<GraphNode> _allNodes = new();
     private List<GraphEdge> _allEdges = new();
     private Dictionary<string, GraphNode> _nodeMap = new();
     private TypeGraph? _currentGraph;
     private bool _updatingClassList;
+
+    private GraphFocusTraversalMode _currentTraversalMode = GraphFocusTraversalMode.UndirectedAssociations;
+    private int _focusDepth = 1;
+    private string _currentSelectedNodeId = string.Empty;
 
     public MainWindow()
     {
@@ -57,6 +65,7 @@ public partial class MainWindow : Window
         {
             _currentGraph = _scanner.ScanFolder(folder);
             _focusNavigationController.SetRootGraph(_currentGraph, folder);
+            _seedSelectionState.Clear();
 
             SetDisplayedGraph(_currentGraph);
             GraphCanvasView.WaitForRender();
@@ -101,7 +110,7 @@ public partial class MainWindow : Window
         {
             var selectedNode = graph.Nodes.FirstOrDefault(n => n.Id == selectedNodeId);
             if (selectedNode != null)
-                SelectedNodeText.Text = $"{selectedNode.Namespace}.{selectedNode.DisplayName}\nKind: {selectedNode.Kind}\nFile: {Path.GetFileName(selectedNode.AssetPath)}";
+                UpdateInspector(selectedNode);
         }
 
         UpdateNavigationButtons();
@@ -126,6 +135,7 @@ public partial class MainWindow : Window
         string stats = $"{graph.Nodes.Count} types, {graph.Edges.Count} relationships";
         if (graph.Metadata.IsDerivedView && !string.IsNullOrEmpty(graph.Metadata.FocusSummary))
             stats += $" | {graph.Metadata.FocusSummary}";
+        stats += $" | Depth: {_focusDepth} | Traversal: {_currentTraversalMode} | Seeds: {_seedSelectionState.Count}";
         StatsText.Text = stats;
     }
 
@@ -141,12 +151,9 @@ public partial class MainWindow : Window
         var node = graph.Nodes.FirstOrDefault(n => $"{n.Namespace}.{n.DisplayName}" == selected);
         if (node == null) return;
 
-        TypeGraph? focusedGraph = _focusNavigationController.FocusSelection(
-            node.Id,
-            depth: 1,
-            GraphFocusTraversalMode.UndirectedAssociations);
-        if (focusedGraph != null)
-            SetDisplayedGraph(focusedGraph, node.Id);
+        _currentSelectedNodeId = node.Id;
+        UpdateInspector(node);
+        UpdateSeedButtons();
     }
 
     private void OnCanvasSelectionChanged(GraphNode? node)
@@ -154,11 +161,181 @@ public partial class MainWindow : Window
         if (node == null)
         {
             SelectedNodeText.Text = "";
+            _currentSelectedNodeId = string.Empty;
+            UpdateSeedButtons();
             return;
         }
 
+        _currentSelectedNodeId = node.Id;
         SelectedNodeText.Text = $"{node.Namespace}.{node.DisplayName}\nKind: {node.Kind}\nFile: {Path.GetFileName(node.AssetPath)}";
+
+        // Update inspector from the actual graph node
+        TypeGraph? graph = _focusNavigationController.CurrentGraph;
+        if (graph != null)
+        {
+            var typeNode = graph.Nodes.FirstOrDefault(n => n.Id == node.Id);
+            if (typeNode != null)
+                UpdateInspector(typeNode);
+        }
+
+        UpdateSeedButtons();
     }
+
+    // --- Focus Controls ---
+
+    private void OnFocusD1(object? sender, RoutedEventArgs e) => FocusCurrentSelection(1);
+    private void OnFocusD2(object? sender, RoutedEventArgs e) => FocusCurrentSelection(2);
+    private void OnFocusD3(object? sender, RoutedEventArgs e) => FocusCurrentSelection(3);
+
+    private void OnFocusCurrent(object? sender, RoutedEventArgs e) => FocusCurrentSelection(_focusDepth);
+
+    private void FocusCurrentSelection(int depth)
+    {
+        _focusDepth = depth;
+        IReadOnlyList<string> seeds = ResolveFocusSeedIds();
+        if (!_focusNavigationController.CanFocusSelection(seeds))
+            return;
+
+        TypeGraph? focused = _focusNavigationController.FocusSelection(seeds, depth, _currentTraversalMode);
+        if (focused != null)
+        {
+            _seedSelectionState.PruneToGraph(focused);
+            SetDisplayedGraph(focused, seeds.Count > 0 ? seeds[0] : _currentSelectedNodeId);
+        }
+    }
+
+    private IReadOnlyList<string> ResolveFocusSeedIds()
+    {
+        if (_seedSelectionState.HasSeeds)
+            return _seedSelectionState.SeedNodeIds;
+
+        return string.IsNullOrEmpty(_currentSelectedNodeId)
+            ? Array.Empty<string>()
+            : new[] { _currentSelectedNodeId };
+    }
+
+    private void OnTraversalChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (TraversalComboBox.SelectedIndex < 0) return;
+        _currentTraversalMode = TraversalComboBox.SelectedIndex switch
+        {
+            0 => GraphFocusTraversalMode.UndirectedAssociations,
+            1 => GraphFocusTraversalMode.OutgoingAssociationsOnly,
+            2 => GraphFocusTraversalMode.IncomingAssociationsOnly,
+            3 => GraphFocusTraversalMode.AllVisibleRelations,
+            _ => GraphFocusTraversalMode.UndirectedAssociations
+        };
+        if (_currentGraph != null)
+            UpdateStats(_focusNavigationController.CurrentGraph);
+    }
+
+    // --- Seed Controls ---
+
+    private void OnAddSeed(object? sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(_currentSelectedNodeId))
+        {
+            _seedSelectionState.Add(_currentSelectedNodeId);
+            UpdateSeedButtons();
+            if (_currentGraph != null)
+                UpdateStats(_focusNavigationController.CurrentGraph);
+        }
+    }
+
+    private void OnRemoveSeed(object? sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(_currentSelectedNodeId))
+        {
+            _seedSelectionState.Remove(_currentSelectedNodeId);
+            UpdateSeedButtons();
+            if (_currentGraph != null)
+                UpdateStats(_focusNavigationController.CurrentGraph);
+        }
+    }
+
+    private void OnClearSeeds(object? sender, RoutedEventArgs e)
+    {
+        _seedSelectionState.Clear();
+        UpdateSeedButtons();
+        if (_currentGraph != null)
+            UpdateStats(_focusNavigationController.CurrentGraph);
+    }
+
+    private void UpdateSeedButtons()
+    {
+        // Could update button enabled states here based on selection
+        if (_currentGraph != null)
+            UpdateStats(_focusNavigationController.CurrentGraph);
+    }
+
+    // --- Search ---
+
+    private void OnSearchTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        string text = SearchTextBox.Text ?? string.Empty;
+        GraphCanvasView.SetSearchText(text);
+    }
+
+    // --- Edge Filters ---
+
+    private void OnEdgeFilterChanged(object? sender, RoutedEventArgs e)
+    {
+        GraphCanvasView.SetEdgeVisibility(
+            ShowInheritanceCheck.IsChecked == true,
+            ShowImplementsCheck.IsChecked == true,
+            ShowAssociationsCheck.IsChecked == true);
+    }
+
+    // --- Inspector ---
+
+    private void UpdateInspector(TypeNodeData node)
+    {
+        SelectedNodeText.Text = $"{node.Namespace}.{node.DisplayName}\nKind: {node.Kind}\nFile: {Path.GetFileName(node.AssetPath)}";
+
+        InspectorNodeText.Text =
+            $"Name: {node.DisplayName}\n" +
+            $"Namespace: {node.Namespace}\n" +
+            $"Kind: {node.Kind}\n" +
+            $"File: {Path.GetFileName(node.AssetPath)}\n" +
+            (node.Stereotypes.Count > 0 ? $"Stereotypes: {string.Join(", ", node.Stereotypes)}\n" : "");
+
+        var memberItems = node.Members
+            .Select(m => $"{m.Visibility} {m.Kind} {m.TypeName} {m.Name}{(m.Kind == TypeMemberKind.Method ? "()" : "")}")
+            .ToList();
+        InspectorMembersList.ItemsSource = memberItems;
+
+        TypeGraph? graph = _focusNavigationController.CurrentGraph;
+        if (graph == null)
+        {
+            InspectorOutgoingList.ItemsSource = Array.Empty<string>();
+            InspectorIncomingList.ItemsSource = Array.Empty<string>();
+            return;
+        }
+
+        var outgoing = graph.Edges
+            .Where(e => e.FromNodeId == node.Id)
+            .Select(e =>
+            {
+                var target = graph.Nodes.FirstOrDefault(n => n.Id == e.ToNodeId);
+                string targetName = target != null ? $"{target.Namespace}.{target.DisplayName}" : e.ToNodeId;
+                return $"{e.Kind} -> {targetName}" + (string.IsNullOrEmpty(e.Label) ? "" : $" [{e.Label}]");
+            })
+            .ToList();
+        InspectorOutgoingList.ItemsSource = outgoing;
+
+        var incoming = graph.Edges
+            .Where(e => e.ToNodeId == node.Id)
+            .Select(e =>
+            {
+                var source = graph.Nodes.FirstOrDefault(n => n.Id == e.FromNodeId);
+                string sourceName = source != null ? $"{source.Namespace}.{source.DisplayName}" : e.FromNodeId;
+                return $"{sourceName} -> {e.Kind}" + (string.IsNullOrEmpty(e.Label) ? "" : $" [{e.Label}]");
+            })
+            .ToList();
+        InspectorIncomingList.ItemsSource = incoming;
+    }
+
+    // --- Export ---
 
     private void OnSavePng(object? sender, RoutedEventArgs e)
     {
@@ -167,6 +344,73 @@ public partial class MainWindow : Window
         var path = Path.Combine(dir, $"diagram_{DateTime.Now:yyyyMMdd_HHmmss}.png");
         GraphCanvasView.SaveToPng(path);
         StatsText.Text = $"Saved: {path}";
+    }
+
+    private void OnSaveMmd(object? sender, RoutedEventArgs e)
+    {
+        TypeGraph? graph = _focusNavigationController.CurrentGraph ?? _currentGraph;
+        if (graph == null) return;
+
+        var dir = Path.Combine(AppContext.BaseDirectory, "export");
+        Directory.CreateDirectory(dir);
+        string mermaid = MermaidGraphExporter.BuildDiagram(graph);
+        var path = Path.Combine(dir, $"{MakeSafeFileName(graph.Title)}.mmd");
+        File.WriteAllText(path, mermaid);
+        StatsText.Text = $"Saved: {path}";
+    }
+
+    private void OnSaveMd(object? sender, RoutedEventArgs e)
+    {
+        TypeGraph? graph = _focusNavigationController.CurrentGraph ?? _currentGraph;
+        if (graph == null) return;
+
+        var dir = Path.Combine(AppContext.BaseDirectory, "export");
+        Directory.CreateDirectory(dir);
+        string mermaid = MermaidGraphExporter.BuildDiagram(graph);
+        var path = Path.Combine(dir, $"{MakeSafeFileName(graph.Title)}.md");
+        File.WriteAllText(path, "# " + graph.Title + "\n\n```mermaid\n" + mermaid + "\n```\n");
+        StatsText.Text = $"Saved: {path}";
+    }
+
+    private async void OnCopyMermaid(object? sender, RoutedEventArgs e)
+    {
+        TypeGraph? graph = _focusNavigationController.CurrentGraph ?? _currentGraph;
+        if (graph == null) return;
+
+        string mermaid = MermaidGraphExporter.BuildDiagram(graph);
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard != null)
+        {
+            await clipboard.SetTextAsync(mermaid);
+            StatsText.Text = "Mermaid copied to clipboard";
+        }
+    }
+
+    private void OnOpenLiveEditor(object? sender, RoutedEventArgs e)
+    {
+        TypeGraph? graph = _focusNavigationController.CurrentGraph ?? _currentGraph;
+        if (graph == null) return;
+
+        string mermaid = MermaidGraphExporter.BuildDiagram(graph);
+        // Mermaid Live Editor supports base64-encoded JSON with code field
+        string json = "{\"code\":\"" + mermaid.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n") + "\",\"mermaid\":{}}";
+        string base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
+        string url = $"https://mermaid.live/edit#base64:{base64}";
+
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            StatsText.Text = "Opened Mermaid Live Editor";
+        }
+        catch { StatsText.Text = "Could not open browser"; }
+    }
+
+    private static string MakeSafeFileName(string title)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var safe = new string(title.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
+        if (string.IsNullOrWhiteSpace(safe)) safe = "diagram";
+        return safe;
     }
 
     private void OnOpenInExplorer(object? sender, RoutedEventArgs e)
@@ -215,8 +459,6 @@ public partial class MainWindow : Window
 
     private void OnFit(object? sender, RoutedEventArgs e) => GraphCanvasView.FitToScreen();
 
-    // For zoom in/out buttons, we directly manipulate the internal zoom
-    // by calling a public method we'll add to GraphCanvas
     private void OnZoomIn(object? sender, RoutedEventArgs e) => GraphCanvasView.ZoomBy(1.2f);
     private void OnZoomOut(object? sender, RoutedEventArgs e) => GraphCanvasView.ZoomBy(1.0f / 1.2f);
 }

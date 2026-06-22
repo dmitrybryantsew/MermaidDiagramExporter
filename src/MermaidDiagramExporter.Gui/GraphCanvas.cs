@@ -10,6 +10,7 @@ using Avalonia.Platform;
 using Avalonia.Skia;
 using Avalonia.Threading;
 using SkiaSharp;
+using MermaidDiagramExporter.Core;
 
 namespace MermaidDiagramExporter.Gui;
 
@@ -32,6 +33,17 @@ public class GraphCanvas : Control
     private bool _needsRender = true;
     private bool _fitToScreenOnNextRender;
     private WriteableBitmap? _writeableBitmap;
+
+    // Search highlighting
+    private string _searchText = string.Empty;
+
+    // Edge type visibility
+    private bool _showInheritanceEdges = true;
+    private bool _showImplementsEdges = true;
+    private bool _showAssociationEdges = true;
+
+    // Search highlight color (bright yellow)
+    private static readonly SKColor ColorNodeStrokeSearchMatch = new(0xFF, 0xE0, 0x40);
 
     // Colors (dark theme matching Unity)
     private static readonly SKColor ColorBg = new(0x1A, 0x1E, 0x24);
@@ -168,6 +180,20 @@ public class GraphCanvas : Control
         Invalidate();
     }
 
+    public void SetSearchText(string searchText)
+    {
+        _searchText = searchText ?? string.Empty;
+        Invalidate();
+    }
+
+    public void SetEdgeVisibility(bool inheritance, bool implements, bool associations)
+    {
+        _showInheritanceEdges = inheritance;
+        _showImplementsEdges = implements;
+        _showAssociationEdges = associations;
+        Invalidate();
+    }
+
     private void Invalidate()
     {
         _needsRender = true;
@@ -282,17 +308,31 @@ public class GraphCanvas : Control
         {
             if (edge.FromNode == null || edge.ToNode == null) continue;
 
+            // Filter by edge kind visibility
+            bool visible = edge.Kind switch
+            {
+                TypeEdgeKind.Inheritance => _showInheritanceEdges,
+                TypeEdgeKind.Implements => _showImplementsEdges,
+                TypeEdgeKind.Association => _showAssociationEdges,
+                _ => true
+            };
+            if (!visible) continue;
+
             float fromX = edge.FromNode.X + edge.FromNode.Width;
             float fromY = edge.FromNode.Y + edge.FromNode.Height / 2;
             float toX = edge.ToNode.X;
             float toY = edge.ToNode.Y + edge.ToNode.Height / 2;
 
-            SKColor edgeColor = edge.IsStrongRelation ? ColorEdgeInheritance : ColorEdgeAssociation;
-            float strokeWidth = edge.IsStrongRelation ? 2.0f : 1.2f;
+            SKColor edgeColor = edge.Kind switch
+            {
+                TypeEdgeKind.Inheritance => ColorEdgeInheritance,
+                TypeEdgeKind.Implements => ColorEdgeImplements,
+                _ => ColorEdgeAssociation
+            };
+            float strokeWidth = edge.Kind == TypeEdgeKind.Association ? 1.2f : 2.0f;
 
             if (_selectedNode != null && (edge.FromNode.Id == _selectedNode.Id || edge.ToNode.Id == _selectedNode.Id))
             {
-                edgeColor = edge.IsStrongRelation ? ColorEdgeInheritance : ColorEdgeImplements;
                 strokeWidth += 0.5f;
             }
 
@@ -316,6 +356,15 @@ public class GraphCanvas : Control
                 toX, toY);
             canvas.DrawPath(path, paint);
 
+            // Draw label if present
+            if (!string.IsNullOrEmpty(edge.Label))
+            {
+                float midX = (fromX + toX) / 2;
+                float midY = (fromY + toY) / 2;
+                using var labelPaint = new SKPaint { Color = ColorTextMuted, IsAntialias = true, TextSize = 9 };
+                canvas.DrawText(edge.Label, midX, midY - 4, labelPaint);
+            }
+
             DrawArrowhead(canvas, toX, toY, edgeColor);
         }
     }
@@ -336,17 +385,30 @@ public class GraphCanvas : Control
 
     private void DrawNodes(SKCanvas canvas)
     {
+        bool searchActive = !string.IsNullOrWhiteSpace(_searchText);
+
         foreach (var node in _nodes)
         {
             float x = node.X, y = node.Y, w = node.Width, h = node.Height;
 
+            bool searchMatch = false;
+            if (searchActive)
+            {
+                searchMatch =
+                    node.DisplayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
+                    || node.Namespace.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
+                    || node.Id.Contains(_searchText, StringComparison.OrdinalIgnoreCase);
+            }
+
             using var fillPaint = new SKPaint { Color = ColorNodeFill, Style = SKPaintStyle.Fill, IsAntialias = true };
             canvas.DrawRoundRect(x, y, w, h, 6, 6, fillPaint);
 
-            var strokeColor = node == _selectedNode ? ColorNodeStrokeSelected
+            var strokeColor = searchActive && searchMatch ? ColorNodeStrokeSearchMatch
+                           : node == _selectedNode ? ColorNodeStrokeSelected
                            : node == _hoveredNode ? ColorNodeStrokeHover
                            : ColorNodeStroke;
-            using var strokePaint = new SKPaint { Color = strokeColor, Style = SKPaintStyle.Stroke, StrokeWidth = node == _selectedNode ? 3 : 1.5f, IsAntialias = true };
+            float strokeWidth = (node == _selectedNode || (searchActive && searchMatch)) ? 3 : 1.5f;
+            using var strokePaint = new SKPaint { Color = strokeColor, Style = SKPaintStyle.Stroke, StrokeWidth = strokeWidth, IsAntialias = true };
             canvas.DrawRoundRect(x, y, w, h, 6, 6, strokePaint);
 
             using var headerPaint = new SKPaint { Color = strokeColor.WithAlpha(40), Style = SKPaintStyle.Fill, IsAntialias = true };
@@ -538,4 +600,6 @@ public class GraphEdge
     public GraphNode? FromNode { get; set; }
     public GraphNode? ToNode { get; set; }
     public bool IsStrongRelation { get; set; }
+    public TypeEdgeKind Kind { get; set; } = TypeEdgeKind.Association;
+    public string Label { get; set; } = "";
 }

@@ -42,15 +42,28 @@ public static class Program
             Directory.CreateDirectory(outputDir);
 
             string safeName = MakeSafeFileName(graph.Title);
-            string outputPath = Path.Combine(outputDir, safeName + ".md");
+            var writtenFiles = new List<string>();
 
-            File.WriteAllText(outputPath, "# " + graph.Title + "\n\n```mermaid\n" + mermaid + "\n```\n");
-
-            Console.WriteLine($"Wrote: {outputPath}");
-
-            if (opts.OpenAfter)
+            if (opts.Format is "md" or "both")
             {
-                OpenInDefaultApp(outputPath);
+                string mdPath = Path.Combine(outputDir, safeName + ".md");
+                File.WriteAllText(mdPath, "# " + graph.Title + "\n\n```mermaid\n" + mermaid + "\n```\n");
+                writtenFiles.Add(mdPath);
+            }
+
+            if (opts.Format is "mmd" or "both")
+            {
+                string mmdPath = Path.Combine(outputDir, safeName + ".mmd");
+                File.WriteAllText(mmdPath, mermaid);
+                writtenFiles.Add(mmdPath);
+            }
+
+            foreach (var path in writtenFiles)
+                Console.WriteLine($"Wrote: {path}");
+
+            if (opts.OpenAfter && writtenFiles.Count > 0)
+            {
+                OpenInDefaultApp(writtenFiles[0]);
             }
 
             return 0;
@@ -95,6 +108,7 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  -o, --output <path>       Output directory (default: ./docs/mermaid)");
+        Console.WriteLine("  --format <md|mmd|both>     Output format (default: md)");
         Console.WriteLine("  --no-fields               Exclude fields");
         Console.WriteLine("  --no-properties           Exclude properties");
         Console.WriteLine("  --no-methods              Exclude methods");
@@ -110,6 +124,7 @@ internal sealed class CliOptions
 {
     public string FolderPath { get; set; } = string.Empty;
     public string OutputDir { get; set; } = Path.Combine(Environment.CurrentDirectory, "docs", "mermaid");
+    public string Format { get; set; } = "md";
     public bool OpenAfter { get; set; }
     public GraphBuildOptions BuildOptions { get; set; } = new GraphBuildOptions();
 
@@ -127,6 +142,14 @@ internal sealed class CliOptions
                 case "--output":
                     if (++i >= args.Length) return null;
                     opts.OutputDir = args[i];
+                    break;
+                case "--format":
+                    if (++i >= args.Length) return null;
+                    {
+                        string fmt = args[i].ToLowerInvariant();
+                        if (fmt is not ("md" or "mmd" or "both")) return null;
+                        opts.Format = fmt;
+                    }
                     break;
                 case "--no-fields": opts.BuildOptions.IncludeFields = false; break;
                 case "--no-properties": opts.BuildOptions.IncludeProperties = false; break;

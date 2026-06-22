@@ -11,7 +11,7 @@ namespace MermaidDiagramExporter.Gui.Layout;
 /// - Structured row building with wrapping
 /// - Crossing reduction via median/barycenter heuristic
 /// </summary>
-internal sealed class LayeredLayoutEngine
+public sealed class LayeredLayoutEngine : IGraphLayoutEngine
 {
     private static readonly CrossingReductionService CrossingReduction = new();
 

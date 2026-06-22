@@ -4,9 +4,9 @@
         x:Class="MermaidDiagramExporter.Gui.MainWindow"
         Title="Mermaid Diagram Exporter" Width="1400" Height="900"
         WindowState="Maximized">
-  <Grid ColumnDefinitions="280,1,*">
+  <Grid ColumnDefinitions="320,1,*,1,300">
     <!-- Sidebar -->
-    <Grid Grid.Column="0" Background="#F0F0F0" RowDefinitions="Auto,Auto,*,Auto,Auto">
+    <Grid Grid.Column="0" Background="#F0F0F0" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
       <!-- Folder picker -->
       <StackPanel Grid.Row="0" Margin="8">
         <TextBlock Text="Source Folder" FontWeight="Bold" Margin="0,0,0,4"/>
@@ -18,31 +18,70 @@
       </StackPanel>
 
       <!-- Navigation buttons -->
-      <StackPanel Grid.Row="1" Margin="8,0,8,8" Orientation="Horizontal" Spacing="4">
+      <StackPanel Grid.Row="1" Margin="8,0,8,4" Orientation="Horizontal" Spacing="4">
         <Button x:Name="BackButton" Content="← Back" Click="OnBack" IsEnabled="False" MinWidth="70"/>
         <Button x:Name="ForwardButton" Content="Forward →" Click="OnForward" IsEnabled="False" MinWidth="70"/>
         <Button x:Name="ResetButton" Content="Reset" Click="OnReset" IsEnabled="False" MinWidth="50"/>
       </StackPanel>
 
+      <!-- Focus controls -->
+      <StackPanel Grid.Row="2" Margin="8,0,8,4">
+        <TextBlock Text="Focus Depth" FontWeight="Bold" Margin="0,0,0,4"/>
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button Content="D1" Click="OnFocusD1" MinWidth="50"/>
+          <Button Content="D2" Click="OnFocusD2" MinWidth="50"/>
+          <Button Content="D3" Click="OnFocusD3" MinWidth="50"/>
+        </StackPanel>
+        <TextBlock Text="Traversal" FontWeight="Bold" Margin="0,6,0,4"/>
+        <ComboBox x:Name="TraversalComboBox" MinWidth="200" SelectionChanged="OnTraversalChanged">
+          <ComboBoxItem Content="Undirected" IsSelected="True"/>
+          <ComboBoxItem Content="Outgoing"/>
+          <ComboBoxItem Content="Incoming"/>
+          <ComboBoxItem Content="All Visible"/>
+        </ComboBox>
+        <TextBlock Text="Seeds" FontWeight="Bold" Margin="0,6,0,4"/>
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button Content="Add Seed" Click="OnAddSeed" MinWidth="70"/>
+          <Button Content="Remove Seed" Click="OnRemoveSeed" MinWidth="80"/>
+          <Button Content="Clear" Click="OnClearSeeds" MinWidth="50"/>
+        </StackPanel>
+        <Button Content="Focus Current Selection" Click="OnFocusCurrent" Margin="0,4,0,0" Background="#2196F3" Foreground="White"/>
+      </StackPanel>
+
+      <!-- Edge filters -->
+      <StackPanel Grid.Row="3" Margin="8,0,8,4">
+        <TextBlock Text="Edge Filters" FontWeight="Bold" Margin="0,0,0,4"/>
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <CheckBox x:Name="ShowInheritanceCheck" Content="Inheritance" IsChecked="True" Click="OnEdgeFilterChanged"/>
+          <CheckBox x:Name="ShowImplementsCheck" Content="Implements" IsChecked="True" Click="OnEdgeFilterChanged"/>
+          <CheckBox x:Name="ShowAssociationsCheck" Content="Associations" IsChecked="True" Click="OnEdgeFilterChanged"/>
+        </StackPanel>
+      </StackPanel>
+
+      <!-- Search -->
+      <StackPanel Grid.Row="4" Margin="8,0,8,4">
+        <TextBlock Text="Search" FontWeight="Bold" Margin="0,0,0,4"/>
+        <TextBox x:Name="SearchTextBox" PlaceholderText="Type to highlight..." Watermark="Type to highlight..." TextChanged="OnSearchTextChanged"/>
+      </StackPanel>
+
       <!-- Class list -->
-      <Grid Grid.Row="2" Margin="8,0,8,0" RowDefinitions="Auto,*">
+      <Grid Grid.Row="5" Margin="8,0,8,0" RowDefinitions="Auto,*">
         <TextBlock Grid.Row="0" Text="Classes" FontWeight="Bold" Margin="0,0,0,4"/>
         <ListBox Grid.Row="1" x:Name="ClassListBox" SelectionChanged="OnClassSelected"/>
       </Grid>
 
       <!-- Selected node info -->
-      <StackPanel Grid.Row="3" Margin="8">
+      <StackPanel Grid.Row="6" Margin="8">
         <TextBlock Text="Selected" FontWeight="Bold" Margin="0,0,0,4"/>
         <TextBlock x:Name="SelectedNodeText" Text="" TextWrapping="Wrap"/>
         <Button Content="Open in Explorer" Click="OnOpenInExplorer" Margin="0,4,0,0" MinWidth="100"/>
-        <Button Content="Save PNG" Click="OnSavePng" Margin="0,4,0,0" MinWidth="100"/>
       </StackPanel>
 
       <!-- Stats -->
-      <TextBlock Grid.Row="4" x:Name="StatsText" Text="" Margin="8" Foreground="Gray" FontSize="11"/>
+      <TextBlock Grid.Row="7" x:Name="StatsText" Text="" Margin="8" Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
     </Grid>
 
-    <!-- Splitter -->
+    <!-- Left Splitter -->
     <GridSplitter Grid.Column="1" Background="#D0D0D0" Width="1"/>
 
     <!-- Graph canvas -->
@@ -54,6 +93,62 @@
         <Button Content="+" Click="OnZoomIn" MinWidth="40"/>
         <Button Content="−" Click="OnZoomOut" MinWidth="40"/>
       </StackPanel>
+      <!-- Export buttons overlay (bottom) -->
+      <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8" Spacing="4">
+        <Button Content="Save PNG" Click="OnSavePng" MinWidth="90"/>
+        <Button Content="Save .mmd" Click="OnSaveMmd" MinWidth="90"/>
+        <Button Content="Save .md" Click="OnSaveMd" MinWidth="90"/>
+        <Button Content="Copy Mermaid" Click="OnCopyMermaid" MinWidth="90"/>
+        <Button Content="Open Live Editor" Click="OnOpenLiveEditor" MinWidth="90"/>
+      </StackPanel>
+    </Grid>
+
+    <!-- Right Splitter -->
+    <GridSplitter Grid.Column="3" Background="#D0D0D0" Width="1"/>
+
+    <!-- Inspector Panel -->
+    <Grid Grid.Column="4" Background="#F5F5F5" RowDefinitions="Auto,*,*,*">
+      <TextBlock Grid.Row="0" Text="Inspector" FontWeight="Bold" Margin="8,8,8,4"/>
+      <ScrollViewer Grid.Row="1" Margin="4">
+        <StackPanel Margin="4">
+          <TextBlock Text="Node Details" FontWeight="SemiBold" Margin="0,0,0,2"/>
+          <TextBlock x:Name="InspectorNodeText" Text="" TextWrapping="Wrap"/>
+        </StackPanel>
+      </ScrollViewer>
+      <Grid Grid.Row="2" Margin="4" RowDefinitions="Auto,*">
+        <TextBlock Grid.Row="0" Text="Members" FontWeight="SemiBold" Margin="4,0,4,2"/>
+        <ScrollViewer Grid.Row="1">
+          <ItemsControl x:Name="InspectorMembersList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="4,1" FontFamily="Consolas,monospace" FontSize="11"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Grid>
+      <Grid Grid.Row="3" Margin="4" RowDefinitions="Auto,*,Auto,*">
+        <TextBlock Grid.Row="0" Text="Outgoing Relations" FontWeight="SemiBold" Margin="4,0,4,2"/>
+        <ScrollViewer Grid.Row="1">
+          <ItemsControl x:Name="InspectorOutgoingList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="4,1" FontFamily="Consolas,monospace" FontSize="11"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+        <TextBlock Grid.Row="2" Text="Incoming Relations" FontWeight="SemiBold" Margin="4,0,4,2"/>
+        <ScrollViewer Grid.Row="3">
+          <ItemsControl x:Name="InspectorIncomingList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="4,1" FontFamily="Consolas,monospace" FontSize="11"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Grid>
     </Grid>
   </Grid>
 </Window>

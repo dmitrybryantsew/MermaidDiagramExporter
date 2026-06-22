@@ -57,6 +57,8 @@ public class LayoutEngine
                 {
                     FromNode = from,
                     ToNode = to,
+                    Kind = e.Kind,
+                    Label = e.Label ?? "",
                     IsStrongRelation = e.Kind == Core.TypeEdgeKind.Inheritance || e.Kind == Core.TypeEdgeKind.Implements
                 });
             }
