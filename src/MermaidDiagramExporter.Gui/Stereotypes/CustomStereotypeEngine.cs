@@ -12,6 +12,9 @@ namespace MermaidDiagramExporter.Gui.Stereotypes;
 /// </summary>
 public sealed class CustomStereotypeEngine
 {
+    private static readonly RegexOptions RegexOpts = RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.NonBacktracking;
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(500);
+
     private readonly List<CompiledRule> _rules = new();
 
     public CustomStereotypeEngine(IEnumerable<StereotypeRule> rules)
@@ -22,7 +25,7 @@ public sealed class CustomStereotypeEngine
                 continue;
             try
             {
-                var regex = new Regex(rule.Pattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                var regex = new Regex(rule.Pattern, RegexOpts, RegexTimeout);
                 _rules.Add(new CompiledRule(regex, rule.Label, rule.ColorHex));
             }
             catch { /* invalid regex — skip */ }
@@ -37,9 +40,17 @@ public sealed class CustomStereotypeEngine
         var results = new List<MatchedStereotype>();
         foreach (var rule in _rules)
         {
-            if (rule.Regex.IsMatch(typeName))
+            try
             {
-                results.Add(new MatchedStereotype(rule.Label, rule.ColorHex));
+                if (rule.Regex.IsMatch(typeName))
+                {
+                    results.Add(new MatchedStereotype(rule.Label, rule.ColorHex));
+                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                // Treat timeout as non-match — don't let one bad pattern crash the scan.
+                continue;
             }
         }
         return results;
@@ -56,10 +67,19 @@ public sealed class CustomStereotypeEngine
             bool matched = false;
             foreach (var typeName in typeNamesInChain)
             {
-                if (typeName != null && rule.Regex.IsMatch(typeName))
+                if (typeName == null) continue;
+                try
                 {
-                    matched = true;
-                    break;
+                    if (rule.Regex.IsMatch(typeName))
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    // Treat timeout as non-match for this type name; continue checking others.
+                    continue;
                 }
             }
             if (matched)
