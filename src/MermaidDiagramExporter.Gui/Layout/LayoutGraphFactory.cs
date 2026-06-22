@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using MermaidDiagramExporter.Core;
 
 namespace MermaidDiagramExporter.Gui.Layout;
 
@@ -39,7 +40,7 @@ internal static class LayoutGraphFactory
 
         var edges = graph.Edges.Select(edge => new LayoutEdge
         {
-            Id = edge.FromNodeId + "->" + edge.ToNodeId + ":" + edge.Kind,
+            Id = TypeEdgeData.CreateEdgeId(edge.FromNodeId, edge.ToNodeId, edge.Kind),
             FromNodeId = edge.FromNodeId,
             ToNodeId = edge.ToNodeId,
             Kind = edge.Kind,

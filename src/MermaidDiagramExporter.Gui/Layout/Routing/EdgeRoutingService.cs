@@ -385,7 +385,7 @@ public sealed class EdgeRoutingService
 
     private static string BuildEdgeId(TypeEdgeData edge)
     {
-        return edge.FromNodeId + "->" + edge.ToNodeId + ":" + edge.Kind;
+        return TypeEdgeData.CreateEdgeId(edge.FromNodeId, edge.ToNodeId, edge.Kind);
     }
 
     private static Dictionary<string, CrossClusterLane> BuildCrossClusterLanes(

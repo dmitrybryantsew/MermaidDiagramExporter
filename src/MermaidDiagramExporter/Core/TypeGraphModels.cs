@@ -193,6 +193,10 @@ public sealed class TypeEdgeData
     public string Label { get; set; } = string.Empty;
 
     public bool IsStrongRelation { get; set; }
+
+    /// <summary>Creates a canonical edge ID string in the format from->to:kind.</summary>
+    public static string CreateEdgeId(string fromNodeId, string toNodeId, TypeEdgeKind kind)
+        => $"{fromNodeId}->{toNodeId}:{kind}";
 }
 
 public sealed class TypeGroupData
