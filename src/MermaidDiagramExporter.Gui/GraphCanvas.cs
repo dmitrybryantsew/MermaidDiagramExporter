@@ -149,7 +149,7 @@ public class GraphCanvas : Control
 
         using var bitmap = new SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
-        canvas.Clear(SKColor.Parse("#1A1E24"));
+        canvas.Clear(ColorBg);
         canvas.Save();
         canvas.Translate(_panX, _panY);
         canvas.Scale(_zoom);
@@ -280,7 +280,7 @@ public class GraphCanvas : Control
         using var surface = SKSurface.Create(info, framebuffer.Address, framebuffer.RowBytes);
         var canvas = surface.Canvas;
 
-        canvas.Clear(SKColor.Parse("#1A1E24"));
+        canvas.Clear(ColorBg);
         canvas.Save();
         canvas.Translate(_panX, _panY);
         canvas.Scale(_zoom);
