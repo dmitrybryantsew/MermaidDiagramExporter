@@ -183,16 +183,28 @@ public sealed class RoslynTypeScanner
     private List<string> BuildStereotypes(INamedTypeSymbol type)
     {
         List<string> stereotypes = new();
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
 
-        if (type.BaseType != null)
+        // Walk the full base type chain to detect Unity stereotypes
+        // even through indirect inheritance (e.g. MyClass -> MyBaseClass -> MonoBehaviour)
+        INamedTypeSymbol? current = type.BaseType;
+        while (current != null)
         {
-            string baseName = type.BaseType.Name;
-            if (baseName == "MonoBehaviour")
-                stereotypes.Add("mono-behaviour");
-            else if (baseName == "ScriptableObject")
-                stereotypes.Add("scriptable-object");
-            else if (baseName == "Component")
-                stereotypes.Add("component");
+            string baseName = current.Name ?? string.Empty;
+            string baseFullName = current.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+            string? stereotype = null;
+            if (baseName == "MonoBehaviour" || baseFullName.Contains("MonoBehaviour"))
+                stereotype = "mono-behaviour";
+            else if (baseName == "ScriptableObject" || baseFullName.Contains("ScriptableObject"))
+                stereotype = "scriptable-object";
+            else if (baseName == "Component" || baseFullName.Contains("UnityEngine.Component"))
+                stereotype = "component";
+
+            if (stereotype != null && seen.Add(stereotype))
+                stereotypes.Add(stereotype);
+
+            current = current.BaseType;
         }
 
         return stereotypes;
@@ -202,6 +214,37 @@ public sealed class RoslynTypeScanner
     {
         List<TypeMemberData> members = new();
 
+        if (options.IncludeDeclaredMembersOnly)
+        {
+            CollectMembers(type, options, members);
+        }
+        else
+        {
+            // Walk the full inheritance chain to collect inherited members
+            // from base types. Start from the base type and walk up,
+            // then add declared members of the current type.
+            CollectInheritedMembers(type.BaseType, options, members);
+            CollectMembers(type, options, members);
+        }
+
+        if (options.MaxMemberCountPerNode > 0 && members.Count > options.MaxMemberCountPerNode)
+        {
+            members = members.Take(options.MaxMemberCountPerNode).ToList();
+        }
+
+        return members;
+    }
+
+    private void CollectInheritedMembers(INamedTypeSymbol? baseType, GraphBuildOptions options, List<TypeMemberData> members)
+    {
+        if (baseType == null) return;
+        // Walk up the chain first (so base type members come first in the list)
+        CollectInheritedMembers(baseType.BaseType, options, members);
+        CollectMembers(baseType, options, members);
+    }
+
+    private void CollectMembers(INamedTypeSymbol type, GraphBuildOptions options, List<TypeMemberData> members)
+    {
         if (options.IncludeFields)
         {
             foreach (IFieldSymbol field in type.GetMembers().OfType<IFieldSymbol>())
@@ -273,13 +316,6 @@ public sealed class RoslynTypeScanner
                 });
             }
         }
-
-        if (options.MaxMemberCountPerNode > 0 && members.Count > options.MaxMemberCountPerNode)
-        {
-            members = members.Take(options.MaxMemberCountPerNode).ToList();
-        }
-
-        return members;
     }
 
     private static bool IsAccessible(ISymbol symbol)

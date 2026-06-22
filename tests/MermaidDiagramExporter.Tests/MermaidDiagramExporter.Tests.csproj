@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\MermaidDiagramExporter\MermaidDiagramExporter.csproj" />
+    <ProjectReference Include="..\..\src\MermaidDiagramExporter.Gui\MermaidDiagramExporter.Gui.csproj" />
   </ItemGroup>
 
 </Project>
