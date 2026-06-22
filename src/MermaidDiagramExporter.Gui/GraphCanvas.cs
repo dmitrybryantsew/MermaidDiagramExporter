@@ -85,6 +85,69 @@ public class GraphCanvas : Control
     private const float NamespacePadding = 24;
     private const float NamespaceTitleHeight = 24;
 
+    // ── Cached SKPaint objects (reused across frames to reduce GC pressure) ──
+    private static readonly SKPaint NamespaceBgPaint = new()
+    {
+        Color = ColorNamespaceBg, Style = SKPaintStyle.Fill, IsAntialias = true
+    };
+    private static readonly SKPaint NamespaceBorderPaint = new()
+    {
+        Color = ColorNamespaceBorder, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true
+    };
+    private static readonly SKPaint NamespaceTextPaint = new()
+    {
+        Color = ColorNamespaceText, IsAntialias = true, TextSize = 13
+    };
+    private static readonly SKPaint EdgeLabelPaint = new()
+    {
+        Color = ColorTextMuted, IsAntialias = true, TextSize = 9
+    };
+    private static readonly SKPaint NodeFillPaint = new()
+    {
+        Color = ColorNodeFill, Style = SKPaintStyle.Fill, IsAntialias = true
+    };
+    private static readonly SKPaint BadgeTextPaint = new()
+    {
+        Color = SKColors.White, IsAntialias = true, TextSize = 9
+    };
+    private static readonly SKPaint StereotypeBadgeTextPaint = new()
+    {
+        Color = SKColors.White, IsAntialias = true, TextSize = 8
+    };
+    private static readonly SKPaint NodeNamePaint = new()
+    {
+        Color = ColorText, IsAntialias = true, TextSize = 12
+    };
+    private static readonly SKPaint NodeMemberPaint = new()
+    {
+        Color = ColorTextMuted, IsAntialias = true, TextSize = 10
+    };
+    // Mutable paints for state-dependent rendering (reused, properties updated per-frame)
+    private static readonly SKPaint EdgeStrokePaint = new()
+    {
+        Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeCap = SKStrokeCap.Round
+    };
+    private static readonly SKPaint ArrowheadPaint = new()
+    {
+        Style = SKPaintStyle.Fill, IsAntialias = true
+    };
+    private static readonly SKPaint NodeStrokePaint = new()
+    {
+        Style = SKPaintStyle.Stroke, IsAntialias = true
+    };
+    private static readonly SKPaint NodeHeaderPaint = new()
+    {
+        Style = SKPaintStyle.Fill, IsAntialias = true
+    };
+    private static readonly SKPaint BadgeFillPaint = new()
+    {
+        Style = SKPaintStyle.Fill, IsAntialias = true
+    };
+    private static readonly SKPaint StereotypeBadgeFillPaint = new()
+    {
+        Style = SKPaintStyle.Fill, IsAntialias = true
+    };
+
     public event Action<GraphNode?>? SelectionChanged;
 
     /// <summary>
@@ -353,13 +416,11 @@ public class GraphCanvas : Control
             float ww = maxX - minX + NamespacePadding * 2;
             float hh = maxY - minY + NamespacePadding * 2 + NamespaceTitleHeight;
 
-            using var bgPaint = new SKPaint { Color = ColorNamespaceBg, Style = SKPaintStyle.Fill, IsAntialias = true };
-            using var borderPaint = new SKPaint { Color = ColorNamespaceBorder, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
-            using var textPaint = new SKPaint { Color = ColorNamespaceText, IsAntialias = true, TextSize = 13 };
 
-            canvas.DrawRoundRect(x, y, ww, hh, 8, 8, bgPaint);
-            canvas.DrawRoundRect(x, y, ww, hh, 8, 8, borderPaint);
-            canvas.DrawText(ns, x + 12, y + NamespaceTitleHeight - 6, textPaint);
+
+            canvas.DrawRoundRect(x, y, ww, hh, 8, 8, NamespaceBgPaint);
+            canvas.DrawRoundRect(x, y, ww, hh, 8, 8, NamespaceBorderPaint);
+            canvas.DrawText(ns, x + 12, y + NamespaceTitleHeight - 6, NamespaceTextPaint);
         }
     }
 
@@ -397,14 +458,8 @@ public class GraphCanvas : Control
                 strokeWidth += 0.5f;
             }
 
-            using var paint = new SKPaint
-            {
-                Color = edgeColor,
-                Style = SKPaintStyle.Stroke,
-                StrokeWidth = strokeWidth,
-                IsAntialias = true,
-                StrokeCap = SKStrokeCap.Round
-            };
+            EdgeStrokePaint.Color = edgeColor;
+            EdgeStrokePaint.StrokeWidth = strokeWidth;
 
             float dx = toX - fromX;
             float controlOffset = Math.Max(40, Math.Min(150, Math.Abs(dx) * 0.4f));
@@ -415,15 +470,14 @@ public class GraphCanvas : Control
                 fromX + controlOffset, fromY,
                 toX - controlOffset, toY,
                 toX, toY);
-            canvas.DrawPath(path, paint);
+            canvas.DrawPath(path, EdgeStrokePaint);
 
             // Draw label if present
             if (!string.IsNullOrEmpty(edge.Label))
             {
                 float midX = (fromX + toX) / 2;
                 float midY = (fromY + toY) / 2;
-                using var labelPaint = new SKPaint { Color = ColorTextMuted, IsAntialias = true, TextSize = 9 };
-                canvas.DrawText(edge.Label, midX, midY - 4, labelPaint);
+                canvas.DrawText(edge.Label, midX, midY - 4, EdgeLabelPaint);
             }
 
             DrawArrowhead(canvas, toX, toY, edgeColor);
@@ -435,13 +489,13 @@ public class GraphCanvas : Control
         float arrowLen = 10;
         float arrowWidth = 5;
 
-        using var paint = new SKPaint { Color = color, Style = SKPaintStyle.Fill, IsAntialias = true };
+        ArrowheadPaint.Color = color;
         var path = new SKPath();
         path.MoveTo(x, y);
         path.LineTo(x - arrowLen, y - arrowWidth);
         path.LineTo(x - arrowLen, y + arrowWidth);
         path.Close();
-        canvas.DrawPath(path, paint);
+        canvas.DrawPath(path, ArrowheadPaint);
     }
 
     private void DrawNodes(SKCanvas canvas)
@@ -461,32 +515,31 @@ public class GraphCanvas : Control
                     || node.Id.Contains(_searchText, StringComparison.OrdinalIgnoreCase);
             }
 
-            using var fillPaint = new SKPaint { Color = ColorNodeFill, Style = SKPaintStyle.Fill, IsAntialias = true };
-            canvas.DrawRoundRect(x, y, w, h, 6, 6, fillPaint);
+            canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeFillPaint);
 
             var strokeColor = searchActive && searchMatch ? ColorNodeStrokeSearchMatch
                            : node == _selectedNode ? ColorNodeStrokeSelected
                            : node == _hoveredNode ? ColorNodeStrokeHover
                            : ColorNodeStroke;
             float strokeWidth = (node == _selectedNode || (searchActive && searchMatch)) ? 3 : 1.5f;
-            using var strokePaint = new SKPaint { Color = strokeColor, Style = SKPaintStyle.Stroke, StrokeWidth = strokeWidth, IsAntialias = true };
-            canvas.DrawRoundRect(x, y, w, h, 6, 6, strokePaint);
+            NodeStrokePaint.Color = strokeColor;
+            NodeStrokePaint.StrokeWidth = strokeWidth;
+            canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeStrokePaint);
 
-            using var headerPaint = new SKPaint { Color = strokeColor.WithAlpha(40), Style = SKPaintStyle.Fill, IsAntialias = true };
-            canvas.DrawRoundRect(x, y, w, NodeHeaderHeight, 6, 6, headerPaint);
-            canvas.DrawRect(x, y + NodeHeaderHeight - 4, w, 4, headerPaint);
+            NodeHeaderPaint.Color = strokeColor.WithAlpha(40);
+            canvas.DrawRoundRect(x, y, w, NodeHeaderHeight, 6, 6, NodeHeaderPaint);
+            canvas.DrawRect(x, y + NodeHeaderHeight - 4, w, 4, NodeHeaderPaint);
 
             string? badge = GetBadgeText(node);
             if (badge != null)
             {
-                using var badgePaint = new SKPaint { Color = GetBadgeColor(node), Style = SKPaintStyle.Fill, IsAntialias = true };
-                using var badgeTextPaint = new SKPaint { Color = SKColors.White, IsAntialias = true, TextSize = 9 };
-                float badgeW = badgeTextPaint.MeasureText(badge) + 10;
+                BadgeFillPaint.Color = GetBadgeColor(node);
+                float badgeW = BadgeTextPaint.MeasureText(badge) + 10;
                 float badgeH = 16;
                 float badgeX = x + w - badgeW - 6;
                 float badgeY = y + 6;
-                canvas.DrawRoundRect(badgeX, badgeY, badgeW, badgeH, 3, 3, badgePaint);
-                canvas.DrawText(badge, badgeX + 5, badgeY + 12, badgeTextPaint);
+                canvas.DrawRoundRect(badgeX, badgeY, badgeW, badgeH, 3, 3, BadgeFillPaint);
+                canvas.DrawText(badge, badgeX + 5, badgeY + 12, BadgeTextPaint);
             }
 
             // Draw custom stereotype badges
@@ -499,37 +552,24 @@ public class GraphCanvas : Control
                 // If there's already a type badge, place to the left of it
                 if (badge != null)
                 {
-                    using var badgeTextPaint = new SKPaint { Color = SKColors.White, IsAntialias = true, TextSize = 9 };
-                    float existingBadgeW = badgeTextPaint.MeasureText(badge) + 10;
+                    float existingBadgeW = BadgeTextPaint.MeasureText(badge) + 10;
                     currentBadgeX -= existingBadgeW + badgeSpacing;
                 }
 
                 foreach (var stBadge in node.StereotypeBadges)
                 {
-                    using var stPaint = new SKPaint
-                    {
-                        Color = SKColor.TryParse(stBadge.ColorHex, out var c) ? c : SKColor.Parse("#9E9E9E"),
-                        Style = SKPaintStyle.Fill,
-                        IsAntialias = true
-                    };
-                    using var stTextPaint = new SKPaint
-                    {
-                        Color = SKColors.White,
-                        IsAntialias = true,
-                        TextSize = 8
-                    };
-                    float stBadgeW = stTextPaint.MeasureText(stBadge.Label) + 10;
+                    StereotypeBadgeFillPaint.Color = SKColor.TryParse(stBadge.ColorHex, out var c) ? c : SKColor.Parse("#9E9E9E");
+                    float stBadgeW = StereotypeBadgeTextPaint.MeasureText(stBadge.Label) + 10;
                     currentBadgeX -= stBadgeW;
-                    canvas.DrawRoundRect(currentBadgeX, currentBadgeY, stBadgeW, badgeH, 3, 3, stPaint);
-                    canvas.DrawText(stBadge.Label, currentBadgeX + 5, currentBadgeY + 10, stTextPaint);
+                    canvas.DrawRoundRect(currentBadgeX, currentBadgeY, stBadgeW, badgeH, 3, 3, StereotypeBadgeFillPaint);
+                    canvas.DrawText(stBadge.Label, currentBadgeX + 5, currentBadgeY + 10, StereotypeBadgeTextPaint);
                     currentBadgeX -= badgeSpacing;
                 }
             }
 
-            using var namePaint = new SKPaint { Color = ColorText, IsAntialias = true, TextSize = 12 };
-            canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, namePaint);
+            canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, NodeNamePaint);
 
-            using var memberPaint = new SKPaint { Color = ColorTextMuted, IsAntialias = true, TextSize = 10 };
+
             float memberY = y + NodeHeaderHeight + 14;
             int count = 0;
             foreach (var member in node.Members)
@@ -538,7 +578,7 @@ public class GraphCanvas : Control
                 string prefix = member.Kind == "Method" ? "  " : "+ ";
                 string text = prefix + member.TypeName + " " + member.Name;
                 if (member.Kind == "Method") text += "()";
-                canvas.DrawText(text, x + NodePaddingX, memberY, memberPaint);
+                canvas.DrawText(text, x + NodePaddingX, memberY, NodeMemberPaint);
                 memberY += NodeMemberHeight;
                 count++;
             }
