@@ -12,12 +12,13 @@ namespace MermaidDiagramExporter.Gui.Settings;
 
 public partial class SettingsWindow : Window
 {
-    private readonly SettingsService _settingsService = new();
+    private readonly SettingsService _settingsService;
     private ProjectSettings _settings = new();
     private System.Collections.ObjectModel.ObservableCollection<StereotypeRule> _stereotypeRules = new();
 
-    public SettingsWindow()
+    public SettingsWindow(SettingsService settingsService)
     {
+        _settingsService = settingsService;
         InitializeComponent();
         WireEvents();
     }

@@ -13,7 +13,12 @@ namespace MermaidDiagramExporter.Gui.Persistence;
 public sealed class SourceBundleService
 {
     private const long MaxSourceFileSizeBytes = 10 * 1024 * 1024; // 10 MB
-    private readonly SettingsService _settingsService = new();
+    private readonly SettingsService _settingsService;
+
+    public SourceBundleService(SettingsService settingsService)
+    {
+        _settingsService = settingsService;
+    }
 
     /// <summary>
     /// Generates a source bundle and returns the path to the created file.

@@ -19,7 +19,12 @@ public sealed class TypeGraphCacheService
 {
     private const string CacheFileName = "typegraph.cache.bin";
     private const string ManifestFileName = ".cache-manifest.json";
-    private readonly SettingsService _settingsService = new();
+    private readonly SettingsService _settingsService;
+
+    public TypeGraphCacheService(SettingsService settingsService)
+    {
+        _settingsService = settingsService;
+    }
 
     /// <summary>
     /// Returns true if a valid cache exists for the given project settings.

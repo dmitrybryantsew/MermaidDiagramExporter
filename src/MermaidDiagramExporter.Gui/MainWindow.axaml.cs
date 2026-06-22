@@ -21,13 +21,13 @@ namespace MermaidDiagramExporter.Gui;
 
 public partial class MainWindow : Window
 {
-    private readonly RoslynTypeScanner _scanner = new();
-    private readonly LayoutEngine _layoutEngine = new();
+    private readonly RoslynTypeScanner _scanner;
+    private readonly LayoutEngine _layoutEngine;
     private readonly FocusedGraphNavigationController _focusNavigationController = new();
     private readonly GraphSeedSelectionState _seedSelectionState = new();
-    private readonly SettingsService _settingsService = new();
-    private readonly TypeGraphCacheService _cacheService = new();
-    private readonly SourceBundleService _bundleService = new();
+    private readonly SettingsService _settingsService;
+    private readonly TypeGraphCacheService _cacheService;
+    private readonly SourceBundleService _bundleService;
     private readonly SymbolSearchEngine _searchEngine = new();
     private ManualLayoutOverrides _manualOverrides = new();
     private ProjectSettings _currentSettings = new();
@@ -44,8 +44,13 @@ public partial class MainWindow : Window
 
     public ProjectSettings CurrentSettings => _currentSettings;
 
-    public MainWindow()
+    public MainWindow(SettingsService settingsService, LayoutEngine layoutEngine, RoslynTypeScanner scanner)
     {
+        _settingsService = settingsService;
+        _layoutEngine = layoutEngine;
+        _scanner = scanner;
+        _cacheService = new TypeGraphCacheService(_settingsService);
+        _bundleService = new SourceBundleService(_settingsService);
         InitializeComponent();
         GraphCanvasView.SelectionChanged += OnCanvasSelectionChanged;
         GraphCanvasView.ManualLayoutChanged += OnManualLayoutChanged;
@@ -706,7 +711,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new SettingsWindow();
+        var window = new SettingsWindow(_settingsService);
         window.LoadForProject(folder);
         await window.ShowDialog(this);
 
