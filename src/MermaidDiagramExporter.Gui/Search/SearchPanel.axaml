@@ -18,7 +18,7 @@
       <ScrollViewer Grid.Row="2" MaxHeight="500">
         <ListBox x:Name="ResultsList" Background="Transparent" BorderThickness="0">
           <ListBox.ItemTemplate>
-            <DataTemplate>
+            <DataTemplate x:DataType="search:SearchResultViewModel">
               <Border Padding="4" Background="Transparent">
                 <StackPanel Spacing="2">
                   <Grid ColumnDefinitions="*,Auto">
@@ -34,7 +34,7 @@
                   <!-- Matched members -->
                   <ItemsControl ItemsSource="{Binding MatchedMembers}" Margin="8,2,0,0">
                     <ItemsControl.ItemTemplate>
-                      <DataTemplate>
+                      <DataTemplate x:DataType="search:MatchedMemberViewModel">
                         <TextBlock FontSize="10" Opacity="0.6">
                           <TextBlock.Text>
                             <MultiBinding StringFormat="  + {0} : {1} ({2})">
