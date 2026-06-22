@@ -1,6 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:MermaidDiagramExporter.Gui"
+        xmlns:search="clr-namespace:MermaidDiagramExporter.Gui.Search"
+        xmlns:matrix="clr-namespace:MermaidDiagramExporter.Gui.Matrix"
         x:Class="MermaidDiagramExporter.Gui.MainWindow"
         Title="Mermaid Diagram Exporter" Width="1400" Height="900"
         WindowState="Maximized">
@@ -22,6 +24,9 @@
         <Button x:Name="BackButton" Content="← Back" Click="OnBack" IsEnabled="False" MinWidth="70"/>
         <Button x:Name="ForwardButton" Content="Forward →" Click="OnForward" IsEnabled="False" MinWidth="70"/>
         <Button x:Name="ResetButton" Content="Reset" Click="OnReset" IsEnabled="False" MinWidth="50"/>
+        <Button x:Name="SettingsButton" Content="Settings" Click="OnOpenSettings" MinWidth="60"/>
+        <Button x:Name="ResetLayoutButton" Content="Reset Layout" Click="OnResetLayout" MinWidth="80"/>
+        <Button x:Name="MatrixButton" Content="Matrix" Click="OnToggleMatrix" MinWidth="60"/>
       </StackPanel>
 
       <!-- Focus controls -->
@@ -64,21 +69,24 @@
         <TextBox x:Name="SearchTextBox" PlaceholderText="Type to highlight..." Watermark="Type to highlight..." TextChanged="OnSearchTextChanged"/>
       </StackPanel>
 
+      <!-- Semantic Search Panel -->
+      <search:SearchPanel Grid.Row="5" x:Name="SymbolSearchPanel" />
+
       <!-- Class list -->
-      <Grid Grid.Row="5" Margin="8,0,8,0" RowDefinitions="Auto,*">
+      <Grid Grid.Row="6" Margin="8,0,8,0" RowDefinitions="Auto,*">
         <TextBlock Grid.Row="0" Text="Classes" FontWeight="Bold" Margin="0,0,0,4"/>
         <ListBox Grid.Row="1" x:Name="ClassListBox" SelectionChanged="OnClassSelected"/>
       </Grid>
 
       <!-- Selected node info -->
-      <StackPanel Grid.Row="6" Margin="8">
+      <StackPanel Grid.Row="7" Margin="8">
         <TextBlock Text="Selected" FontWeight="Bold" Margin="0,0,0,4"/>
         <TextBlock x:Name="SelectedNodeText" Text="" TextWrapping="Wrap"/>
         <Button Content="Open in Explorer" Click="OnOpenInExplorer" Margin="0,4,0,0" MinWidth="100"/>
       </StackPanel>
 
       <!-- Stats -->
-      <TextBlock Grid.Row="7" x:Name="StatsText" Text="" Margin="8" Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
+      <TextBlock Grid.Row="8" x:Name="StatsText" Text="" Margin="8" Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
     </Grid>
 
     <!-- Left Splitter -->
@@ -87,6 +95,17 @@
     <!-- Graph canvas -->
     <Grid Grid.Column="2">
       <local:GraphCanvas x:Name="GraphCanvasView" MinWidth="100" MinHeight="100"/>
+      <!-- Minimap overlay -->
+      <local:MinimapControl x:Name="MinimapView"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom"
+                            Margin="12"
+                            IsVisible="False"/>
+      <!-- Matrix overlay -->
+      <matrix:NamespaceMatrixView x:Name="MatrixView"
+                                  HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Stretch"
+                                  IsVisible="False"/>
       <!-- Zoom controls overlay -->
       <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Spacing="4">
         <Button Content="Fit" Click="OnFit" MinWidth="40"/>

@@ -20,6 +20,21 @@ public sealed class GraphBuildOptions
     public TypeGroupKind PrimaryGroupKind { get; set; } = TypeGroupKind.Namespace;
 
     public int MaxMemberCountPerNode { get; set; }
+
+    /// <summary>
+    /// User-defined custom stereotype rules to apply during scanning.
+    /// </summary>
+    public List<StereotypeConfig> CustomStereotypes { get; set; } = new();
+}
+
+/// <summary>
+/// A user-defined stereotype configuration passed to the scanner.
+/// </summary>
+public sealed class StereotypeConfig
+{
+    public string Pattern { get; set; } = ".*";
+    public string Label { get; set; } = "";
+    public string ColorHex { get; set; } = "#4ECDC4";
 }
 
 public enum TypeNodeKind

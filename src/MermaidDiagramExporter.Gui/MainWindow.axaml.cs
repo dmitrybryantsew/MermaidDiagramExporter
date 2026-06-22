@@ -12,6 +12,10 @@ using MermaidDiagramExporter.Core;
 using MermaidDiagramExporter.Extraction;
 using MermaidDiagramExporter.Export;
 using MermaidDiagramExporter.Focus;
+using MermaidDiagramExporter.Gui.Search;
+using MermaidDiagramExporter.Gui.Settings;
+using MermaidDiagramExporter.Gui.Persistence;
+using MermaidDiagramExporter.Gui.Matrix;
 
 namespace MermaidDiagramExporter.Gui;
 
@@ -21,6 +25,12 @@ public partial class MainWindow : Window
     private readonly LayoutEngine _layoutEngine = new();
     private readonly FocusedGraphNavigationController _focusNavigationController = new();
     private readonly GraphSeedSelectionState _seedSelectionState = new();
+    private readonly SettingsService _settingsService = new();
+    private readonly TypeGraphCacheService _cacheService = new();
+    private readonly SourceBundleService _bundleService = new();
+    private readonly SymbolSearchEngine _searchEngine = new();
+    private ManualLayoutOverrides _manualOverrides = new();
+    private ProjectSettings _currentSettings = new();
 
     private List<GraphNode> _allNodes = new();
     private List<GraphEdge> _allEdges = new();
@@ -32,10 +42,19 @@ public partial class MainWindow : Window
     private int _focusDepth = 1;
     private string _currentSelectedNodeId = string.Empty;
 
+    public ProjectSettings CurrentSettings => _currentSettings;
+
     public MainWindow()
     {
         InitializeComponent();
         GraphCanvasView.SelectionChanged += OnCanvasSelectionChanged;
+        GraphCanvasView.ManualLayoutChanged += OnManualLayoutChanged;
+        GraphCanvasView.ViewportChanged += OnViewportChanged;
+        SymbolSearchPanel.NodeSelected += OnSearchNodeSelected;
+        SymbolSearchPanel.FocusOnResultsRequested += OnFocusSearchResults;
+        SymbolSearchPanel.SearchCleared += OnSearchCleared;
+        MinimapView.ViewportJumpRequested += OnMinimapViewportJump;
+        MatrixView.CellClicked += OnMatrixCellClicked;
     }
 
     private async void OnBrowse(object? sender, RoutedEventArgs e)
@@ -52,7 +71,7 @@ public partial class MainWindow : Window
             FolderTextBox.Text = path;
     }
 
-    private void OnScan(object? sender, RoutedEventArgs e)
+    private async void OnScan(object? sender, RoutedEventArgs e)
     {
         var folder = FolderTextBox.Text?.Trim();
         if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
@@ -63,13 +82,88 @@ public partial class MainWindow : Window
 
         try
         {
-            _currentGraph = _scanner.ScanFolder(folder);
+            // Load settings for this project
+            _currentSettings = _settingsService.LoadSettings(folder);
+
+            // Check cache and prompt if available
+            bool useCache = false;
+            if (_currentSettings.PromptToLoadCache && _cacheService.CacheExists(_currentSettings))
+            {
+                var cacheInfo = _cacheService.GetCacheInfo(_currentSettings);
+                var manifestPath = Path.Combine(
+                    _settingsService.ResolveCacheDirectory(_currentSettings),
+                    ".cache-manifest.json");
+                var validation = _cacheService.ValidateManifest(manifestPath, _currentSettings);
+
+                if (validation == CacheValidationResult.UpToDate || validation == CacheValidationResult.MinorChanges)
+                {
+                    var dialog = new CachePromptDialog();
+                    if (cacheInfo != null)
+                        dialog.SetInfo(cacheInfo, validation);
+                    await dialog.ShowDialog(this);
+                    useCache = dialog.Result == CachePromptResult.LoadCache;
+                    if (dialog.Result == CachePromptResult.Cancelled)
+                        return;
+                }
+            }
+
+            // Build scan options with custom stereotypes from settings
+            var buildOptions = new GraphBuildOptions();
+            if (_currentSettings.ApplyCustomStereotypes && _currentSettings.StereotypeRules.Count > 0)
+            {
+                foreach (var rule in _currentSettings.StereotypeRules)
+                {
+                    buildOptions.CustomStereotypes.Add(new StereotypeConfig
+                    {
+                        Pattern = rule.Pattern,
+                        Label = rule.Label,
+                        ColorHex = rule.ColorHex
+                    });
+                }
+            }
+
+            TypeGraph graph;
+            if (useCache)
+            {
+                var cached = _cacheService.LoadCache(_currentSettings);
+                if (cached != null)
+                {
+                    graph = cached;
+                    StatsText.Text = "Loaded from cache";
+                }
+                else
+                {
+                    graph = _scanner.ScanFolder(folder, buildOptions);
+                }
+            }
+            else
+            {
+                graph = _scanner.ScanFolder(folder, buildOptions);
+            }
+
+            _currentGraph = graph;
             _focusNavigationController.SetRootGraph(_currentGraph, folder);
             _seedSelectionState.Clear();
 
             SetDisplayedGraph(_currentGraph);
             GraphCanvasView.WaitForRender();
             UpdateStats(_currentGraph);
+
+            // Auto-save cache if enabled
+            if (_currentSettings.AutoSaveCache)
+            {
+                _cacheService.SaveCache(_currentGraph, _currentSettings);
+            }
+
+            // Auto-save source bundle if enabled
+            if (_currentSettings.AutoSaveSourceBundle)
+            {
+                string bundlePath = _bundleService.GenerateBundle(folder, _currentSettings);
+                StatsText.Text += $" | Bundle: {Path.GetFileName(bundlePath)}";
+            }
+
+            // Persist settings (ensures project is registered)
+            _settingsService.SaveSettings(_currentSettings);
 
             // Auto-save screenshot
             var dir = Path.Combine(AppContext.BaseDirectory, "export");
@@ -97,14 +191,38 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Load manual overrides before layout
+        if (_currentSettings.PersistManualLayout)
+        {
+            _manualOverrides = _cacheService.LoadManualOverrides(_currentSettings);
+        }
+        else
+        {
+            _manualOverrides = new ManualLayoutOverrides();
+        }
+        _layoutEngine.ManualOverrides = _manualOverrides;
+
         var (nodes, edges) = _layoutEngine.Layout(graph);
         _allNodes = nodes;
         _allEdges = edges;
         _nodeMap = nodes.ToDictionary(n => n.Id);
 
+        GraphCanvasView.ManualOverrides = _manualOverrides;
         GraphCanvasView.SetGraph(nodes, edges);
+        MinimapView.SetGraph(nodes, edges);
+        MinimapView.IsVisible = _currentSettings.ShowMinimap;
         UpdateClassList(graph);
         UpdateStats(graph);
+
+        if (graph != null)
+        {
+            SymbolSearchPanel.SetGraph(graph, _currentSettings);
+            _searchEngine.RebuildIndex(graph);
+        }
+        else
+        {
+            SymbolSearchPanel.Clear();
+        }
 
         if (!string.IsNullOrEmpty(selectedNodeId))
         {
@@ -276,6 +394,38 @@ public partial class MainWindow : Window
         GraphCanvasView.SetSearchText(text);
     }
 
+    private void OnSearchNodeSelected(string nodeId)
+    {
+        if (_nodeMap.TryGetValue(nodeId, out var node))
+        {
+            GraphCanvasView.CenterOnNode(node);
+            if (_currentGraph != null)
+            {
+                var typeNode = _currentGraph.Nodes.FirstOrDefault(n => n.Id == nodeId);
+                if (typeNode != null)
+                    UpdateInspector(typeNode);
+            }
+        }
+    }
+
+    private void OnFocusSearchResults(IReadOnlyList<string> nodeIds)
+    {
+        var visibleSet = new HashSet<string>(nodeIds);
+        var filteredNodes = _allNodes.Where(n => visibleSet.Contains(n.Id)).ToList();
+        var filteredEdges = _allEdges.Where(e =>
+            visibleSet.Contains(e.FromNode?.Id ?? "") && visibleSet.Contains(e.ToNode?.Id ?? ""))
+            .ToList();
+        GraphCanvasView.SetGraph(filteredNodes, filteredEdges);
+    }
+
+    private void OnSearchCleared()
+    {
+        if (_currentGraph != null)
+        {
+            SetDisplayedGraph(_currentGraph);
+        }
+    }
+
     // --- Edge Filters ---
 
     private void OnEdgeFilterChanged(object? sender, RoutedEventArgs e)
@@ -333,6 +483,72 @@ public partial class MainWindow : Window
             })
             .ToList();
         InspectorIncomingList.ItemsSource = incoming;
+    }
+
+    // --- Manual Layout ---
+
+    private void OnViewportChanged(float zoom, float panX, float panY, float viewW, float viewH)
+    {
+        MinimapView.UpdateViewport(zoom, panX, panY, viewW, viewH);
+    }
+
+    private void OnMinimapViewportJump(float newPanX, float newPanY)
+    {
+        GraphCanvasView.SetPan(newPanX, newPanY);
+    }
+
+    private void OnManualLayoutChanged()
+    {
+        if (_currentSettings.PersistManualLayout)
+        {
+            _cacheService.SaveManualOverrides(GraphCanvasView.ManualOverrides, _currentSettings);
+        }
+    }
+
+    private void OnResetLayout(object? sender, RoutedEventArgs e)
+    {
+        _manualOverrides.Clear();
+        _cacheService.SaveManualOverrides(_manualOverrides, _currentSettings);
+
+        if (_currentGraph != null)
+        {
+            _layoutEngine.ManualOverrides = _manualOverrides;
+            SetDisplayedGraph(_currentGraph);
+        }
+    }
+
+    // --- Matrix View ---
+
+    private bool _matrixVisible;
+
+    private void OnToggleMatrix(object? sender, RoutedEventArgs e)
+    {
+        _matrixVisible = !_matrixVisible;
+        MatrixView.IsVisible = _matrixVisible;
+        MatrixButton.Content = _matrixVisible ? "Graph" : "Matrix";
+
+        if (_matrixVisible && _currentGraph != null)
+        {
+            MatrixView.SetGraph(_currentGraph);
+        }
+    }
+
+    private void OnMatrixCellClicked(string fromNamespace, string toNamespace)
+    {
+        // Switch back to graph view and filter to show types from both namespaces
+        _matrixVisible = false;
+        MatrixView.IsVisible = false;
+        MatrixButton.Content = "Matrix";
+
+        if (_currentGraph != null)
+        {
+            var nsSet = new HashSet<string> { fromNamespace, toNamespace };
+            var filteredNodes = _allNodes.Where(n => nsSet.Contains(n.Namespace)).ToList();
+            var nodeIds = new HashSet<string>(filteredNodes.Select(n => n.Id));
+            var filteredEdges = _allEdges.Where(e =>
+                nodeIds.Contains(e.FromNode?.Id ?? "") && nodeIds.Contains(e.ToNode?.Id ?? "")).ToList();
+            GraphCanvasView.SetGraph(filteredNodes, filteredEdges);
+        }
     }
 
     // --- Export ---
@@ -461,4 +677,29 @@ public partial class MainWindow : Window
 
     private void OnZoomIn(object? sender, RoutedEventArgs e) => GraphCanvasView.ZoomBy(1.2f);
     private void OnZoomOut(object? sender, RoutedEventArgs e) => GraphCanvasView.ZoomBy(1.0f / 1.2f);
+
+    // --- Settings ---
+
+    private async void OnOpenSettings(object? sender, RoutedEventArgs e)
+    {
+        string folder = FolderTextBox.Text?.Trim() ?? "";
+        if (string.IsNullOrEmpty(folder))
+        {
+            StatsText.Text = "Select a folder first to configure project settings";
+            return;
+        }
+
+        var window = new SettingsWindow();
+        window.LoadForProject(folder);
+        await window.ShowDialog(this);
+
+        if (window.SavedSettings != null)
+        {
+            _currentSettings = window.SavedSettings;
+            StatsText.Text = "Settings saved";
+            // Apply settings that affect UI immediately
+            if (MinimapView != null)
+                MinimapView.IsVisible = _currentSettings.ShowMinimap;
+        }
+    }
 }

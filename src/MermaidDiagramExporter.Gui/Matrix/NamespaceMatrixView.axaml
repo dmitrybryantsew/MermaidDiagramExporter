@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MermaidDiagramExporter.Gui.Matrix.NamespaceMatrixView"
+             Background="#1A1F26">
+  <Grid RowDefinitions="Auto,Auto,*">
+    <!-- Header -->
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8" Spacing="8">
+      <TextBlock Text="Namespace Dependency Matrix" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
+      <Button x:Name="CloseButton" Content="✕" Width="28" Height="28" VerticalAlignment="Center"/>
+    </StackPanel>
+
+    <!-- Legend -->
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="8,0,8,4" Spacing="12">
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <Border Width="14" Height="14" Background="#2D5A27" CornerRadius="2"/>
+        <TextBlock Text="Low" FontSize="10" Opacity="0.7" VerticalAlignment="Center"/>
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <Border Width="14" Height="14" Background="#5A8A3A" CornerRadius="2"/>
+        <TextBlock Text="Medium" FontSize="10" Opacity="0.7" VerticalAlignment="Center"/>
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <Border Width="14" Height="14" Background="#A0D050" CornerRadius="2"/>
+        <TextBlock Text="High" FontSize="10" Opacity="0.7" VerticalAlignment="Center"/>
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <Border Width="14" Height="14" Background="#FF6040" CornerRadius="2"/>
+        <TextBlock Text="Circular" FontSize="10" Opacity="0.7" VerticalAlignment="Center"/>
+      </StackPanel>
+    </StackPanel>
+
+    <!-- Matrix grid -->
+    <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+      <Canvas x:Name="MatrixCanvas" Margin="8"/>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

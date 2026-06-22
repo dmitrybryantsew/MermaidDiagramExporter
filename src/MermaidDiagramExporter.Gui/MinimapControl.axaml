@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MermaidDiagramExporter.Gui.MinimapControl"
+             Width="200"
+             Height="150"
+             IsVisible="False">
+  <Border Background="#15191E"
+          BorderBrush="#3A4250"
+          BorderThickness="1"
+          CornerRadius="4">
+    <Panel>
+      <!-- The minimap bitmap -->
+      <Image x:Name="MinimapImage" Stretch="Uniform" />
+      <!-- Viewport overlay rectangle -->
+      <Canvas x:Name="ViewportOverlay">
+        <Border x:Name="ViewportRect"
+                BorderBrush="#FFE040"
+                BorderThickness="1"
+                Background="#FFE04020"
+                IsHitTestVisible="False" />
+      </Canvas>
+    </Panel>
+  </Border>
+</UserControl>

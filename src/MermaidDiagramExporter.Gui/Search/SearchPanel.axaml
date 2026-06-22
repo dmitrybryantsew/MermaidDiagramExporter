@@ -1,0 +1,61 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MermaidDiagramExporter.Gui.Search.SearchPanel"
+             Width="320">
+  <Border Background="#1E2329" BorderBrush="#3A4250" BorderThickness="1" Padding="8">
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+      <!-- Header -->
+      <TextBlock Grid.Row="0" Text="Symbol Search" FontWeight="Bold" FontSize="14" Margin="0,0,0,8" />
+
+      <!-- Query Box -->
+      <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+        <TextBox Grid.Column="0" x:Name="QueryTextBox" Watermark="Namespace.Class.Member" />
+        <Button Grid.Column="1" x:Name="FocusResultsButton" Content="Focus" Margin="4,0,0,0"
+                ToolTip.Tip="Filter canvas to show only results" />
+      </Grid>
+
+      <!-- Results -->
+      <ScrollViewer Grid.Row="2" MaxHeight="500">
+        <ListBox x:Name="ResultsList" Background="Transparent" BorderThickness="0">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Border Padding="4" Background="Transparent">
+                <StackPanel Spacing="2">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontWeight="Bold"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{Binding NodeKind}" FontSize="10"
+                               Opacity="0.5" Margin="4,0,0,0" />
+                  </Grid>
+                  <TextBlock Text="{Binding NodeNamespace}" FontSize="10" Opacity="0.5"
+                             TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding FileName}" FontSize="9" Opacity="0.4"
+                             TextTrimming="CharacterEllipsis" />
+                  <!-- Matched members -->
+                  <ItemsControl ItemsSource="{Binding MatchedMembers}" Margin="8,2,0,0">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock FontSize="10" Opacity="0.6">
+                          <TextBlock.Text>
+                            <MultiBinding StringFormat="  + {0} : {1} ({2})">
+                              <Binding Path="Name" />
+                              <Binding Path="TypeName" />
+                              <Binding Path="Kind" />
+                            </MultiBinding>
+                          </TextBlock.Text>
+                        </TextBlock>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </ScrollViewer>
+
+      <!-- Status -->
+      <TextBlock Grid.Row="3" x:Name="StatusText" FontSize="10" Opacity="0.5" Margin="0,4,0,0" />
+    </Grid>
+  </Border>
+</UserControl>

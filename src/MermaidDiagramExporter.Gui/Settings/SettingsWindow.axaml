@@ -1,0 +1,91 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:settings="clr-namespace:MermaidDiagramExporter.Gui.Settings"
+        x:Class="MermaidDiagramExporter.Gui.Settings.SettingsWindow"
+        Title="Project Settings"
+        Width="520"
+        Height="600"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <Border Padding="20">
+    <Grid RowDefinitions="*,Auto">
+      <ScrollViewer Grid.Row="0">
+        <StackPanel Spacing="16">
+          <!-- Project Identification -->
+          <TextBlock Text="Project" FontWeight="Bold" FontSize="16" />
+          <Grid ColumnDefinitions="Auto,*">
+            <TextBlock Grid.Column="0" Text="Source Folder:" VerticalAlignment="Center" Width="120" />
+            <TextBlock Grid.Column="1" x:Name="SourceFolderText" TextWrapping="Wrap" Opacity="0.7" />
+          </Grid>
+
+          <!-- Cache Settings -->
+          <TextBlock Text="Cache" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
+          <CheckBox x:Name="AutoSaveCacheCheck" Content="Auto-save relationship cache after scan" />
+          <CheckBox x:Name="AutoSaveSourceBundleCheck" Content="Auto-save source bundle after scan" />
+          <CheckBox x:Name="PromptLoadCacheCheck" Content="Prompt to load from cache when reopening project" />
+          <Grid ColumnDefinitions="Auto,*">
+            <TextBlock Grid.Column="0" Text="On source change:" VerticalAlignment="Center" Width="120" />
+            <ComboBox x:Name="CacheInvalidationCombo" Grid.Column="1" Width="260" HorizontalAlignment="Left">
+              <ComboBoxItem Content="Warn and prompt to rescan" />
+              <ComboBoxItem Content="Automatically rescan" />
+              <ComboBoxItem Content="Ignore (use cache regardless)" />
+            </ComboBox>
+          </Grid>
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <TextBlock Grid.Column="0" Text="Cache folder:" VerticalAlignment="Center" Width="120" />
+            <TextBox Grid.Column="1" x:Name="CacheFolderText" Watermark="(default)" IsReadOnly="True" />
+            <Button Grid.Column="2" x:Name="BrowseCacheButton" Content="Browse..." Margin="8,0,0,0" />
+          </Grid>
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <TextBlock Grid.Column="0" Text="Bundle folder:" VerticalAlignment="Center" Width="120" />
+            <TextBox Grid.Column="1" x:Name="BundleFolderText" Watermark="(default)" IsReadOnly="True" />
+            <Button Grid.Column="2" x:Name="BrowseBundleButton" Content="Browse..." Margin="8,0,0,0" />
+          </Grid>
+
+          <!-- Search Settings -->
+          <TextBlock Text="Search" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
+          <CheckBox x:Name="SearchCaseSensitiveCheck" Content="Case-sensitive search" />
+          <CheckBox x:Name="SearchIncludeMembersCheck" Content="Include member names in semantic search" />
+          <CheckBox x:Name="AutoFocusSearchCheck" Content="Auto-focus canvas on search results" />
+
+          <!-- Stereotype Settings -->
+          <TextBlock Text="Stereotypes" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
+          <CheckBox x:Name="ApplyCustomStereotypesCheck" Content="Apply custom stereotype rules" />
+          <Border BorderBrush="#3A4250" BorderThickness="1" CornerRadius="4" Padding="8">
+            <Grid RowDefinitions="Auto,*">
+              <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="Rules" FontWeight="Bold" Margin="0,0,0,4" />
+                <Button Grid.Column="1" x:Name="AddStereotypeRuleButton" Content="+ Add" Padding="8,2" />
+              </Grid>
+              <ListBox Grid.Row="1" x:Name="StereotypeRulesList" Height="140" BorderThickness="0" Background="Transparent">
+                <ListBox.DataTemplates>
+                  <DataTemplate DataType="settings:StereotypeRule">
+                    <Grid ColumnDefinitions="*,100,80,Auto">
+                      <TextBox Grid.Column="0" Text="{Binding Pattern}" Watermark="Regex pattern" Margin="0,0,4,0" />
+                      <TextBox Grid.Column="1" Text="{Binding Label}" Watermark="Label" Margin="0,0,4,0" />
+                      <TextBox Grid.Column="2" Text="{Binding ColorHex}" Watermark="#RRGGBB" Margin="0,0,4,0" />
+                      <Button Grid.Column="3" Content="x" Tag="{Binding}" Click="OnRemoveStereotypeRule" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.DataTemplates>
+              </ListBox>
+            </Grid>
+          </Border>
+
+          <!-- Canvas Settings -->
+          <TextBlock Text="Canvas" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
+          <CheckBox x:Name="PersistLayoutCheck" Content="Persist manual layout positions" />
+          <CheckBox x:Name="EnableDraggingCheck" Content="Enable node drag-to-reposition" />
+          <CheckBox x:Name="ShowMinimapCheck" Content="Show minimap" />
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- Buttons -->
+      <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+        <Button x:Name="ResetDefaultsButton" Content="Reset Defaults" />
+        <Button x:Name="CancelButton" Content="Cancel" />
+        <Button x:Name="SaveButton" Content="Save" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

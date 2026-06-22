@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
+using MermaidDiagramExporter.Core;
 using MermaidDiagramExporter.Gui.Layout;
+using MermaidDiagramExporter.Gui.Persistence;
 
 namespace MermaidDiagramExporter.Gui;
 
@@ -12,9 +14,20 @@ public class LayoutEngine
 {
     private readonly GraphLayoutCoordinator _coordinator = new();
 
+    /// <summary>
+    /// Manual position overrides to apply after layout. Set before calling Layout().
+    /// </summary>
+    public ManualLayoutOverrides? ManualOverrides { get; set; }
+
     public (List<GraphNode> nodes, List<GraphEdge> edges) Layout(Core.TypeGraph graph)
     {
         var result = _coordinator.CreateLayout(graph);
+
+        // Apply manual overrides if present
+        if (ManualOverrides != null && ManualOverrides.HasOverrides)
+        {
+            result = ManualLayoutApplier.ApplyOverrides(result, ManualOverrides);
+        }
         var nodeMap = new Dictionary<string, GraphNode>();
 
         foreach (var nd in graph.Nodes)
@@ -42,7 +55,8 @@ public class LayoutEngine
                 Y = bounds.Y,
                 Width = bounds.Width,
                 Height = bounds.Height,
-                Members = members
+                Members = members,
+                StereotypeBadges = BuildStereotypeBadges(nd)
             };
             nodeMap[nd.Id] = node;
         }
@@ -65,5 +79,22 @@ public class LayoutEngine
         }
 
         return (nodeMap.Values.ToList(), edges);
+    }
+
+    private static List<GraphStereotypeBadge> BuildStereotypeBadges(TypeNodeData nd)
+    {
+        var badges = new List<GraphStereotypeBadge>();
+        foreach (var stereotype in nd.Stereotypes)
+        {
+            string color = stereotype switch
+            {
+                "mono-behaviour" => "#4CAF50",
+                "scriptable-object" => "#FF9800",
+                "component" => "#2196F3",
+                _ => "#9E9E9E" // default gray for unknown/custom
+            };
+            badges.Add(new GraphStereotypeBadge { Label = stereotype, ColorHex = color });
+        }
+        return badges;
     }
 }

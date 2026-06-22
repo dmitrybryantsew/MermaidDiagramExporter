@@ -163,7 +163,7 @@ public sealed class RoslynTypeScanner
     private TypeNodeData BuildNode(INamedTypeSymbol type, GraphBuildOptions options)
     {
         List<TypeMemberData> members = BuildMembers(type, options);
-        List<string> stereotypes = BuildStereotypes(type);
+        List<string> stereotypes = BuildStereotypes(type, options);
 
         return new TypeNodeData
         {
@@ -180,7 +180,7 @@ public sealed class RoslynTypeScanner
         };
     }
 
-    private List<string> BuildStereotypes(INamedTypeSymbol type)
+    private List<string> BuildStereotypes(INamedTypeSymbol type, GraphBuildOptions options)
     {
         List<string> stereotypes = new();
         HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
@@ -205,6 +205,36 @@ public sealed class RoslynTypeScanner
                 stereotypes.Add(stereotype);
 
             current = current.BaseType;
+        }
+
+        // --- User-defined custom stereotypes ---
+        // Build the chain of type names to match against
+        var typeNameChain = new List<string>();
+        typeNameChain.Add(type.Name ?? string.Empty);
+        typeNameChain.Add(type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        var baseCurrent = type.BaseType;
+        while (baseCurrent != null)
+        {
+            typeNameChain.Add(baseCurrent.Name ?? string.Empty);
+            typeNameChain.Add(baseCurrent.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            baseCurrent = baseCurrent.BaseType;
+        }
+
+        foreach (var config in options.CustomStereotypes ?? Enumerable.Empty<StereotypeConfig>())
+        {
+            if (string.IsNullOrWhiteSpace(config.Pattern) || string.IsNullOrWhiteSpace(config.Label))
+                continue;
+            try
+            {
+                var regex = new System.Text.RegularExpressions.Regex(config.Pattern,
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                bool matched = typeNameChain.Any(name => name != null && regex.IsMatch(name));
+                if (matched && seen.Add(config.Label))
+                {
+                    stereotypes.Add(config.Label);
+                }
+            }
+            catch { /* invalid regex — skip */ }
         }
 
         return stereotypes;

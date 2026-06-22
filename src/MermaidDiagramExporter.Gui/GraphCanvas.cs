@@ -11,6 +11,9 @@ using Avalonia.Skia;
 using Avalonia.Threading;
 using SkiaSharp;
 using MermaidDiagramExporter.Core;
+using MermaidDiagramExporter.Gui.Persistence;
+using MermaidDiagramExporter.Gui.Layout;
+using LayoutRect = MermaidDiagramExporter.Gui.Layout.Rect;
 
 namespace MermaidDiagramExporter.Gui;
 
@@ -33,6 +36,17 @@ public class GraphCanvas : Control
     private bool _needsRender = true;
     private bool _fitToScreenOnNextRender;
     private WriteableBitmap? _writeableBitmap;
+
+    // Dragging state
+    private GraphNode? _draggedNode;
+    private bool _isDraggingNode;
+    private bool _isDraggingCluster;
+    private string? _draggedClusterId;
+    private float _dragStartMouseX;
+    private float _dragStartMouseY;
+    private float _dragStartNodeX;
+    private float _dragStartNodeY;
+    private Dictionary<string, Vector2> _clusterDragStartPositions = new();
 
     // Search highlighting
     private string _searchText = string.Empty;
@@ -73,6 +87,21 @@ public class GraphCanvas : Control
 
     public event Action<GraphNode?>? SelectionChanged;
 
+    /// <summary>
+    /// Raised when zoom or pan changes. Used by the minimap to update its viewport rectangle.
+    /// </summary>
+    public event Action<float, float, float, float, float>? ViewportChanged;
+
+    /// <summary>
+    /// Manual position overrides. Set by MainWindow, modified by drag operations.
+    /// </summary>
+    public ManualLayoutOverrides ManualOverrides { get; set; } = new();
+
+    /// <summary>
+    /// Raised when the user finishes dragging a node. MainWindow should persist the overrides.
+    /// </summary>
+    public event Action? ManualLayoutChanged;
+
     public GraphCanvas()
     {
         ClipToBounds = true;
@@ -80,6 +109,16 @@ public class GraphCanvas : Control
     }
 
     public GraphNode? SelectedNode => _selectedNode;
+
+    /// <summary>
+    /// Sets the pan position directly (used by minimap).
+    /// </summary>
+    public void SetPan(float panX, float panY)
+    {
+        _panX = panX;
+        _panY = panY;
+        Invalidate();
+    }
 
     public void SetGraph(List<GraphNode> nodes, List<GraphEdge> edges)
     {
@@ -164,6 +203,7 @@ public class GraphCanvas : Control
             RecalculateLayout(w, h);
             _fitToScreenOnNextRender = false;
         }
+        NotifyViewportChanged();
         Invalidate();
     }
 
@@ -177,6 +217,7 @@ public class GraphCanvas : Control
         _panX = cx - worldX * newZoom;
         _panY = cy - worldY * newZoom;
         _zoom = newZoom;
+        NotifyViewportChanged();
         Invalidate();
     }
 
@@ -194,10 +235,30 @@ public class GraphCanvas : Control
         Invalidate();
     }
 
+    /// <summary>
+    /// Pans the canvas so the given node is centered in the viewport.
+    /// </summary>
+    public void CenterOnNode(GraphNode node)
+    {
+        float nodeCenterX = node.X + node.Width / 2;
+        float nodeCenterY = node.Y + node.Height / 2;
+        float viewW = (float)Bounds.Width;
+        float viewH = (float)Bounds.Height;
+
+        _panX = viewW / 2 - nodeCenterX * _zoom;
+        _panY = viewH / 2 - nodeCenterY * _zoom;
+        Invalidate();
+    }
+
     private void Invalidate()
     {
         _needsRender = true;
         InvalidateVisual();
+    }
+
+    private void NotifyViewportChanged()
+    {
+        ViewportChanged?.Invoke(_zoom, _panX, _panY, (float)Bounds.Width, (float)Bounds.Height);
     }
 
     private void RenderNow()
@@ -250,8 +311,8 @@ public class GraphCanvas : Control
 
         if (_writeableBitmap != null)
         {
-            var srcRect = new Rect(0, 0, _writeableBitmap.PixelSize.Width, _writeableBitmap.PixelSize.Height);
-            var destRect = new Rect(0, 0, w, h);
+            var srcRect = new Avalonia.Rect(0, 0, _writeableBitmap.PixelSize.Width, _writeableBitmap.PixelSize.Height);
+            var destRect = new Avalonia.Rect(0, 0, w, h);
             context.DrawImage(_writeableBitmap, srcRect, destRect);
         }
     }
@@ -428,6 +489,43 @@ public class GraphCanvas : Control
                 canvas.DrawText(badge, badgeX + 5, badgeY + 12, badgeTextPaint);
             }
 
+            // Draw custom stereotype badges
+            if (node.StereotypeBadges.Count > 0)
+            {
+                float badgeSpacing = 4;
+                float badgeH = 14;
+                float currentBadgeY = y + 6;
+                float currentBadgeX = x + w - 6;
+                // If there's already a type badge, place to the left of it
+                if (badge != null)
+                {
+                    using var badgeTextPaint = new SKPaint { Color = SKColors.White, IsAntialias = true, TextSize = 9 };
+                    float existingBadgeW = badgeTextPaint.MeasureText(badge) + 10;
+                    currentBadgeX -= existingBadgeW + badgeSpacing;
+                }
+
+                foreach (var stBadge in node.StereotypeBadges)
+                {
+                    using var stPaint = new SKPaint
+                    {
+                        Color = SKColor.TryParse(stBadge.ColorHex, out var c) ? c : SKColor.Parse("#9E9E9E"),
+                        Style = SKPaintStyle.Fill,
+                        IsAntialias = true
+                    };
+                    using var stTextPaint = new SKPaint
+                    {
+                        Color = SKColors.White,
+                        IsAntialias = true,
+                        TextSize = 8
+                    };
+                    float stBadgeW = stTextPaint.MeasureText(stBadge.Label) + 10;
+                    currentBadgeX -= stBadgeW;
+                    canvas.DrawRoundRect(currentBadgeX, currentBadgeY, stBadgeW, badgeH, 3, 3, stPaint);
+                    canvas.DrawText(stBadge.Label, currentBadgeX + 5, currentBadgeY + 10, stTextPaint);
+                    currentBadgeX -= badgeSpacing;
+                }
+            }
+
             using var namePaint = new SKPaint { Color = ColorText, IsAntialias = true, TextSize = 12 };
             canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, namePaint);
 
@@ -493,7 +591,9 @@ public class GraphCanvas : Control
     {
         base.OnPointerPressed(e);
         var pos = e.GetPosition(this);
+        var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
 
+        // Middle button or Ctrl+Left = pan (existing behavior)
         if (e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed ||
             (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed &&
              (e.KeyModifiers & KeyModifiers.Control) != 0))
@@ -507,15 +607,46 @@ public class GraphCanvas : Control
             return;
         }
 
-        var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
-        var hit = HitTest(worldPos);
-        if (hit != _selectedNode)
+        // Left click on node = start drag (if enabled)
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            _selectedNode = hit;
-            SelectionChanged?.Invoke(hit);
-            Invalidate();
+            var hit = HitTest(worldPos);
+
+            // Shift+click on a node = select entire cluster for dragging
+            if ((e.KeyModifiers & KeyModifiers.Shift) != 0 && hit != null)
+            {
+                string? clusterId = GetNodeClusterId(hit);
+                if (clusterId != null)
+                {
+                    StartClusterDrag(clusterId, worldPos, (float)pos.X, (float)pos.Y);
+                    e.Pointer.Capture(this);
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            // Normal node drag
+            if (hit != null)
+            {
+                StartNodeDrag(hit, worldPos, (float)pos.X, (float)pos.Y);
+                if (hit != _selectedNode)
+                {
+                    _selectedNode = hit;
+                    SelectionChanged?.Invoke(hit);
+                }
+                e.Pointer.Capture(this);
+                e.Handled = true;
+                return;
+            }
+
+            // Click on empty space (start pan)
+            _isPanning = true;
+            _lastMouseX = (float)pos.X;
+            _lastMouseY = (float)pos.Y;
+            Cursor = new Cursor(StandardCursorType.SizeAll);
+            e.Pointer.Capture(this);
+            e.Handled = true;
         }
-        e.Handled = true;
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
@@ -523,6 +654,7 @@ public class GraphCanvas : Control
         base.OnPointerMoved(e);
         var pos = e.GetPosition(this);
 
+        // Panning (existing behavior)
         if (_isPanning)
         {
             float dx = (float)(pos.X - _lastMouseX);
@@ -532,26 +664,142 @@ public class GraphCanvas : Control
             _lastMouseX = (float)pos.X;
             _lastMouseY = (float)pos.Y;
             e.Handled = true;
+            NotifyViewportChanged();
             Invalidate();
             return;
         }
 
-        var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
-        var hovered = HitTest(worldPos);
-        if (hovered != _hoveredNode)
+        // Node dragging
+        if (_isDraggingNode && _draggedNode != null)
         {
-            _hoveredNode = hovered;
+            var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
+            float deltaWorldX = worldPos.X - _dragStartMouseX;
+            float deltaWorldY = worldPos.Y - _dragStartMouseY;
+
+            float newX = _dragStartNodeX + deltaWorldX;
+            float newY = _dragStartNodeY + deltaWorldY;
+
+            // Apply delta as manual override (relative to engine position)
+            Vector2 enginePos = GetEnginePosition(_draggedNode);
+            Vector2 overrideDelta = new Vector2(newX - enginePos.X, newY - enginePos.Y);
+            ManualOverrides.SetDelta(_draggedNode.Id, overrideDelta);
+
+            _draggedNode.X = newX;
+            _draggedNode.Y = newY;
+            e.Handled = true;
             Invalidate();
+            return;
+        }
+
+        // Cluster dragging
+        if (_isDraggingCluster && _draggedClusterId != null)
+        {
+            var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
+            float deltaWorldX = worldPos.X - _dragStartMouseX;
+            float deltaWorldY = worldPos.Y - _dragStartMouseY;
+
+            foreach (var node in _nodes)
+            {
+                if (_clusterDragStartPositions.TryGetValue(node.Id, out var startPos))
+                {
+                    float newX = startPos.X + deltaWorldX;
+                    float newY = startPos.Y + deltaWorldY;
+
+                    Vector2 enginePos = GetEnginePosition(node);
+                    Vector2 overrideDelta = new Vector2(newX - enginePos.X, newY - enginePos.Y);
+                    ManualOverrides.SetDelta(node.Id, overrideDelta);
+
+                    node.X = newX;
+                    node.Y = newY;
+                }
+            }
+            e.Handled = true;
+            Invalidate();
+            return;
+        }
+
+        // Hover detection (existing behavior, but skip during drag)
+        if (!_isDraggingNode && !_isDraggingCluster)
+        {
+            var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
+            var hovered = HitTest(worldPos);
+            if (hovered != _hoveredNode)
+            {
+                _hoveredNode = hovered;
+                Invalidate();
+            }
         }
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+
+        if (_isDraggingNode || _isDraggingCluster)
+        {
+            _isDraggingNode = false;
+            _isDraggingCluster = false;
+            _draggedNode = null;
+            _draggedClusterId = null;
+            Cursor = Cursor.Default;
+            e.Pointer.Capture(null);
+            ManualLayoutChanged?.Invoke();
+            e.Handled = true;
+            return;
+        }
+
         _isPanning = false;
         Cursor = Cursor.Default;
         e.Pointer.Capture(null);
         e.Handled = true;
+    }
+
+    private void StartNodeDrag(GraphNode node, SKPoint worldPos, float screenX, float screenY)
+    {
+        _draggedNode = node;
+        _isDraggingNode = true;
+        _isDraggingCluster = false;
+        _draggedClusterId = null;
+        _dragStartMouseX = worldPos.X;
+        _dragStartMouseY = worldPos.Y;
+        _dragStartNodeX = node.X;
+        _dragStartNodeY = node.Y;
+        Cursor = new Cursor(StandardCursorType.Hand);
+    }
+
+    private void StartClusterDrag(string clusterId, SKPoint worldPos, float screenX, float screenY)
+    {
+        _isDraggingNode = false;
+        _isDraggingCluster = true;
+        _draggedClusterId = clusterId;
+        _draggedNode = null;
+        _dragStartMouseX = worldPos.X;
+        _dragStartMouseY = worldPos.Y;
+        _clusterDragStartPositions.Clear();
+
+        // Record start positions of all nodes in this cluster
+        foreach (var node in _nodes)
+        {
+            if (GetNodeClusterId(node) == clusterId)
+            {
+                _clusterDragStartPositions[node.Id] = new Vector2(node.X, node.Y);
+            }
+        }
+        Cursor = new Cursor(StandardCursorType.Hand);
+    }
+
+    private string? GetNodeClusterId(GraphNode node)
+    {
+        return node.Namespace;
+    }
+
+    /// <summary>
+    /// The engine-computed position before manual overrides were applied.
+    /// </summary>
+    private Vector2 GetEnginePosition(GraphNode node)
+    {
+        Vector2 delta = ManualOverrides.GetDelta(node.Id);
+        return new Vector2(node.X - delta.X, node.Y - delta.Y);
     }
 
     private SKPoint ScreenToWorld(float screenX, float screenY)
@@ -586,6 +834,18 @@ public class GraphNode
     public float Width { get; set; } = 120;
     public float Height { get; set; } = 60;
     public List<GraphMember> Members { get; set; } = new();
+
+    /// <summary>
+    /// Stereotype labels with their display colors.
+    /// Populated by the LayoutEngine from TypeNodeData.Stereotypes + custom rules.
+    /// </summary>
+    public List<GraphStereotypeBadge> StereotypeBadges { get; set; } = new();
+}
+
+public class GraphStereotypeBadge
+{
+    public string Label { get; set; } = "";
+    public string ColorHex { get; set; } = "#4ECDC4";
 }
 
 public class GraphMember
