@@ -1,8 +1,46 @@
+# Build outputs
 bin/
 obj/
-*.user
+out/
+
+# IDE
 .vs/
+*.user
+*.suo
+*.userprefs
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI coding assistants
+.agents/
+.codex/
+.cursor/
+
+# Test output
 test-output/
 test-output-self/
-*.md
-!README.md
+
+# Exported diagrams (generated output)
+**/export/
+docs/mermaid/
+
+# Screenshots / images (artifacts)
+*.png
+*.PNG
+*.jpg
+*.jpeg
+*.gif
+
+# Large text dumps
+csharp_project_context.txt
+
+# Archives
+*.zip
+
+# NuGet
+**/project.assets.json
+**/project.nuget.cache
+.nuget/
+packages/
