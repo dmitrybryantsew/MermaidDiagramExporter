@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using MermaidDiagramExporter.Core;
 using MermaidDiagramExporter.Extraction;
 using MermaidDiagramExporter.Gui.Persistence;
@@ -41,6 +42,14 @@ public sealed class ScanCoordinator
         _cacheService = cacheService;
         _bundleService = bundleService;
         _settingsService = settingsService;
+    }
+
+    /// <summary>
+    /// Raise StatusChanged on the UI thread to avoid cross-thread exceptions.
+    /// </summary>
+    private void RaiseStatusChanged(string status)
+    {
+        Dispatcher.UIThread.Post(() => StatusChanged?.Invoke(status));
     }
 
     /// <summary>
@@ -97,7 +106,7 @@ public sealed class ScanCoordinator
             if (cached != null)
             {
                 graph = cached;
-                StatusChanged?.Invoke("Loaded from cache");
+                RaiseStatusChanged("Loaded from cache");
             }
             else
             {
@@ -115,7 +124,7 @@ public sealed class ScanCoordinator
         if (settings.AutoSaveSourceBundle)
         {
             string bundlePath = _bundleService.GenerateBundle(folder, settings);
-            StatusChanged?.Invoke($"Bundle: {Path.GetFileName(bundlePath)}");
+            RaiseStatusChanged($"Bundle: {Path.GetFileName(bundlePath)}");
         }
 
         _settingsService.SaveSettings(settings);
