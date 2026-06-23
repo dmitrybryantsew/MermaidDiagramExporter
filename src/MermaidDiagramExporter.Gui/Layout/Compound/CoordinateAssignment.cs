@@ -49,6 +49,9 @@ public static class CoordinateAssignment
     /// </summary>
     private static void AssignOrderAxisPosition(CompoundGraph compound, LayoutOptions options)
     {
+        // Build full position lookup from all compound nodes
+        var nodeById = compound.Nodes.ToDictionary(n => n.Id);
+
         var byRank = compound.Nodes
             .GroupBy(n => n.Rank)
             .OrderBy(g => g.Key)
@@ -60,7 +63,7 @@ public static class CoordinateAssignment
         foreach (var rank in byRank.Keys)
             PackRankWithoutOverlap(byRank[rank], options);
 
-        // Pass 2: iterative median-pull
+        // Pass 2: iterative median-pull using actual neighbor positions
         var adjacency = BuildAdjacency(compound);
         int passes = options.CoordinateAssignmentPasses;
         for (int pass = 0; pass < passes; pass++)
@@ -71,7 +74,7 @@ public static class CoordinateAssignment
                 : byRank.Keys.OrderByDescending(r => r).ToList();
 
             foreach (var rank in ranksInPassOrder)
-                PullTowardNeighborMedianAndResolveOverlaps(byRank[rank], adjacency, options);
+                PullTowardNeighborMedianAndResolveOverlaps(byRank[rank], adjacency, nodeById, options);
         }
     }
 
@@ -90,17 +93,6 @@ public static class CoordinateAssignment
         }
     }
 
-    private static Dictionary<string, int> BuildPositionLookup(Dictionary<int, List<CompoundNode>> byRank)
-    {
-        var pos = new Dictionary<string, int>();
-        foreach (var kv in byRank)
-        {
-            for (int i = 0; i < kv.Value.Count; i++)
-                pos[kv.Value[i].Id] = i;
-        }
-        return pos;
-    }
-
     private static Dictionary<string, HashSet<string>> BuildAdjacency(CompoundGraph compound)
     {
         var adj = new Dictionary<string, HashSet<string>>();
@@ -109,7 +101,6 @@ public static class CoordinateAssignment
         {
             if (edge.IsContainment) continue;
             if (adj.TryGetValue(edge.FromId, out var set)) set.Add(edge.ToId);
-            if (adj.TryGetValue(edge.ToId, out var set2)) set2.Add(edge.FromId);
         }
         return adj;
     }
@@ -117,15 +108,9 @@ public static class CoordinateAssignment
     private static void PullTowardNeighborMedianAndResolveOverlaps(
         List<CompoundNode> rank,
         Dictionary<string, HashSet<string>> adjacency,
+        Dictionary<string, CompoundNode> nodeById,
         LayoutOptions options)
     {
-        // Build a quick lookup from node id to node for position queries
-        var nodeById = new Dictionary<string, CompoundNode>();
-        foreach (var node in rank) nodeById[node.Id] = node;
-        // Also include all nodes reachable via adjacency (could be in other layers)
-        var allNodes = new Dictionary<string, CompoundNode>();
-        foreach (var node in rank) allNodes[node.Id] = node;
-
         // Compute desired position for each node = median of neighbor positions
         var desired = new Dictionary<string, float>();
         foreach (var node in rank)
@@ -135,10 +120,9 @@ public static class CoordinateAssignment
             var positions = new List<float>();
             foreach (var neighborId in neighbors)
             {
-                // We don't have access to all nodes here; use the current node's position
-                // as a proxy. A full implementation would need access to the full compound graph.
-                if (options.Direction == LayoutDirection.LeftToRight) positions.Add(node.X);
-                else positions.Add(node.Y);
+                if (!nodeById.TryGetValue(neighborId, out var neighbor)) continue;
+                float pos = options.Direction == LayoutDirection.LeftToRight ? neighbor.X : neighbor.Y;
+                positions.Add(pos);
             }
             if (positions.Count == 0) continue;
             positions.Sort();

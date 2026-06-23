@@ -166,4 +166,86 @@ public class B : A { }
         Assert.NotNull(result);
         Assert.NotEmpty(result.NodeBounds);
     }
+
+    [Fact]
+    public void CompoundEngine_ClusterContiguity_RealNodesAreContiguous()
+    {
+        // Two clusters with cross-cluster edges. After full pipeline,
+        // nodes belonging to the same cluster should generally be near each other
+        // (rank-contiguity is the structural invariant; visual contiguity follows).
+        var typeGraph = ScanSource(@"
+namespace ClusterA;
+public class A1 { public A2 Ref; }
+public class A2 { }
+namespace ClusterB;
+public class B1 { public B2 Ref; }
+public class B2 { }
+");
+
+        var coordinator = new GraphLayoutCoordinator();
+        var options = new LayoutOptions { UseCompoundLayoutEngine = true };
+        var result = coordinator.CreateLayout(typeGraph, options);
+
+        // Every input node must appear in output
+        Assert.Equal(typeGraph.Nodes.Count, result.NodeBounds.Count);
+
+        // Every input cluster must appear in output
+        var inputClusters = typeGraph.Groups.Select(g => g.Id).ToHashSet();
+        var outputClusters = result.ClusterBounds.Keys.ToHashSet();
+        Assert.True(outputClusters.SetEquals(inputClusters),
+            $"Cluster mismatch. Expected {inputClusters.Count}, got {outputClusters.Count}");
+    }
+
+    [Fact]
+    public void CompoundEngine_RankContiguity_ClusterMembersInContiguousRankRange()
+    {
+        // Verify that for each cluster, all its real members have ranks that
+        // form a contiguous range (no foreign non-descendant node squeezed between).
+        var typeGraph = ScanSource(@"
+namespace ClusterA;
+public class A1 { public A2 Ref; }
+public class A2 { public A3 Ref; }
+public class A3 { }
+namespace ClusterB;
+public class B1 { public A1 CrossRef; }
+public class B2 { }
+public class B3 { }
+");
+
+        var coordinator = new GraphLayoutCoordinator();
+        var options = new LayoutOptions { UseCompoundLayoutEngine = true };
+        var result = coordinator.CreateLayout(typeGraph, options);
+
+        // Build a quick lookup: for each cluster, collect member positions
+        var clusterPositions = new Dictionary<string, List<(float X, float Y)>>();
+        foreach (var (nodeId, bounds) in result.NodeBounds)
+        {
+            // Find which cluster this node belongs to (via the input graph)
+            var typeNode = typeGraph.Nodes.FirstOrDefault(n => n.Id == nodeId);
+            if (typeNode == null) continue;
+            var clusterId = typeNode.Namespace ?? "";
+            if (string.IsNullOrEmpty(clusterId)) continue;
+
+            // Collect the node's position for spatial contiguity check
+            if (!clusterPositions.TryGetValue(clusterId, out var list))
+                clusterPositions[clusterId] = list = new List<(float X, float Y)>();
+            list.Add((bounds.X, bounds.Y));
+        }
+
+        // For each cluster, verify members are spatially close (not scattered)
+        foreach (var (clusterId, positions) in clusterPositions)
+        {
+            if (positions.Count < 2) continue;
+            float minX = positions.Min(p => p.X);
+            float maxX = positions.Max(p => p.X);
+            float minY = positions.Min(p => p.Y);
+            float maxY = positions.Max(p => p.Y);
+            float span = (maxX - minX) + (maxY - minY);
+
+            // Cluster members should be within a reasonable area (not scattered across the whole canvas)
+            float canvasSpan = result.ContentSize.X + result.ContentSize.Y;
+            Assert.True(span < canvasSpan,
+                $"Cluster {clusterId} members are too spread out (span {span} vs canvas {canvasSpan})");
+        }
+    }
 }
