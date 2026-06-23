@@ -65,6 +65,9 @@ public class GraphCanvas : Control
     /// </summary>
     private string? _draggedNodeIdDuringRender;
 
+    // ── Extracted rendering and hit-test services (Step 17) ──
+    private readonly CanvasRenderer _renderer = new();
+
     // Edge type visibility
     private bool _showInheritanceEdges = true;
     private bool _showImplementsEdges = true;
@@ -370,6 +373,22 @@ public class GraphCanvas : Control
         ViewportChanged?.Invoke(_zoom, _panX, _panY, (float)Bounds.Width, (float)Bounds.Height);
     }
 
+    /// <summary>
+    /// Builds an immutable snapshot of current viewport state for the renderer.
+    /// </summary>
+    private ViewportState GetViewportState() => new()
+    {
+        Zoom = _zoom,
+        PanX = _panX,
+        PanY = _panY,
+        ShowInheritanceEdges = _showInheritanceEdges,
+        ShowImplementsEdges = _showImplementsEdges,
+        ShowAssociationEdges = _showAssociationEdges,
+        SelectedNode = _selectedNode,
+        HoveredNode = _hoveredNode,
+        SearchText = _searchText,
+    };
+
     private void ComputeContentBounds()
     {
         if (_nodes.Count == 0)
@@ -496,203 +515,23 @@ public class GraphCanvas : Control
 
     private void DrawNamespaceGroups(SKCanvas canvas)
     {
-        var groups = new Dictionary<string, List<GraphNode>>();
-        foreach (var node in _nodes)
-        {
-            if (!groups.ContainsKey(node.Namespace))
-                groups[node.Namespace] = new();
-            groups[node.Namespace].Add(node);
-        }
-
-        foreach (var (ns, nsNodes) in groups)
-        {
-            if (string.IsNullOrEmpty(ns) || nsNodes.Count == 0) continue;
-
-            float minX = float.MaxValue, minY = float.MaxValue;
-            float maxX = float.MinValue, maxY = float.MinValue;
-            foreach (var n in nsNodes)
-            {
-                minX = Math.Min(minX, n.X);
-                minY = Math.Min(minY, n.Y);
-                maxX = Math.Max(maxX, n.X + n.Width);
-                maxY = Math.Max(maxY, n.Y + n.Height);
-            }
-
-            float x = minX - NamespacePadding;
-            float y = minY - NamespacePadding - NamespaceTitleHeight;
-            float ww = maxX - minX + NamespacePadding * 2;
-            float hh = maxY - minY + NamespacePadding * 2 + NamespaceTitleHeight;
-
-
-
-            canvas.DrawRoundRect(x, y, ww, hh, 8, 8, NamespaceBgPaint);
-            canvas.DrawRoundRect(x, y, ww, hh, 8, 8, NamespaceBorderPaint);
-            canvas.DrawText(ns, x + 12, y + NamespaceTitleHeight - 6, NamespaceTextPaint);
-        }
+        _renderer.DrawNamespaceGroups(canvas, _nodes);
     }
 
     private void DrawEdges(SKCanvas canvas, string? excludeNodeId = null)
     {
-        foreach (var edge in _edges)
-        {
-            if (edge.FromNode == null || edge.ToNode == null) continue;
-            // Skip edges connected to the dragged node (they're drawn separately during drag)
-            if (excludeNodeId != null && (edge.FromNode.Id == excludeNodeId || edge.ToNode.Id == excludeNodeId))
-                continue;
-
-            // Filter by edge kind visibility
-            bool visible = edge.Kind switch
-            {
-                TypeEdgeKind.Inheritance => _showInheritanceEdges,
-                TypeEdgeKind.Implements => _showImplementsEdges,
-                TypeEdgeKind.Association => _showAssociationEdges,
-                _ => true
-            };
-            if (!visible) continue;
-
-            float fromX = edge.FromNode.X + edge.FromNode.Width;
-            float fromY = edge.FromNode.Y + edge.FromNode.Height / 2;
-            float toX = edge.ToNode.X;
-            float toY = edge.ToNode.Y + edge.ToNode.Height / 2;
-
-            SKColor edgeColor = edge.Kind switch
-            {
-                TypeEdgeKind.Inheritance => ColorEdgeInheritance,
-                TypeEdgeKind.Implements => ColorEdgeImplements,
-                _ => ColorEdgeAssociation
-            };
-            float strokeWidth = edge.Kind == TypeEdgeKind.Association ? 1.2f : 2.0f;
-
-            if (_selectedNode != null && (edge.FromNode.Id == _selectedNode.Id || edge.ToNode.Id == _selectedNode.Id))
-            {
-                strokeWidth += 0.5f;
-            }
-
-            EdgeStrokePaint.Color = edgeColor;
-            EdgeStrokePaint.StrokeWidth = strokeWidth;
-
-            float dx = toX - fromX;
-            float controlOffset = Math.Max(40, Math.Min(150, Math.Abs(dx) * 0.4f));
-
-            using var path = new SKPath();
-            path.MoveTo(fromX, fromY);
-            path.CubicTo(
-                fromX + controlOffset, fromY,
-                toX - controlOffset, toY,
-                toX, toY);
-            canvas.DrawPath(path, EdgeStrokePaint);
-
-            // Draw label if present
-            if (!string.IsNullOrEmpty(edge.Label))
-            {
-                float midX = (fromX + toX) / 2;
-                float midY = (fromY + toY) / 2;
-                canvas.DrawText(edge.Label, midX, midY - 4, EdgeLabelPaint);
-            }
-
-            DrawArrowhead(canvas, toX, toY, edgeColor);
-        }
+        _renderer.DrawEdges(canvas, _edges, GetViewportState(), excludeNodeId);
     }
 
     private void DrawArrowhead(SKCanvas canvas, float x, float y, SKColor color)
     {
-        float arrowLen = ArrowheadLength;
-        float arrowWidth = ArrowheadHalfWidth;
-
-        ArrowheadPaint.Color = color;
-        var path = new SKPath();
-        path.MoveTo(x, y);
-        path.LineTo(x - arrowLen, y - arrowWidth);
-        path.LineTo(x - arrowLen, y + arrowWidth);
-        path.Close();
-        canvas.DrawPath(path, ArrowheadPaint);
+        // Delegated to CanvasRenderer — kept for compatibility with DrawSingleNode in GraphCanvas
+        // This method is no longer called directly; DrawSingleNode now uses the renderer.
     }
 
     private void DrawNodes(SKCanvas canvas)
     {
-        bool searchActive = !string.IsNullOrWhiteSpace(_searchText);
-
-        foreach (var node in _nodes)
-        {
-            float x = node.X, y = node.Y, w = node.Width, h = node.Height;
-
-            bool searchMatch = false;
-            if (searchActive)
-            {
-                searchMatch =
-                    node.DisplayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
-                    || node.Namespace.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
-                    || node.Id.Contains(_searchText, StringComparison.OrdinalIgnoreCase);
-            }
-
-            canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeFillPaint);
-
-            var strokeColor = searchActive && searchMatch ? ColorNodeStrokeSearchMatch
-                           : node == _selectedNode ? ColorNodeStrokeSelected
-                           : node == _hoveredNode ? ColorNodeStrokeHover
-                           : ColorNodeStroke;
-            float strokeWidth = (node == _selectedNode || (searchActive && searchMatch)) ? 3 : 1.5f;
-            NodeStrokePaint.Color = strokeColor;
-            NodeStrokePaint.StrokeWidth = strokeWidth;
-            canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeStrokePaint);
-
-            NodeHeaderPaint.Color = strokeColor.WithAlpha(40);
-            canvas.DrawRoundRect(x, y, w, NodeHeaderHeight, 6, 6, NodeHeaderPaint);
-            canvas.DrawRect(x, y + NodeHeaderHeight - 4, w, 4, NodeHeaderPaint);
-
-            string? badge = GetBadgeText(node);
-            if (badge != null)
-            {
-                BadgeFillPaint.Color = GetBadgeColor(node);
-                float badgeW = BadgeTextPaint.MeasureText(badge) + 10;
-                float badgeH = 16;
-                float badgeX = x + w - badgeW - 6;
-                float badgeY = y + 6;
-                canvas.DrawRoundRect(badgeX, badgeY, badgeW, badgeH, 3, 3, BadgeFillPaint);
-                canvas.DrawText(badge, badgeX + 5, badgeY + 12, BadgeTextPaint);
-            }
-
-            // Draw custom stereotype badges
-            if (node.StereotypeBadges.Count > 0)
-            {
-                float badgeSpacing = 4;
-                float badgeH = 14;
-                float currentBadgeY = y + 6;
-                float currentBadgeX = x + w - 6;
-                // If there's already a type badge, place to the left of it
-                if (badge != null)
-                {
-                    float existingBadgeW = BadgeTextPaint.MeasureText(badge) + 10;
-                    currentBadgeX -= existingBadgeW + badgeSpacing;
-                }
-
-                foreach (var stBadge in node.StereotypeBadges)
-                {
-                    StereotypeBadgeFillPaint.Color = SKColor.TryParse(stBadge.ColorHex, out var c) ? c : SKColor.Parse("#9E9E9E");
-                    float stBadgeW = StereotypeBadgeTextPaint.MeasureText(stBadge.Label) + 10;
-                    currentBadgeX -= stBadgeW;
-                    canvas.DrawRoundRect(currentBadgeX, currentBadgeY, stBadgeW, badgeH, 3, 3, StereotypeBadgeFillPaint);
-                    canvas.DrawText(stBadge.Label, currentBadgeX + 5, currentBadgeY + 10, StereotypeBadgeTextPaint);
-                    currentBadgeX -= badgeSpacing;
-                }
-            }
-
-            canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, NodeNamePaint);
-
-
-            float memberY = y + NodeHeaderHeight + 14;
-            int count = 0;
-            foreach (var member in node.Members)
-            {
-                if (count >= MaxMembersShownPerNode) break;
-                string prefix = member.Kind == "Method" ? "  " : "+ ";
-                string text = prefix + member.TypeName + " " + member.Name;
-                if (member.Kind == "Method") text += "()";
-                canvas.DrawText(text, x + NodePaddingX, memberY, NodeMemberPaint);
-                memberY += NodeMemberHeight;
-                count++;
-            }
-        }
+        _renderer.DrawNodes(canvas, _nodes, GetViewportState());
     }
 
     /// <summary>
@@ -704,96 +543,11 @@ public class GraphCanvas : Control
     {
         var node = _nodes.FirstOrDefault(n => n.Id == nodeId);
         if (node == null) return;
-
-        float x = node.X, y = node.Y, w = node.Width, h = node.Height;
-
-        // Draw connected edges first (so they appear behind the node)
-        foreach (var edge in _edges)
-        {
-            if (edge.FromNode == null || edge.ToNode == null) continue;
-            bool connected = edge.FromNode.Id == nodeId || edge.ToNode.Id == nodeId;
-            if (!connected) continue;
-
-            // Filter by edge kind visibility
-            bool visible = edge.Kind switch
-            {
-                TypeEdgeKind.Inheritance => _showInheritanceEdges,
-                TypeEdgeKind.Implements => _showImplementsEdges,
-                TypeEdgeKind.Association => _showAssociationEdges,
-                _ => true
-            };
-            if (!visible) continue;
-
-            SKColor edgeColor = edge.Kind switch
-            {
-                TypeEdgeKind.Inheritance => ColorEdgeInheritance,
-                TypeEdgeKind.Implements => ColorEdgeImplements,
-                _ => ColorEdgeAssociation
-            };
-            float strokeWidth = edge.Kind == TypeEdgeKind.Association ? 1.2f : 2.0f;
-
-            float fromX = edge.FromNode.X + edge.FromNode.Width;
-            float fromY = edge.FromNode.Y + edge.FromNode.Height / 2;
-            float toX = edge.ToNode.X;
-            float toY = edge.ToNode.Y + edge.ToNode.Height / 2;
-
-            EdgeStrokePaint.Color = edgeColor;
-            EdgeStrokePaint.StrokeWidth = strokeWidth;
-
-            float dx = toX - fromX;
-            float controlOffset = Math.Max(40, Math.Min(150, Math.Abs(dx) * 0.4f));
-
-            using var path = new SKPath();
-            path.MoveTo(fromX, fromY);
-            path.CubicTo(fromX + controlOffset, fromY, toX - controlOffset, toY, toX, toY);
-            canvas.DrawPath(path, EdgeStrokePaint);
-
-            DrawArrowhead(canvas, toX, toY, edgeColor);
-        }
-
-        // Draw the node itself
-        canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeFillPaint);
-
-        var strokeColor = node == _selectedNode ? ColorNodeStrokeSelected
-                       : node == _hoveredNode ? ColorNodeStrokeHover
-                       : ColorNodeStroke;
-        float strokeW = node == _selectedNode ? 3f : 1.5f;
-        NodeStrokePaint.Color = strokeColor;
-        NodeStrokePaint.StrokeWidth = strokeW;
-        canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeStrokePaint);
-
-        NodeHeaderPaint.Color = strokeColor.WithAlpha(40);
-        canvas.DrawRoundRect(x, y, w, NodeHeaderHeight, 6, 6, NodeHeaderPaint);
-        canvas.DrawRect(x, y + NodeHeaderHeight - 4, w, 4, NodeHeaderPaint);
-
-        canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, NodeNamePaint);
+        _renderer.DrawSingleNode(canvas, _edges, node, GetViewportState());
     }
 
-    private static string? GetBadgeText(GraphNode node)
-    {
-        return node.Kind switch
-        {
-            "Interface" => "IF",
-            "Enum" => "EN",
-            "Struct" => "ST",
-            "StaticClass" => "SC",
-            "AbstractClass" => "AB",
-            _ => null
-        };
-    }
-
-    private static SKColor GetBadgeColor(GraphNode node)
-    {
-        return node.Kind switch
-        {
-            "Interface" => ColorBadgeInterface,
-            "Enum" => ColorBadgeEnum,
-            "Struct" => ColorBadgeStruct,
-            "StaticClass" => ColorBadgeStatic,
-            "AbstractClass" => ColorBadgeAbstract,
-            _ => ColorNodeStroke
-        };
-    }
+    private static string? GetBadgeText(GraphNode node) => CanvasRenderer.GetBadgeText(node);
+    private static SKColor GetBadgeColor(GraphNode node) => CanvasRenderer.GetBadgeColor(node);
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
@@ -1065,21 +819,12 @@ public class GraphCanvas : Control
 
     private SKPoint ScreenToWorld(float screenX, float screenY)
     {
-        return new SKPoint((screenX - _panX) / _zoom, (screenY - _panY) / _zoom);
+        return HitTestService.ScreenToWorld(screenX, screenY, _panX, _panY, _zoom);
     }
 
     private GraphNode? HitTest(SKPoint worldPos)
     {
-        for (int i = _nodes.Count - 1; i >= 0; i--)
-        {
-            var node = _nodes[i];
-            if (worldPos.X >= node.X && worldPos.X <= node.X + node.Width &&
-                worldPos.Y >= node.Y && worldPos.Y <= node.Y + node.Height)
-            {
-                return node;
-            }
-        }
-        return null;
+        return HitTestService.HitTest(worldPos, _nodes);
     }
 }
 
