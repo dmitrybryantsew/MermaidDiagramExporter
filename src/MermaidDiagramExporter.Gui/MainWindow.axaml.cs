@@ -107,16 +107,45 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Disable UI during scan to prevent double-clicks
+        IsEnabled = false;
+        StatsText.Text = "Scanning...";
+
         try
         {
-            var graph = await _scanCoordinator.ExecuteScanFlowAsync(folder, PromptForCache);
-            if (graph == null) return; // user cancelled
+            // Phase 1: Check cache on background thread (disk I/O)
+            var promptRequest = await Task.Run(() => _scanCoordinator.CheckCachePrompt(folder));
+
+            // Phase 2: If cache prompt needed, show dialog on UI thread
+            bool useCache = false;
+            if (promptRequest != null)
+            {
+                var dialog = new CachePromptDialog();
+                dialog.SetInfo(promptRequest.CacheInfo, promptRequest.Validation);
+                await dialog.ShowDialog(this);
+                if (dialog.Result == CachePromptResult.Cancelled)
+                {
+                    IsEnabled = true;
+                    return;
+                }
+                if (dialog.Result == CachePromptResult.LoadCache)
+                    useCache = true;
+            }
+
+            // Phase 3: Execute scan on background thread (Roslyn compilation, disk I/O)
+            var graph = await Task.Run(() => _scanCoordinator.ExecuteScan(folder, useCache));
+            if (graph == null)
+            {
+                IsEnabled = true;
+                return;
+            }
 
             _currentSettings = _settingsService.LoadSettings(graph.Metadata.SourceDescription);
             _currentGraph = graph;
             _focusNavigationController.SetRootGraph(_currentGraph, _currentSettings.SourceFolderPath);
             _seedSelectionState.Clear();
 
+            // Phase 4: Update UI on the main thread (touches Avalonia controls)
             SetDisplayedGraph(_currentGraph);
             GraphCanvasView.WaitForRender();
             UpdateStats(_currentGraph);
@@ -132,14 +161,10 @@ public partial class MainWindow : Window
         {
             StatsText.Text = $"Error: {ex.Message}";
         }
-    }
-
-    private async Task<CachePromptResult> PromptForCache(CacheInfo cacheInfo, CacheValidationResult validation)
-    {
-        var dialog = new CachePromptDialog();
-        dialog.SetInfo(cacheInfo, validation);
-        await dialog.ShowDialog(this);
-        return dialog.Result;
+        finally
+        {
+            IsEnabled = true;
+        }
     }
 
     private void OnScanStatusChanged(string status)

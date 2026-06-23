@@ -216,12 +216,15 @@ public sealed class CanvasRenderer
     /// <summary>
     /// Draws all nodes with search highlighting, selection, and hover states.
     /// </summary>
-    public void DrawNodes(SKCanvas canvas, List<GraphNode> nodes, ViewportState vp)
+    public void DrawNodes(SKCanvas canvas, List<GraphNode> nodes, ViewportState vp, string? excludeNodeId = null)
     {
         bool searchActive = !string.IsNullOrWhiteSpace(vp.SearchText);
 
         foreach (var node in nodes)
         {
+            // Skip the dragged node — it's drawn separately in DrawSingleNode
+            if (excludeNodeId != null && node.Id == excludeNodeId)
+                continue;
             float x = node.X, y = node.Y, w = node.Width, h = node.Height;
 
             bool searchMatch = false;

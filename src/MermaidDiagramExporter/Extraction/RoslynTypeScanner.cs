@@ -227,12 +227,18 @@ public sealed class RoslynTypeScanner
             try
             {
                 var regex = new System.Text.RegularExpressions.Regex(config.Pattern,
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.NonBacktracking,
+                    TimeSpan.FromMilliseconds(500));
                 bool matched = typeNameChain.Any(name => name != null && regex.IsMatch(name));
                 if (matched && seen.Add(config.Label))
                 {
                     stereotypes.Add(config.Label);
                 }
+            }
+            catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+            {
+                // Treat timeout as non-match, continue scanning
+                continue;
             }
             catch { /* invalid regex — skip */ }
         }

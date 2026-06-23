@@ -425,6 +425,8 @@ public class GraphCanvas : Control
         canvas.Translate(-_staticContentMinX, -_staticContentMinY);
         DrawNamespaceGroups(canvas);
         DrawEdges(canvas, excludeNodeId: _draggedNodeIdDuringRender);
+        // Draw non-dragged nodes into the static picture so they don't disappear during drag
+        _renderer.DrawNodes(canvas, _nodes, GetViewportState(), excludeNodeId: _draggedNodeIdDuringRender);
         _staticContentPicture = recorder.EndRecording();
         _staticContentDirty = false;
     }

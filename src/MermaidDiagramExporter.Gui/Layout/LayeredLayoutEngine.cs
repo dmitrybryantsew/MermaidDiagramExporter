@@ -148,10 +148,13 @@ public sealed class LayeredLayoutEngine : IGraphLayoutEngine
         var ranks = BuildBaselineRanks(component, metrics);
         var componentIds = new HashSet<string>(component.Select(c => c.Id));
 
+        // Hoist sorting outside the loop — O(N log N) once, not O(N² log N)
+        var orderedEdges = graph.Edges.OrderByDescending(e => GetEdgeWeight(e.Kind)).ToList();
+
         for (int i = 0; i < component.Count * 2; i++)
         {
             bool changed = false;
-            foreach (var edge in graph.Edges.OrderByDescending(e => GetEdgeWeight(e.Kind)))
+            foreach (var edge in orderedEdges)
             {
                 if (!clusterIdByNodeId.TryGetValue(edge.FromNodeId, out var fromId) ||
                     !clusterIdByNodeId.TryGetValue(edge.ToNodeId, out var toId))
@@ -371,10 +374,13 @@ public sealed class LayeredLayoutEngine : IGraphLayoutEngine
         var ranks = nodes.ToDictionary(n => n.Id, n => GetInitialLocalRank(n));
         var nodeIds = new HashSet<string>(nodes.Select(n => n.Id));
 
+        // Hoist sorting outside the loop — O(N log N) once, not O(N² log N)
+        var orderedEdges = graph.Edges.OrderByDescending(e => GetEdgeWeight(e.Kind)).ToList();
+
         for (int i = 0; i < nodes.Count * 2; i++)
         {
             bool changed = false;
-            foreach (var edge in graph.Edges.OrderByDescending(e => GetEdgeWeight(e.Kind)))
+            foreach (var edge in orderedEdges)
             {
                 if (!nodeIds.Contains(edge.FromNodeId) || !nodeIds.Contains(edge.ToNodeId) || edge.FromNodeId == edge.ToNodeId)
                     continue;
