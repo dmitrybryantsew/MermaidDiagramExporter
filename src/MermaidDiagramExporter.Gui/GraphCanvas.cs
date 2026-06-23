@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -55,6 +56,14 @@ public class GraphCanvas : Control
     private SKPicture? _staticContentPicture;
     private bool _staticContentDirty = true;
     private float _staticContentMinX, _staticContentMinY, _staticContentMaxX, _staticContentMaxY;
+
+    // ── Partial redraw during drag (Step 12) ──
+    /// <summary>
+    /// Set to the ID of the node currently being dragged. When non-null, the static content
+    /// is recorded without this node and its connected edges, and only this node + edges
+    /// are redrawn each frame on top of the cached picture.
+    /// </summary>
+    private string? _draggedNodeIdDuringRender;
 
     // Edge type visibility
     private bool _showInheritanceEdges = true;
@@ -245,7 +254,15 @@ public class GraphCanvas : Control
         }
 
         // Draw nodes every frame (they have per-frame state: hover, selection, search match)
-        DrawNodes(canvas);
+        if (_draggedNodeIdDuringRender != null)
+        {
+            // During drag: draw only the dragged node on top of the cached static picture
+            DrawSingleNode(canvas, _draggedNodeIdDuringRender);
+        }
+        else
+        {
+            DrawNodes(canvas);
+        }
         canvas.Restore();
 
         using var data = bitmap.Encode(SKEncodedImageFormat.Png, 100);
@@ -388,7 +405,7 @@ public class GraphCanvas : Control
         // Offset so content is relative to (0,0) in the picture
         canvas.Translate(-_staticContentMinX, -_staticContentMinY);
         DrawNamespaceGroups(canvas);
-        DrawEdges(canvas);
+        DrawEdges(canvas, excludeNodeId: _draggedNodeIdDuringRender);
         _staticContentPicture = recorder.EndRecording();
         _staticContentDirty = false;
     }
@@ -431,7 +448,15 @@ public class GraphCanvas : Control
         }
 
         // Draw nodes every frame (they have per-frame state: hover, selection, search match)
-        DrawNodes(canvas);
+        if (_draggedNodeIdDuringRender != null)
+        {
+            // During drag: draw only the dragged node on top of the cached static picture
+            DrawSingleNode(canvas, _draggedNodeIdDuringRender);
+        }
+        else
+        {
+            DrawNodes(canvas);
+        }
         canvas.Restore();
         canvas.Flush();
         surface.Flush();
@@ -506,11 +531,14 @@ public class GraphCanvas : Control
         }
     }
 
-    private void DrawEdges(SKCanvas canvas)
+    private void DrawEdges(SKCanvas canvas, string? excludeNodeId = null)
     {
         foreach (var edge in _edges)
         {
             if (edge.FromNode == null || edge.ToNode == null) continue;
+            // Skip edges connected to the dragged node (they're drawn separately during drag)
+            if (excludeNodeId != null && (edge.FromNode.Id == excludeNodeId || edge.ToNode.Id == excludeNodeId))
+                continue;
 
             // Filter by edge kind visibility
             bool visible = edge.Kind switch
@@ -665,6 +693,80 @@ public class GraphCanvas : Control
                 count++;
             }
         }
+    }
+
+    /// <summary>
+    /// Draws a single node (and its connected edges) during drag operations.
+    /// This is used for partial redraw optimization — the static picture contains
+    /// everything except the dragged node, so we only draw this one node on top.
+    /// </summary>
+    private void DrawSingleNode(SKCanvas canvas, string nodeId)
+    {
+        var node = _nodes.FirstOrDefault(n => n.Id == nodeId);
+        if (node == null) return;
+
+        float x = node.X, y = node.Y, w = node.Width, h = node.Height;
+
+        // Draw connected edges first (so they appear behind the node)
+        foreach (var edge in _edges)
+        {
+            if (edge.FromNode == null || edge.ToNode == null) continue;
+            bool connected = edge.FromNode.Id == nodeId || edge.ToNode.Id == nodeId;
+            if (!connected) continue;
+
+            // Filter by edge kind visibility
+            bool visible = edge.Kind switch
+            {
+                TypeEdgeKind.Inheritance => _showInheritanceEdges,
+                TypeEdgeKind.Implements => _showImplementsEdges,
+                TypeEdgeKind.Association => _showAssociationEdges,
+                _ => true
+            };
+            if (!visible) continue;
+
+            SKColor edgeColor = edge.Kind switch
+            {
+                TypeEdgeKind.Inheritance => ColorEdgeInheritance,
+                TypeEdgeKind.Implements => ColorEdgeImplements,
+                _ => ColorEdgeAssociation
+            };
+            float strokeWidth = edge.Kind == TypeEdgeKind.Association ? 1.2f : 2.0f;
+
+            float fromX = edge.FromNode.X + edge.FromNode.Width;
+            float fromY = edge.FromNode.Y + edge.FromNode.Height / 2;
+            float toX = edge.ToNode.X;
+            float toY = edge.ToNode.Y + edge.ToNode.Height / 2;
+
+            EdgeStrokePaint.Color = edgeColor;
+            EdgeStrokePaint.StrokeWidth = strokeWidth;
+
+            float dx = toX - fromX;
+            float controlOffset = Math.Max(40, Math.Min(150, Math.Abs(dx) * 0.4f));
+
+            using var path = new SKPath();
+            path.MoveTo(fromX, fromY);
+            path.CubicTo(fromX + controlOffset, fromY, toX - controlOffset, toY, toX, toY);
+            canvas.DrawPath(path, EdgeStrokePaint);
+
+            DrawArrowhead(canvas, toX, toY, edgeColor);
+        }
+
+        // Draw the node itself
+        canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeFillPaint);
+
+        var strokeColor = node == _selectedNode ? ColorNodeStrokeSelected
+                       : node == _hoveredNode ? ColorNodeStrokeHover
+                       : ColorNodeStroke;
+        float strokeW = node == _selectedNode ? 3f : 1.5f;
+        NodeStrokePaint.Color = strokeColor;
+        NodeStrokePaint.StrokeWidth = strokeW;
+        canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeStrokePaint);
+
+        NodeHeaderPaint.Color = strokeColor.WithAlpha(40);
+        canvas.DrawRoundRect(x, y, w, NodeHeaderHeight, 6, 6, NodeHeaderPaint);
+        canvas.DrawRect(x, y + NodeHeaderHeight - 4, w, 4, NodeHeaderPaint);
+
+        canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, NodeNamePaint);
     }
 
     private static string? GetBadgeText(GraphNode node)
@@ -890,6 +992,8 @@ public class GraphCanvas : Control
 
             _draggedNode = null;
             _draggedClusterId = null;
+            _draggedNodeIdDuringRender = null;
+            _staticContentDirty = true; // Re-record static content with the node at its new position
             Cursor = Cursor.Default;
             e.Pointer.Capture(null);
 
@@ -919,6 +1023,8 @@ public class GraphCanvas : Control
         _dragStartMouseY = worldPos.Y;
         _dragStartNodeX = node.X;
         _dragStartNodeY = node.Y;
+        _draggedNodeIdDuringRender = node.Id;
+        _staticContentDirty = true; // Re-record static content without the dragged node
         Cursor = new Cursor(StandardCursorType.Hand);
     }
 
