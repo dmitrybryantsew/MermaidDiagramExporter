@@ -55,6 +55,10 @@ public sealed class CompoundEdge
     public int MinRankSpan { get; set; } = 1;  // normally 1; nesting/border edges may differ
     public bool IsContainment { get; set; }    // true for cluster containment edges (06 Step 2c/2d)
     public bool IsReversedForRanking { get; set; } // true if this edge was flipped to break a cycle
+    /// <summary>The original TypeEdgeKind, preserved so dummy-chain projection can
+    /// produce a canonical edge key compatible with TypeEdgeData.CreateEdgeId.</summary>
+    public MermaidDiagramExporter.Core.TypeEdgeKind Kind { get; set; }
+        = MermaidDiagramExporter.Core.TypeEdgeKind.Association;
     /// <summary>The original LayoutEdge.Id, if this edge originated from a LayoutEdge.</summary>
     public string? OriginalLayoutEdgeId { get; set; }
 }

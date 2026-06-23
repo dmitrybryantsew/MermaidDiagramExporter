@@ -25,6 +25,28 @@ public sealed class EdgeRoutingService
 
         foreach (TypeEdgeData edge in graph.Edges)
         {
+            // The compound engine stores dummy chains keyed by the canonical edge id
+            // (from->to:kind) — same format as TypeEdgeData.CreateEdgeId.
+            string edgeKey = TypeEdgeData.CreateEdgeId(edge.FromNodeId, edge.ToNodeId, edge.Kind);
+
+            // If the compound engine pre-computed dummy-chain polyline points for this edge,
+            // prefer those over our own routing (they have real intermediate waypoints).
+            if (result.EdgeDummyPaths != null
+                && result.EdgeDummyPaths.TryGetValue(edgeKey, out var dummyPoints)
+                && dummyPoints.Count >= 2)
+            {
+                paths.Add(new LayoutEdgePath
+                {
+                    EdgeId = edgeKey,
+                    FromNodeId = edge.FromNodeId,
+                    ToNodeId = edge.ToNodeId,
+                    Kind = edge.Kind,
+                    Points = dummyPoints.ToList(),
+                    IsClippedToClusters = false,
+                });
+                continue;
+            }
+
             if (!result.NodeBounds.TryGetValue(edge.FromNodeId, out Rect fromRect)
                 || !result.NodeBounds.TryGetValue(edge.ToNodeId, out Rect toRect))
             {

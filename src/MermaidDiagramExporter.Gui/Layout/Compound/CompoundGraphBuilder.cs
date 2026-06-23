@@ -55,6 +55,7 @@ public static class CompoundGraphBuilder
                 ToId = toId,
                 Weight = LayoutEdgeWeights.GetWeight(edge.Kind),
                 MinRankSpan = 1,
+                Kind = edge.Kind,
                 OriginalLayoutEdgeId = edge.Id,
             });
         }

@@ -78,6 +78,14 @@ public sealed class LayoutResult
     public IReadOnlyDictionary<string, LayoutClusterVisual> ClusterVisuals { get; set; } = new Dictionary<string, LayoutClusterVisual>();
     public IReadOnlyList<LayoutEdgePath> EdgePaths { get; set; } = Array.Empty<LayoutEdgePath>();
     public Vector2 ContentSize { get; set; }
+
+    /// <summary>
+    /// Optional: pre-computed polyline points for long edges that were broken
+    /// into dummy chains by the compound layout engine. Key = original edge id,
+    /// Value = ordered list of intermediate points (including start and end).
+    /// When non-null, EdgeRoutingService should prefer these over its own routing.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<Vector2>>? EdgeDummyPaths { get; set; }
 }
 
 public sealed class LayoutEdgePath

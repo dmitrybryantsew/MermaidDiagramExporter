@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using MermaidDiagramExporter.Core;
 
 namespace MermaidDiagramExporter.Gui.Layout.Compound;
 
@@ -104,7 +105,14 @@ public static class RankAssignment
             int direction = to.Rank > from.Rank ? 1 : -1;
             string previousId = edge.FromId;
             var chain = new List<string> { edge.FromId };
-            string? layoutEdgeId = edge.OriginalLayoutEdgeId;
+            // Use canonical edge key (from->to:kind) so EdgeRoutingService can look it up
+            // using TypeEdgeData.CreateEdgeId on the original TypeEdgeData.
+            // We use SourceLayoutNodeId (the original layout node id) so the key matches
+            // what EdgeRoutingService computes from the original TypeEdgeData.
+            string edgeKey = Core.TypeEdgeData.CreateEdgeId(
+                from.SourceLayoutNodeId ?? edge.FromId,
+                to.SourceLayoutNodeId ?? edge.ToId,
+                edge.Kind);
 
             for (int r = from.Rank + direction; r != to.Rank; r += direction)
             {
@@ -113,7 +121,7 @@ public static class RankAssignment
                 {
                     Id = dummyId,
                     Kind = CompoundNodeKind.EdgeSegment,
-                    OriginalEdgeId = layoutEdgeId,
+                    OriginalEdgeId = edgeKey,
                     Rank = r,
                     Width = 0,
                     Height = 0,
@@ -126,7 +134,7 @@ public static class RankAssignment
                     ToId = dummyId,
                     Weight = edge.Weight,
                     MinRankSpan = 1,
-                    OriginalLayoutEdgeId = layoutEdgeId
+                    OriginalLayoutEdgeId = edgeKey
                 });
                 previousId = dummyId;
                 chain.Add(dummyId);
@@ -137,15 +145,12 @@ public static class RankAssignment
                 ToId = edge.ToId,
                 Weight = edge.Weight,
                 MinRankSpan = 1,
-                OriginalLayoutEdgeId = layoutEdgeId
+                OriginalLayoutEdgeId = edgeKey
             });
             chain.Add(edge.ToId);
 
-            // Record the dummy chain for later projection
-            if (!string.IsNullOrEmpty(layoutEdgeId))
-            {
-                compound.EdgeDummyChains[layoutEdgeId] = chain;
-            }
+            // Record the dummy chain for later projection, keyed by canonical edge id
+            compound.EdgeDummyChains[edgeKey] = chain;
 
             // Remove the original long edge from compound.Edges (now represented by chain)
             compound.Edges.Remove(edge);
