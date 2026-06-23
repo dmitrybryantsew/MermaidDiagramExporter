@@ -112,8 +112,8 @@
         <Button Content="+" Click="OnZoomIn" MinWidth="40"/>
         <Button Content="−" Click="OnZoomOut" MinWidth="40"/>
       </StackPanel>
-      <!-- Export buttons overlay (bottom) -->
-      <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="8" Spacing="4">
+      <!-- Export buttons overlay (bottom-left, to avoid overlapping the minimap at bottom-right) -->
+      <StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8" Spacing="4" ZIndex="10">
         <Button Content="Save PNG" Click="OnSavePng" MinWidth="90"/>
         <Button Content="Save .mmd" Click="OnSaveMmd" MinWidth="90"/>
         <Button Content="Save .md" Click="OnSaveMd" MinWidth="90"/>

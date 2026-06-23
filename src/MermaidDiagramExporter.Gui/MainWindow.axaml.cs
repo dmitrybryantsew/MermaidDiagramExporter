@@ -172,7 +172,7 @@ public partial class MainWindow : Window
         StatsText.Text = status;
     }
 
-    private void SetDisplayedGraph(TypeGraph? graph, string selectedNodeId = "")
+    private void SetDisplayedGraph(TypeGraph? graph, string selectedNodeId = "", bool reloadManualOverridesFromDisk = true)
     {
         if (graph == null)
         {
@@ -185,14 +185,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Load manual overrides before layout
-        if (_currentSettings.PersistManualLayout)
+        // Load manual overrides before layout (Bug 02 Fix 2):
+        // only reload from disk on "entering a view" paths, not when the caller
+        // has already deliberately set _manualOverrides itself (e.g. after Reset).
+        if (reloadManualOverridesFromDisk)
         {
-            _manualOverrides = _cacheService.LoadManualOverrides(_currentSettings);
-        }
-        else
-        {
-            _manualOverrides = new ManualLayoutOverrides();
+            _manualOverrides = _currentSettings.PersistManualLayout
+                ? _cacheService.LoadManualOverrides(_currentSettings)
+                : new ManualLayoutOverrides();
         }
         _layoutEngine.ManualOverrides = _manualOverrides;
 
@@ -507,7 +507,8 @@ public partial class MainWindow : Window
         if (_currentGraph != null)
         {
             _layoutEngine.ManualOverrides = _manualOverrides;
-            SetDisplayedGraph(_currentGraph);
+            // Bug 02 Fix 2: don't reload from disk — we just deliberately cleared in-memory state
+            SetDisplayedGraph(_currentGraph, reloadManualOverridesFromDisk: false);
         }
     }
 

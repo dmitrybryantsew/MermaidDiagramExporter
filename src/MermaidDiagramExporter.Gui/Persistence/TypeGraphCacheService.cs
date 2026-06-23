@@ -156,13 +156,23 @@ public sealed class TypeGraphCacheService
 
     /// <summary>
     /// Saves manual layout overrides to a companion file in the cache directory.
+    /// If overrides is null or empty, deletes any existing file to prevent stale
+    /// drag deltas from being resurrected on the next load (Bug 02 Fix 1).
     /// </summary>
     public void SaveManualOverrides(ManualLayoutOverrides overrides, ProjectSettings settings)
     {
-        if (overrides == null || !overrides.HasOverrides) return;
-
         string cacheDir = _settingsService.ResolveCacheDirectory(settings);
         string path = Path.Combine(cacheDir, "layout.overrides.json");
+
+        if (overrides == null || !overrides.HasOverrides)
+        {
+            // Nothing to persist — make sure a stale file from a previous
+            // session doesn't resurrect old deltas on next load.
+            if (File.Exists(path))
+                File.Delete(path);
+            return;
+        }
+
         overrides.LastSavedUtc = DateTime.UtcNow;
         var json = JsonSerializer.Serialize(overrides, new JsonSerializerOptions
         {

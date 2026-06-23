@@ -564,6 +564,8 @@ public class GraphCanvas : Control
         _panY = (float)cursorPos.Y - worldY * newZoom;
         _zoom = newZoom;
         e.Handled = true;
+        // Bug 03 Fix A: notify minimap that viewport changed on scroll-wheel zoom
+        NotifyViewportChanged();
         Invalidate();
     }
 

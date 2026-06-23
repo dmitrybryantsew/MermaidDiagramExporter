@@ -137,4 +137,43 @@ public class ManualLayoutOverridesRoundtripTests
             try { if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true); } catch { }
         }
     }
+
+    /// <summary>
+    /// Bug 02 Fix 1 verification: saving empty overrides over an existing file
+    /// must delete the stale file so Reset Layout actually resets on next load.
+    /// </summary>
+    [Fact]
+    public void SaveEmptyOverrides_DeletesStaleFile()
+    {
+        string cacheDir = CreateTempCacheDir();
+        try
+        {
+            var settingsService = new SettingsService();
+            var cacheService = new TypeGraphCacheService(settingsService);
+            var settings = CreateSettings(cacheDir);
+
+            // Step 1: save a non-empty overrides file
+            var original = new ManualLayoutOverrides();
+            original.SetDelta("node1", new Vector2(10f, 20f));
+            cacheService.SaveManualOverrides(original, settings);
+            string path = Path.Combine(cacheDir, "layout.overrides.json");
+            Assert.True(File.Exists(path));
+
+            // Step 2: save empty overrides over the same directory
+            var empty = new ManualLayoutOverrides();
+            cacheService.SaveManualOverrides(empty, settings);
+
+            // Step 3: the stale file must be gone
+            Assert.False(File.Exists(path));
+
+            // Step 4: loading must now return an empty overrides object
+            var loaded = cacheService.LoadManualOverrides(settings);
+            Assert.False(loaded.HasOverrides);
+            Assert.Empty(loaded.NodePositionDeltas);
+        }
+        finally
+        {
+            try { if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true); } catch { }
+        }
+    }
 }
