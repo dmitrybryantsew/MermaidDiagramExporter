@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private readonly TypeGraphCacheService _cacheService;
     private readonly SourceBundleService _bundleService;
     private readonly SymbolSearchEngine _searchEngine = new();
+    private readonly ScanCoordinator _scanCoordinator;
     private ManualLayoutOverrides _manualOverrides = new();
     private ProjectSettings _currentSettings = new();
 
@@ -51,6 +52,10 @@ public partial class MainWindow : Window
         _scanner = scanner;
         _cacheService = new TypeGraphCacheService(_settingsService);
         _bundleService = new SourceBundleService(_settingsService);
+        _scanCoordinator = new ScanCoordinator(_scanner, _cacheService, _bundleService, _settingsService);
+        _scanCoordinator.CachePromptRequested += OnCachePromptRequested;
+        _scanCoordinator.ScanCompleted += OnScanCompleted;
+        _scanCoordinator.StatusChanged += OnScanStatusChanged;
         InitializeComponent();
         GraphCanvasView.SelectionChanged += OnCanvasSelectionChanged;
         GraphCanvasView.ManualLayoutChanged += OnManualLayoutChanged;
@@ -76,7 +81,7 @@ public partial class MainWindow : Window
             FolderTextBox.Text = path;
     }
 
-    private async void OnScan(object? sender, RoutedEventArgs e)
+    private void OnScan(object? sender, RoutedEventArgs e)
     {
         var rawPath = FolderTextBox.Text?.Trim();
         if (string.IsNullOrEmpty(rawPath))
@@ -102,102 +107,42 @@ public partial class MainWindow : Window
             return;
         }
 
-        try
-        {
-            // Load settings for this project
-            _currentSettings = _settingsService.LoadSettings(folder);
+        _scanCoordinator.CachePromptResult = null;
+        var graph = _scanCoordinator.ExecuteScanFlow(folder);
+        // If null, user cancelled the cache prompt — OnScanCompleted will handle success
+    }
 
-            // Check cache and prompt if available
-            bool useCache = false;
-            if (_currentSettings.PromptToLoadCache && _cacheService.CacheExists(_currentSettings))
-            {
-                var cacheInfo = _cacheService.GetCacheInfo(_currentSettings);
-                var manifestPath = Path.Combine(
-                    _settingsService.ResolveCacheDirectory(_currentSettings),
-                    ".cache-manifest.json");
-                var validation = _cacheService.ValidateManifest(manifestPath, _currentSettings);
+    private async void OnCachePromptRequested(CacheInfo cacheInfo, CacheValidationResult validation)
+    {
+        var dialog = new CachePromptDialog();
+        dialog.SetInfo(cacheInfo, validation);
+        await dialog.ShowDialog(this);
+        _scanCoordinator.CachePromptResult = dialog.Result;
+    }
 
-                if (validation == CacheValidationResult.UpToDate || validation == CacheValidationResult.MinorChanges)
-                {
-                    var dialog = new CachePromptDialog();
-                    if (cacheInfo != null)
-                        dialog.SetInfo(cacheInfo, validation);
-                    await dialog.ShowDialog(this);
-                    useCache = dialog.Result == CachePromptResult.LoadCache;
-                    if (dialog.Result == CachePromptResult.Cancelled)
-                        return;
-                }
-            }
+    private void OnScanCompleted(TypeGraph graph)
+    {
+        _currentSettings = _settingsService.LoadSettings(graph.Metadata.SourceDescription);
 
-            // Build scan options with custom stereotypes from settings
-            var buildOptions = new GraphBuildOptions();
-            if (_currentSettings.ApplyCustomStereotypes && _currentSettings.StereotypeRules.Count > 0)
-            {
-                foreach (var rule in _currentSettings.StereotypeRules)
-                {
-                    buildOptions.CustomStereotypes.Add(new StereotypeConfig
-                    {
-                        Pattern = rule.Pattern,
-                        Label = rule.Label,
-                        ColorHex = rule.ColorHex
-                    });
-                }
-            }
+        _currentGraph = graph;
+        _focusNavigationController.SetRootGraph(_currentGraph, _currentSettings.SourceFolderPath);
+        _seedSelectionState.Clear();
 
-            TypeGraph graph;
-            if (useCache)
-            {
-                var cached = _cacheService.LoadCache(_currentSettings);
-                if (cached != null)
-                {
-                    graph = cached;
-                    StatsText.Text = "Loaded from cache";
-                }
-                else
-                {
-                    graph = _scanner.ScanFolder(folder, buildOptions);
-                }
-            }
-            else
-            {
-                graph = _scanner.ScanFolder(folder, buildOptions);
-            }
+        SetDisplayedGraph(_currentGraph);
+        GraphCanvasView.WaitForRender();
+        UpdateStats(_currentGraph);
 
-            _currentGraph = graph;
-            _focusNavigationController.SetRootGraph(_currentGraph, folder);
-            _seedSelectionState.Clear();
+        // Auto-save screenshot
+        var dir = Path.Combine(AppContext.BaseDirectory, "export");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"diagram_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+        GraphCanvasView.SaveToPng(path);
+        StatsText.Text += $" | Saved: {Path.GetFileName(path)}";
+    }
 
-            SetDisplayedGraph(_currentGraph);
-            GraphCanvasView.WaitForRender();
-            UpdateStats(_currentGraph);
-
-            // Auto-save cache if enabled
-            if (_currentSettings.AutoSaveCache)
-            {
-                _cacheService.SaveCache(_currentGraph, _currentSettings);
-            }
-
-            // Auto-save source bundle if enabled
-            if (_currentSettings.AutoSaveSourceBundle)
-            {
-                string bundlePath = _bundleService.GenerateBundle(folder, _currentSettings);
-                StatsText.Text += $" | Bundle: {Path.GetFileName(bundlePath)}";
-            }
-
-            // Persist settings (ensures project is registered)
-            _settingsService.SaveSettings(_currentSettings);
-
-            // Auto-save screenshot
-            var dir = Path.Combine(AppContext.BaseDirectory, "export");
-            Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, $"diagram_{DateTime.Now:yyyyMMdd_HHmmss}.png");
-            GraphCanvasView.SaveToPng(path);
-            StatsText.Text += $" | Saved: {Path.GetFileName(path)}";
-        }
-        catch (Exception ex)
-        {
-            StatsText.Text = $"Error: {ex.Message}";
-        }
+    private void OnScanStatusChanged(string status)
+    {
+        StatsText.Text = status;
     }
 
     private void SetDisplayedGraph(TypeGraph? graph, string selectedNodeId = "")
