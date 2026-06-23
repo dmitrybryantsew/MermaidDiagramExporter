@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -53,9 +54,8 @@ public partial class MainWindow : Window
         _cacheService = new TypeGraphCacheService(_settingsService);
         _bundleService = new SourceBundleService(_settingsService);
         _scanCoordinator = new ScanCoordinator(_scanner, _cacheService, _bundleService, _settingsService);
-        _scanCoordinator.CachePromptRequested += OnCachePromptRequested;
-        _scanCoordinator.ScanCompleted += OnScanCompleted;
         _scanCoordinator.StatusChanged += OnScanStatusChanged;
+
         InitializeComponent();
         GraphCanvasView.SelectionChanged += OnCanvasSelectionChanged;
         GraphCanvasView.ManualLayoutChanged += OnManualLayoutChanged;
@@ -81,7 +81,7 @@ public partial class MainWindow : Window
             FolderTextBox.Text = path;
     }
 
-    private void OnScan(object? sender, RoutedEventArgs e)
+    private async void OnScan(object? sender, RoutedEventArgs e)
     {
         var rawPath = FolderTextBox.Text?.Trim();
         if (string.IsNullOrEmpty(rawPath))
@@ -107,37 +107,39 @@ public partial class MainWindow : Window
             return;
         }
 
-        _scanCoordinator.CachePromptResult = null;
-        var graph = _scanCoordinator.ExecuteScanFlow(folder);
-        // If null, user cancelled the cache prompt — OnScanCompleted will handle success
+        try
+        {
+            var graph = await _scanCoordinator.ExecuteScanFlowAsync(folder, PromptForCache);
+            if (graph == null) return; // user cancelled
+
+            _currentSettings = _settingsService.LoadSettings(graph.Metadata.SourceDescription);
+            _currentGraph = graph;
+            _focusNavigationController.SetRootGraph(_currentGraph, _currentSettings.SourceFolderPath);
+            _seedSelectionState.Clear();
+
+            SetDisplayedGraph(_currentGraph);
+            GraphCanvasView.WaitForRender();
+            UpdateStats(_currentGraph);
+
+            // Auto-save screenshot
+            var dir = Path.Combine(AppContext.BaseDirectory, "export");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, $"diagram_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+            GraphCanvasView.SaveToPng(path);
+            StatsText.Text += $" | Saved: {Path.GetFileName(path)}";
+        }
+        catch (Exception ex)
+        {
+            StatsText.Text = $"Error: {ex.Message}";
+        }
     }
 
-    private async void OnCachePromptRequested(CacheInfo cacheInfo, CacheValidationResult validation)
+    private async Task<CachePromptResult> PromptForCache(CacheInfo cacheInfo, CacheValidationResult validation)
     {
         var dialog = new CachePromptDialog();
         dialog.SetInfo(cacheInfo, validation);
         await dialog.ShowDialog(this);
-        _scanCoordinator.CachePromptResult = dialog.Result;
-    }
-
-    private void OnScanCompleted(TypeGraph graph)
-    {
-        _currentSettings = _settingsService.LoadSettings(graph.Metadata.SourceDescription);
-
-        _currentGraph = graph;
-        _focusNavigationController.SetRootGraph(_currentGraph, _currentSettings.SourceFolderPath);
-        _seedSelectionState.Clear();
-
-        SetDisplayedGraph(_currentGraph);
-        GraphCanvasView.WaitForRender();
-        UpdateStats(_currentGraph);
-
-        // Auto-save screenshot
-        var dir = Path.Combine(AppContext.BaseDirectory, "export");
-        Directory.CreateDirectory(dir);
-        var path = Path.Combine(dir, $"diagram_{DateTime.Now:yyyyMMdd_HHmmss}.png");
-        GraphCanvasView.SaveToPng(path);
-        StatsText.Text += $" | Saved: {Path.GetFileName(path)}";
+        return dialog.Result;
     }
 
     private void OnScanStatusChanged(string status)

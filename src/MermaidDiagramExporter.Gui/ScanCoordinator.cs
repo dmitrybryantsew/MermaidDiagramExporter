@@ -13,7 +13,7 @@ namespace MermaidDiagramExporter.Gui;
 /// Extracted in Step 18 to separate orchestration from UI.
 ///
 /// This class is UI-framework-agnostic — it communicates results back via events
-/// so the caller (MainWindow) can update its own UI controls.
+/// and async callbacks so the caller (MainWindow) can update its own UI controls.
 /// </summary>
 public sealed class ScanCoordinator
 {
@@ -37,17 +37,6 @@ public sealed class ScanCoordinator
     /// </summary>
     public event Action<string>? StatusChanged;
 
-    /// <summary>
-    /// Raised when the cache prompt dialog should be shown.
-    /// The caller should set <see cref="CachePromptResult"/> based on user choice.
-    /// </summary>
-    public event Action<CacheInfo, CacheValidationResult>? CachePromptRequested;
-
-    /// <summary>
-    /// Set by the caller in response to <see cref="CachePromptRequested"/>.
-    /// </summary>
-    public CachePromptResult? CachePromptResult { get; set; }
-
     public ScanCoordinator(
         RoslynTypeScanner scanner,
         TypeGraphCacheService cacheService,
@@ -62,9 +51,13 @@ public sealed class ScanCoordinator
 
     /// <summary>
     /// Executes the full scan-or-load-from-cache flow for the given folder path.
-    /// Returns the loaded or scanned graph, or null if the user cancelled the cache prompt.
+    /// The <paramref name="promptForCache"/> async callback is invoked when the user
+    /// should be asked whether to load from cache. It returns the user's choice.
+    /// Returns the loaded or scanned graph, or null if the user cancelled.
     /// </summary>
-    public TypeGraph? ExecuteScanFlow(string folder)
+    public async Task<TypeGraph?> ExecuteScanFlowAsync(
+        string folder,
+        Func<CacheInfo, CacheValidationResult, Task<CachePromptResult>> promptForCache)
     {
         // Load settings for this project
         var settings = _settingsService.LoadSettings(folder);
@@ -81,15 +74,14 @@ public sealed class ScanCoordinator
 
             if (validation == CacheValidationResult.UpToDate || validation == CacheValidationResult.MinorChanges)
             {
-                // Raise event for the UI to show the dialog
                 if (cacheInfo != null)
-                    CachePromptRequested?.Invoke(cacheInfo, validation);
-
-                var result = CachePromptResult;
-                if (result == null || result == MermaidDiagramExporter.Gui.Persistence.CachePromptResult.Cancelled)
-                    return null;
-                if (result == MermaidDiagramExporter.Gui.Persistence.CachePromptResult.LoadCache)
-                    useCache = true;
+                {
+                    var result = await promptForCache(cacheInfo, validation);
+                    if (result == CachePromptResult.Cancelled)
+                        return null;
+                    if (result == CachePromptResult.LoadCache)
+                        useCache = true;
+                }
             }
         }
 
