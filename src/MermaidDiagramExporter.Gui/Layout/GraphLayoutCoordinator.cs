@@ -1,4 +1,5 @@
 using System.Linq;
+using MermaidDiagramExporter.Gui.Layout.Compound;
 
 namespace MermaidDiagramExporter.Gui.Layout;
 
@@ -10,6 +11,7 @@ namespace MermaidDiagramExporter.Gui.Layout;
 public sealed class GraphLayoutCoordinator
 {
     private readonly IGraphLayoutEngine _layeredLayoutEngine = new LayeredLayoutEngine();
+    private readonly IGraphLayoutEngine _compoundLayeredLayoutEngine = new CompoundLayeredLayoutEngine();
     private readonly IGraphLayoutEngine _simpleColumnLayoutEngine = new SimpleColumnLayoutEngine();
     private readonly EdgeRoutingService _edgeRoutingService = new();
     private readonly PostLayoutPipeline _postLayoutPipeline = new PostLayoutPipeline()
@@ -36,9 +38,14 @@ public sealed class GraphLayoutCoordinator
         LayoutGraph layoutGraph = LayoutGraphFactory.Create(graph, resolvedOptions);
         LayoutGraph preparedGraph = _pipeline.Run(layoutGraph, resolvedOptions);
 
+        // Feature-flagged engine selection (per docs/08 Part C).
+        // Default is the old engine (UseCompoundLayoutEngine = false) until the new
+        // engine is validated per docs/09.
         LayoutResult layoutResult = preparedGraph.Nodes.Count == 0
             ? _simpleColumnLayoutEngine.Run(preparedGraph, resolvedOptions)
-            : _layeredLayoutEngine.Run(preparedGraph, resolvedOptions);
+            : resolvedOptions.UseCompoundLayoutEngine
+                ? _compoundLayeredLayoutEngine.Run(preparedGraph, resolvedOptions)
+                : _layeredLayoutEngine.Run(preparedGraph, resolvedOptions);
 
         layoutResult = _postLayoutPipeline.Run(preparedGraph, layoutResult, resolvedOptions);
         layoutResult.NodeClusterIds = preparedGraph.Nodes.ToDictionary(node => node.Id, node => node.ClusterId);

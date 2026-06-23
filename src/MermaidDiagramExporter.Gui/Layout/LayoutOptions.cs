@@ -35,4 +35,18 @@ public sealed class LayoutOptions
     public float RecursiveRankSpacingBonus { get; set; } = 25f;
     public float MinimumContentWidth { get; set; } = 2200f;
     public float MinimumContentHeight { get; set; } = 2200f;
+
+    // ── Compound layout engine (docs/08) ──
+    /// <summary>
+    /// Feature flag: when true, uses the new CompoundLayeredLayoutEngine
+    /// (unified node+border-dummy ranking, compound-aware ordering).
+    /// Default false until validated per docs/09.
+    /// </summary>
+    public bool UseCompoundLayoutEngine { get; set; } = false;
+
+    /// <summary>Weight used for cluster containment edges (docs/06 Step 2c).</summary>
+    public float ClusterContainmentEdgeWeight { get; set; } = 24f;
+
+    /// <summary>Number of coordinate-assignment passes (docs/08 Part A2).</summary>
+    public int CoordinateAssignmentPasses { get; set; } = 6;
 }
