@@ -83,6 +83,11 @@
           <CheckBox x:Name="PersistLayoutCheck" Content="Persist manual layout positions" />
           <CheckBox x:Name="EnableDraggingCheck" Content="Enable node drag-to-reposition" />
           <CheckBox x:Name="ShowMinimapCheck" Content="Show minimap" />
+
+          <!-- Experimental Layout Engine -->
+          <TextBlock Text="Experimental" FontWeight="Bold" FontSize="16" Margin="0,16,0,0" Foreground="#FFA040" />
+          <CheckBox x:Name="UseCompoundEngineCheck" Content="Use compound layout engine (experimental)" />
+          <TextBlock Text="Ranks all nodes globally with cluster-contiguity constraints. Requires re-scan to take effect." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="20,2,0,0" />
         </StackPanel>
       </ScrollViewer>
 

@@ -13,6 +13,7 @@ using MermaidDiagramExporter.Core;
 using MermaidDiagramExporter.Extraction;
 using MermaidDiagramExporter.Export;
 using MermaidDiagramExporter.Focus;
+using MermaidDiagramExporter.Gui.Layout;
 using MermaidDiagramExporter.Gui.Search;
 using MermaidDiagramExporter.Gui.Settings;
 using MermaidDiagramExporter.Gui.Persistence;
@@ -195,6 +196,13 @@ public partial class MainWindow : Window
                 : new ManualLayoutOverrides();
         }
         _layoutEngine.ManualOverrides = _manualOverrides;
+
+        // Build LayoutOptions from current settings so the compound engine toggle
+        // (and any future per-setting overrides) actually reaches the engine.
+        _layoutEngine.LayoutOptions = new LayoutOptions
+        {
+            UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine
+        };
 
         var (nodes, edges) = _layoutEngine.Layout(graph);
         _allNodes = nodes;

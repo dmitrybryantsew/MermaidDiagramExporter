@@ -84,6 +84,13 @@ public sealed class ProjectSettings
     /// Whether to enable drag-to-reposition on the canvas.
     /// </summary>
     public bool EnableNodeDragging { get; set; } = true;
+
+    /// <summary>
+    /// Whether to use the experimental compound layout engine (unified node+border-dummy
+    /// ranking, cluster-contiguity ordering). Default false until validated per docs/09.
+    /// When false, the original cluster-as-supernode layered engine is used.
+    /// </summary>
+    public bool UseCompoundLayoutEngine { get; set; } = false;
 }
 
 public enum CacheInvalidationMode

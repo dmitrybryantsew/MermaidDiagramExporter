@@ -61,6 +61,7 @@ public partial class SettingsWindow : Window
         PersistLayoutCheck.IsChecked = _settings.PersistManualLayout;
         EnableDraggingCheck.IsChecked = _settings.EnableNodeDragging;
         ShowMinimapCheck.IsChecked = _settings.ShowMinimap;
+        UseCompoundEngineCheck.IsChecked = _settings.UseCompoundLayoutEngine;
 
         _stereotypeRules.Clear();
         foreach (var rule in _settings.StereotypeRules)
@@ -116,6 +117,7 @@ public partial class SettingsWindow : Window
         _settings.PersistManualLayout = PersistLayoutCheck.IsChecked == true;
         _settings.EnableNodeDragging = EnableDraggingCheck.IsChecked == true;
         _settings.ShowMinimap = ShowMinimapCheck.IsChecked == true;
+        _settings.UseCompoundLayoutEngine = UseCompoundEngineCheck.IsChecked == true;
         _settings.StereotypeRules = _stereotypeRules.ToList();
 
         _settingsService.SaveSettings(_settings);
@@ -144,6 +146,7 @@ public partial class SettingsWindow : Window
         PersistLayoutCheck.IsChecked = true;
         EnableDraggingCheck.IsChecked = true;
         ShowMinimapCheck.IsChecked = true;
+        UseCompoundEngineCheck.IsChecked = false;
     }
 
     private void OnRemoveStereotypeRule(object? sender, RoutedEventArgs e)
