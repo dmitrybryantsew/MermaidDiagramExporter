@@ -168,4 +168,95 @@ public class MermaidGraphExporterTests
         Assert.Contains("classDiagram", mmd);
         Assert.Contains("direction LR", mmd);
     }
+
+    [Fact]
+    public void BuildDiagram_TitleWithColon_DoesNotBreakYamlFrontmatter()
+    {
+        // Regression: Mermaid's frontmatter uses YAML syntax. A title like
+        // "Focused: Foo (depth 1)" gets parsed as a YAML mapping key, causing
+        // "bad indentation of a mapping entry" errors. The exporter must
+        // sanitize colons out of the title.
+        var graph = new TypeGraph(
+            title: "Focused: CharacterStatsViewModel (depth 1)",
+            nodes: new[]
+            {
+                new TypeNodeData
+                {
+                    Id = "T_Test",
+                    DisplayName = "Test",
+                    Namespace = "MyApp",
+                    Kind = TypeNodeKind.Class,
+                    Members = Array.Empty<TypeMemberData>()
+                }
+            },
+            edges: Array.Empty<TypeEdgeData>(),
+            groups: new[]
+            {
+                new TypeGroupData
+                {
+                    Id = "Namespace:MyApp",
+                    Label = "MyApp",
+                    Kind = TypeGroupKind.Namespace,
+                    NodeIds = new[] { "T_Test" }
+                }
+            },
+            metadata: new TypeGraphMetadata
+            {
+                GeneratedAtUtc = DateTime.UtcNow,
+                SourceKind = GraphSourceKind.Folder,
+                Options = new GraphBuildOptions(),
+                SourceDescription = "test"
+            });
+
+        var mmd = MermaidGraphExporter.BuildDiagram(graph);
+
+        // The title line in the frontmatter must not contain raw colons
+        // (which would break YAML parsing). After sanitization it should
+        // contain " - " instead.
+        Assert.Contains("title: Focused - CharacterStatsViewModel", mmd);
+        // The raw colon-in-title pattern must not appear in the title line
+        Assert.DoesNotContain("title: Focused: CharacterStatsViewModel", mmd);
+    }
+
+    [Fact]
+    public void BuildDiagram_EmptyTitle_UsesFallback()
+    {
+        // An empty title should fall back to a safe default rather than
+        // producing an empty `title:` line.
+        var graph = new TypeGraph(
+            title: "",
+            nodes: new[]
+            {
+                new TypeNodeData
+                {
+                    Id = "T_Test",
+                    DisplayName = "Test",
+                    Namespace = "MyApp",
+                    Kind = TypeNodeKind.Class,
+                    Members = Array.Empty<TypeMemberData>()
+                }
+            },
+            edges: Array.Empty<TypeEdgeData>(),
+            groups: new[]
+            {
+                new TypeGroupData
+                {
+                    Id = "Namespace:MyApp",
+                    Label = "MyApp",
+                    Kind = TypeGroupKind.Namespace,
+                    NodeIds = new[] { "T_Test" }
+                }
+            },
+            metadata: new TypeGraphMetadata
+            {
+                GeneratedAtUtc = DateTime.UtcNow,
+                SourceKind = GraphSourceKind.Folder,
+                Options = new GraphBuildOptions(),
+                SourceDescription = "test"
+            });
+
+        var mmd = MermaidGraphExporter.BuildDiagram(graph);
+
+        Assert.Contains("title: Diagram", mmd);
+    }
 }

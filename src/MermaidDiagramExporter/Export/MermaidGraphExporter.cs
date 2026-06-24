@@ -18,8 +18,15 @@ public static class MermaidGraphExporter
             ValidateInputs = true
         };
 
+        // Mermaid frontmatter uses YAML syntax — colons in the title break parsing
+        // (e.g. "Focused: Foo (depth 1)" is parsed as a mapping key). Strip colons
+        // from the title to keep the frontmatter valid.
+        string safeTitle = string.IsNullOrEmpty(graph.Title)
+            ? "Diagram"
+            : graph.Title.Replace(":", " -");
+
         var builder = MermaidApi.ClassDiagram(
-            title: graph.Title,
+            title: safeTitle,
             direction: ClassDiagramDirection.LeftToRight,
             options: options);
 
