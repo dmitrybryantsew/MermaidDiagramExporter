@@ -13,6 +13,7 @@ using MermaidDiagramExporter.Core;
 using MermaidDiagramExporter.Extraction;
 using MermaidDiagramExporter.Export;
 using MermaidDiagramExporter.Focus;
+using MermaidDiagramExporter.Gui.Design;
 using MermaidDiagramExporter.Gui.Layout;
 using MermaidDiagramExporter.Gui.Search;
 using MermaidDiagramExporter.Gui.Settings;
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
     private readonly FocusedGraphNavigationController _focusNavigationController = new();
     private readonly GraphSeedSelectionState _seedSelectionState = new();
     private readonly SettingsService _settingsService;
+    private readonly DesignModeController _designModeController = new();
     private readonly TypeGraphCacheService _cacheService;
     private readonly SourceBundleService _bundleService;
     private readonly SymbolSearchEngine _searchEngine = new();
@@ -65,7 +67,44 @@ public partial class MainWindow : Window
         SymbolSearchPanel.FocusOnResultsRequested += OnFocusSearchResults;
         SymbolSearchPanel.SearchCleared += OnSearchCleared;
         MinimapView.ViewportJumpRequested += OnMinimapViewportJump;
+
+        // Initialize mode toggle UI (default is Analyze Mode)
+        UpdateModeUi();
         MatrixView.CellClicked += OnMatrixCellClicked;
+    }
+
+    // --- Mode toggle (M0 scaffold) ---
+
+    private void OnAnalyzeModeClick(object? sender, RoutedEventArgs e)
+    {
+        _designModeController.EnterAnalyzeMode();
+        UpdateModeUi();
+    }
+
+    private void OnDesignModeClick(object? sender, RoutedEventArgs e)
+    {
+        _designModeController.EnterDesignMode();
+        UpdateModeUi();
+    }
+
+    /// <summary>
+    /// Shows/hides the Analyze and Design Mode panels based on the current mode,
+    /// and updates the toggle button backgrounds to indicate which is active.
+    /// Called on startup (default Analyze) and after every mode switch.
+    /// </summary>
+    private void UpdateModeUi()
+    {
+        bool isDesign = _designModeController.CurrentMode == AppMode.Design;
+        AnalyzeModePanel.IsVisible = !isDesign;
+        DesignModePanel.IsVisible = isDesign;
+
+        // Highlight the active mode toggle button
+        AnalyzeModeButton.Background = isDesign
+            ? Avalonia.Media.Brush.Parse("#3A4250")
+            : Avalonia.Media.Brush.Parse("#4CAF50");
+        DesignModeButton.Background = isDesign
+            ? Avalonia.Media.Brush.Parse("#4CAF50")
+            : Avalonia.Media.Brush.Parse("#3A4250");
     }
 
     private async void OnBrowse(object? sender, RoutedEventArgs e)
