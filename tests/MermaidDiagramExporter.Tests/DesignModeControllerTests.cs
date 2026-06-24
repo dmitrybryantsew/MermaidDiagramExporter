@@ -45,7 +45,7 @@ public class DesignModeControllerTests
     public void EnterDesignMode_StoresStartingFrom()
     {
         var controller = new DesignModeController();
-        var startingFrom = new object(); // M1 will use a real DesignGraph here
+        var startingFrom = new DesignGraph();
         controller.EnterDesignMode(startingFrom);
         Assert.Same(startingFrom, controller.CurrentDesign);
     }
@@ -57,7 +57,7 @@ public class DesignModeControllerTests
         // (it doesn't clear it). This allows the user to return without
         // losing work.
         var controller = new DesignModeController();
-        var firstDesign = new object();
+        var firstDesign = new DesignGraph();
         controller.EnterDesignMode(firstDesign);
         controller.EnterAnalyzeMode();
         controller.EnterDesignMode(); // no startingFrom

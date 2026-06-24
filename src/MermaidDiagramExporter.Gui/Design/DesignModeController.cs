@@ -42,17 +42,18 @@ public sealed class DesignModeController
     }
 
     /// <summary>
-    /// Placeholder for the DesignGraph that will be added in M1. Always null
-    /// in M0 — Design Mode shows a "Coming soon" placeholder.
+    /// The current design graph. Null when in Analyze Mode or when Design Mode
+    /// has just been entered without a startingFrom argument. M1: this is now
+    /// a real <see cref="DesignGraph"/> (M0 used <c>object?</c> as a placeholder).
     /// </summary>
-    public object? CurrentDesign { get; private set; }
+    public DesignGraph? CurrentDesign { get; private set; }
 
     /// <summary>
     /// Switches to Design Mode. Uses <paramref name="startingFrom"/> as the
     /// current design if non-null; otherwise keeps the previous design (so
     /// the user can toggle away and back without losing work).
     /// </summary>
-    public void EnterDesignMode(object? startingFrom = null)
+    public void EnterDesignMode(DesignGraph? startingFrom = null)
     {
         if (startingFrom != null)
             CurrentDesign = startingFrom;
