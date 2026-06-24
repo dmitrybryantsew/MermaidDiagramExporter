@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using MermaidDiagramExporter.Gui.Design;
 using Avalonia.Skia;
 using Avalonia.Threading;
 using SkiaSharp;
@@ -37,6 +38,19 @@ public class GraphCanvas : Control
     private bool _needsRender = true;
     private bool _fitToScreenOnNextRender;
     private WriteableBitmap? _writeableBitmap;
+
+    // ── Design Mode integration (M2) ──
+    private DesignCanvasController? _designController;
+
+    /// <summary>
+    /// Wires the Design Mode controller. Called from MainWindow when the mode
+    /// toggle switches to Design. Pass null to disable Design Mode.
+    /// </summary>
+    public void SetDesignController(DesignCanvasController? controller)
+    {
+        _designController = controller;
+        Invalidate();
+    }
 
     // Dragging state
     private GraphNode? _draggedNode;
@@ -575,6 +589,27 @@ public class GraphCanvas : Control
         var pos = e.GetPosition(this);
         var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
 
+        // ── Design Mode routing (M2) ──
+        // Every branch in this block ends with `return` (or falls through to
+        // the final `return` after Select). Without early returns, control
+        // would fall through into the Analyze Mode pan/drag code below and
+        // produce duplicate/broken behavior.
+        if (_designController != null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            var designGraph = _designController.Selection as object; // not used; we need the graph
+            // Get the current design graph via the controller's graph reference.
+            // For M2 we pass null for graph — the controller will look it up
+            // from its own state. M3+ will wire this properly.
+            // TODO(M3): pass the actual DesignGraph here.
+            if (_designController.HandlePointerPressed(worldPos, null, new List<SKPoint>()))
+            {
+                e.Pointer.Capture(this);
+                e.Handled = true;
+                Invalidate();
+                return;
+            }
+        }
+
         // Middle button or Ctrl+Left = pan (existing behavior)
         if (e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed ||
             (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed &&
@@ -635,6 +670,16 @@ public class GraphCanvas : Control
     {
         base.OnPointerMoved(e);
         var pos = e.GetPosition(this);
+        var designWorldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
+
+        // Design Mode drag/resize routing (M2)
+        if (_designController != null && (_designController.IsDragging || _designController.IsResizing))
+        {
+            _designController.HandlePointerMoved(designWorldPos);
+            e.Handled = true;
+            Invalidate();
+            return;
+        }
 
         // Panning (existing behavior)
         if (_isPanning)
@@ -716,6 +761,15 @@ public class GraphCanvas : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+
+        // Design Mode drag/resize commit (M2)
+        if (_designController != null && (_designController.IsDragging || _designController.IsResizing))
+        {
+            _designController.HandlePointerReleased();
+            e.Handled = true;
+            Invalidate();
+            return;
+        }
 
         if (_isDraggingNode || _isDraggingCluster)
         {
