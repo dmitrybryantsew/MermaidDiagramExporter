@@ -13,61 +13,61 @@
         <!-- Folder picker -->
         <StackPanel Grid.Row="0" Margin="8">
           <TextBlock Text="Source Folder" FontWeight="Bold" Margin="0,0,0,4"/>
-          <TextBox x:Name="FolderTextBox" PlaceholderText="Select folder..." IsReadOnly="True" Margin="0,0,0,4"/>
+          <TextBox x:Name="FolderTextBox" PlaceholderText="Select folder..." IsReadOnly="True" Margin="0,0,0,4" Foreground="White"/>
           <Grid ColumnDefinitions="*,*">
-            <Button Grid.Column="0" Content="Browse..." Click="OnBrowse" Margin="0,0,2,0"/>
+            <Button Grid.Column="0" Content="Browse..." Click="OnBrowse" Margin="0,0,2,0" Foreground="White"/>
             <Button Grid.Column="1" Content="Scan" Click="OnScan" Margin="2,0,0,0" Background="#4CAF50" Foreground="White"/>
           </Grid>
         </StackPanel>
 
         <!-- Navigation buttons -->
-        <StackPanel Grid.Row="1" Margin="8,0,8,4" Orientation="Horizontal" Spacing="4">
-          <Button x:Name="BackButton" Content="← Back" Click="OnBack" IsEnabled="False" MinWidth="70"/>
-          <Button x:Name="ForwardButton" Content="Forward →" Click="OnForward" IsEnabled="False" MinWidth="70"/>
-          <Button x:Name="ResetButton" Content="Reset" Click="OnReset" IsEnabled="False" MinWidth="50"/>
-          <Button x:Name="SettingsButton" Content="Settings" Click="OnOpenSettings" MinWidth="60"/>
-          <Button x:Name="ResetLayoutButton" Content="Reset Layout" Click="OnResetLayout" MinWidth="80"/>
-          <Button x:Name="MatrixButton" Content="Matrix" Click="OnToggleMatrix" MinWidth="60"/>
-        </StackPanel>
+        <WrapPanel Grid.Row="1" Margin="8,0,8,4" Orientation="Horizontal" ItemWidth="NaN">
+          <Button x:Name="BackButton" Content="← Back" Click="OnBack" IsEnabled="False" MinWidth="70" Foreground="White" Margin="0,0,4,4"/>
+          <Button x:Name="ForwardButton" Content="Forward →" Click="OnForward" IsEnabled="False" MinWidth="70" Foreground="White" Margin="0,0,4,4"/>
+          <Button x:Name="ResetButton" Content="Reset" Click="OnReset" IsEnabled="False" MinWidth="50" Foreground="White" Margin="0,0,4,4"/>
+          <Button x:Name="SettingsButton" Content="Settings" Click="OnOpenSettings" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+          <Button x:Name="ResetLayoutButton" Content="Reset Layout" Click="OnResetLayout" MinWidth="80" Foreground="White" Margin="0,0,4,4"/>
+          <Button x:Name="MatrixButton" Content="Matrix" Click="OnToggleMatrix" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+        </WrapPanel>
 
         <!-- Focus controls -->
         <StackPanel Grid.Row="2" Margin="8,0,8,4">
           <TextBlock Text="Focus Depth" FontWeight="Bold" Margin="0,0,0,4"/>
-          <StackPanel Orientation="Horizontal" Spacing="4">
-            <Button Content="D1" Click="OnFocusD1" MinWidth="50"/>
-            <Button Content="D2" Click="OnFocusD2" MinWidth="50"/>
-            <Button Content="D3" Click="OnFocusD3" MinWidth="50"/>
-          </StackPanel>
+          <WrapPanel Orientation="Horizontal">
+            <Button Content="D1" Click="OnFocusD1" MinWidth="50" Foreground="White" Margin="0,0,4,4"/>
+            <Button Content="D2" Click="OnFocusD2" MinWidth="50" Foreground="White" Margin="0,0,4,4"/>
+            <Button Content="D3" Click="OnFocusD3" MinWidth="50" Foreground="White" Margin="0,0,4,4"/>
+          </WrapPanel>
           <TextBlock Text="Traversal" FontWeight="Bold" Margin="0,6,0,4"/>
-          <ComboBox x:Name="TraversalComboBox" MinWidth="200" SelectionChanged="OnTraversalChanged">
+          <ComboBox x:Name="TraversalComboBox" MinWidth="200" SelectionChanged="OnTraversalChanged" Foreground="White">
             <ComboBoxItem Content="Undirected" IsSelected="True"/>
             <ComboBoxItem Content="Outgoing"/>
             <ComboBoxItem Content="Incoming"/>
             <ComboBoxItem Content="All Visible"/>
           </ComboBox>
           <TextBlock Text="Seeds" FontWeight="Bold" Margin="0,6,0,4"/>
-          <StackPanel Orientation="Horizontal" Spacing="4">
-            <Button Content="Add Seed" Click="OnAddSeed" MinWidth="70"/>
-            <Button Content="Remove Seed" Click="OnRemoveSeed" MinWidth="80"/>
-            <Button Content="Clear" Click="OnClearSeeds" MinWidth="50"/>
-          </StackPanel>
+          <WrapPanel Orientation="Horizontal">
+            <Button Content="Add Seed" Click="OnAddSeed" MinWidth="70" Foreground="White" Margin="0,0,4,4"/>
+            <Button Content="Remove Seed" Click="OnRemoveSeed" MinWidth="80" Foreground="White" Margin="0,0,4,4"/>
+            <Button Content="Clear" Click="OnClearSeeds" MinWidth="50" Foreground="White" Margin="0,0,4,4"/>
+          </WrapPanel>
           <Button Content="Focus Current Selection" Click="OnFocusCurrent" Margin="0,4,0,0" Background="#2196F3" Foreground="White"/>
         </StackPanel>
 
         <!-- Edge filters -->
         <StackPanel Grid.Row="3" Margin="8,0,8,4">
           <TextBlock Text="Edge Filters" FontWeight="Bold" Margin="0,0,0,4"/>
-          <StackPanel Orientation="Horizontal" Spacing="12">
-            <CheckBox x:Name="ShowInheritanceCheck" Content="Inheritance" IsChecked="True" Click="OnEdgeFilterChanged"/>
-            <CheckBox x:Name="ShowImplementsCheck" Content="Implements" IsChecked="True" Click="OnEdgeFilterChanged"/>
-            <CheckBox x:Name="ShowAssociationsCheck" Content="Associations" IsChecked="True" Click="OnEdgeFilterChanged"/>
-          </StackPanel>
+          <WrapPanel Orientation="Horizontal">
+            <CheckBox x:Name="ShowInheritanceCheck" Content="Inheritance" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0" Foreground="White"/>
+            <CheckBox x:Name="ShowImplementsCheck" Content="Implements" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0" Foreground="White"/>
+            <CheckBox x:Name="ShowAssociationsCheck" Content="Associations" IsChecked="True" Click="OnEdgeFilterChanged" Foreground="White"/>
+          </WrapPanel>
         </StackPanel>
 
         <!-- Search -->
         <StackPanel Grid.Row="4" Margin="8,0,8,4">
           <TextBlock Text="Search" FontWeight="Bold" Margin="0,0,0,4"/>
-          <TextBox x:Name="SearchTextBox" PlaceholderText="Type to highlight..." TextChanged="OnSearchTextChanged"/>
+          <TextBox x:Name="SearchTextBox" PlaceholderText="Type to highlight..." TextChanged="OnSearchTextChanged" Foreground="White"/>
         </StackPanel>
 
         <!-- Semantic Search Panel -->
@@ -110,17 +110,17 @@
                                   IsVisible="False"/>
       <!-- Zoom controls overlay -->
       <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Spacing="4">
-        <Button Content="Fit" Click="OnFit" MinWidth="40"/>
-        <Button Content="+" Click="OnZoomIn" MinWidth="40"/>
-        <Button Content="−" Click="OnZoomOut" MinWidth="40"/>
+        <Button Content="Fit" Click="OnFit" MinWidth="40" Background="#3A4250" Foreground="White"/>
+        <Button Content="+" Click="OnZoomIn" MinWidth="40" Background="#3A4250" Foreground="White"/>
+        <Button Content="−" Click="OnZoomOut" MinWidth="40" Background="#3A4250" Foreground="White"/>
       </StackPanel>
       <!-- Export buttons overlay (bottom-left, to avoid overlapping the minimap at bottom-right) -->
       <StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8" Spacing="4" ZIndex="10">
-        <Button Content="Save PNG" Click="OnSavePng" MinWidth="90"/>
-        <Button Content="Save .mmd" Click="OnSaveMmd" MinWidth="90"/>
-        <Button Content="Save .md" Click="OnSaveMd" MinWidth="90"/>
-        <Button Content="Copy Mermaid" Click="OnCopyMermaid" MinWidth="90"/>
-        <Button Content="Open Live Editor" Click="OnOpenLiveEditor" MinWidth="90"/>
+        <Button Content="Save PNG" Click="OnSavePng" MinWidth="90" Background="#3A4250" Foreground="White"/>
+        <Button Content="Save .mmd" Click="OnSaveMmd" MinWidth="90" Background="#3A4250" Foreground="White"/>
+        <Button Content="Save .md" Click="OnSaveMd" MinWidth="90" Background="#3A4250" Foreground="White"/>
+        <Button Content="Copy Mermaid" Click="OnCopyMermaid" MinWidth="90" Background="#3A4250" Foreground="White"/>
+        <Button Content="Open Live Editor" Click="OnOpenLiveEditor" MinWidth="90" Background="#3A4250" Foreground="White"/>
       </StackPanel>
     </Grid>
 
