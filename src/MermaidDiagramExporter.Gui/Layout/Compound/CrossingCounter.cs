@@ -7,7 +7,7 @@ namespace MermaidDiagramExporter.Gui.Layout.Compound;
 /// Brute-force crossing counter for testing purposes (O(E²) — fine for small fixtures).
 /// Per docs/09 §1.3 validation checklist.
 /// </summary>
-internal static class CrossingCounter
+public static class CrossingCounter
 {
     /// <summary>
     /// Counts the total number of edge crossings in the final per-layer orders.

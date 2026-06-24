@@ -11,15 +11,24 @@ public static class OrderAssignment
 {
     public static void Run(CompoundGraph compound, LayoutOptions options)
     {
-        var layers = compound.Nodes
-            .GroupBy(n => n.Rank)
-            .OrderBy(g => g.Key)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
+        var layers = BuildLayers(compound);
         AssignInitialOrder(layers, compound);
         RunOrderingSweeps(layers, compound, options);
         ApplyBorderFixup(layers);
         WriteBackOrderInRank(layers);
+    }
+
+    /// <summary>
+    /// Builds the per-rank layer dictionary from the compound graph. Exposed
+    /// publicly so tests can assert precise order-index contiguity invariants
+    /// (docs/09 §1.3) without re-implementing the grouping logic.
+    /// </summary>
+    public static Dictionary<int, List<CompoundNode>> BuildLayers(CompoundGraph compound)
+    {
+        return compound.Nodes
+            .GroupBy(n => n.Rank)
+            .OrderBy(g => g.Key)
+            .ToDictionary(g => g.Key, g => g.ToList());
     }
 
     /// <summary>

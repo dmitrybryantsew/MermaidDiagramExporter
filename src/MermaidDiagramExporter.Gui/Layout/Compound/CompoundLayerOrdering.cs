@@ -32,9 +32,6 @@ internal static class CompoundLayerOrdering
         // Flatten back
         var sorted = Flatten(rootGroup);
 
-        // Apply border fixup: move border nodes to ends of their cluster's block
-        ApplyBorderFixup(sorted, compound);
-
         // Write back
         layer.Clear();
         layer.AddRange(sorted);
@@ -176,15 +173,6 @@ internal static class CompoundLayerOrdering
             if (key is Group childGroup)
                 SortGroupRecursive(childGroup, adjacentPosition, adjacency);
         }
-
-        // Apply border fixup per child group (border nodes go to ends)
-        foreach (var (_, _, _) in sortableItems)
-        {
-            foreach (var (_, childGroup) in group.ChildGroups)
-            {
-                ApplyBorderFixupToGroup(childGroup);
-            }
-        }
     }
 
     private static List<CompoundNode> CollectAllNodes(Group group)
@@ -238,51 +226,5 @@ internal static class CompoundLayerOrdering
         result.AddRange(group.DirectMembers);
         foreach (var (_, child) in group.ChildGroups)
             FlattenInOrder(child, result);
-    }
-
-    private static void ApplyBorderFixup(List<CompoundNode> sorted, CompoundGraph compound)
-    {
-        // For each cluster, find its contiguous block and move border nodes to ends
-        var clusterPositions = new Dictionary<string, List<int>>();
-        for (int i = 0; i < sorted.Count; i++)
-        {
-            var node = sorted[i];
-            if (node.OwningClusterId == null) continue;
-            if (node.Kind == CompoundNodeKind.ClusterBorderTop || node.Kind == CompoundNodeKind.ClusterBorderBottom)
-                continue;
-            if (!clusterPositions.TryGetValue(node.OwningClusterId, out var list))
-                clusterPositions[node.OwningClusterId] = list = new List<int>();
-            list.Add(i);
-        }
-
-        foreach (var (clusterId, positions) in clusterPositions)
-        {
-            if (positions.Count == 0) continue;
-            int minIdx = positions.Min();
-            int maxIdx = positions.Max();
-
-            // Find border nodes for this cluster in this layer
-            var topBorder = sorted.FirstOrDefault(n =>
-                n.Kind == CompoundNodeKind.ClusterBorderTop && n.OwningClusterId == clusterId);
-            var bottomBorder = sorted.FirstOrDefault(n =>
-                n.Kind == CompoundNodeKind.ClusterBorderBottom && n.OwningClusterId == clusterId);
-
-            // Place top border at minIdx, bottom border at maxIdx (if they exist)
-            // For simplicity in this first version, just verify they exist and don't reorder
-            // (a full implementation would move them; this is a safe starting point)
-            if (topBorder != null && sorted.IndexOf(topBorder) > minIdx)
-            {
-                // Border is not at the start — should be moved, but for first version skip
-            }
-            if (bottomBorder != null && sorted.IndexOf(bottomBorder) < maxIdx)
-            {
-                // Border is not at the end — should be moved, but for first version skip
-            }
-        }
-    }
-
-    private static void ApplyBorderFixupToGroup(Group group)
-    {
-        // Placeholder for per-group border fixup — handled at the layer level
     }
 }
