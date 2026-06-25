@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     private readonly DesignModeController _designModeController = new();
     private readonly DesignCanvasController _designCanvasController;
     private DesignGraph? _designGraph;
+    private string? _designFilePath;
     private readonly TypeGraphCacheService _cacheService;
     private readonly SourceBundleService _bundleService;
     private readonly SymbolSearchEngine _searchEngine = new();
@@ -130,6 +131,212 @@ public partial class MainWindow : Window
     private void OnDesignGraphMutated(object? sender, EventArgs e)
     {
         RenderDesignModeGraph();
+    }
+
+    // ── Design Mode toolbar handlers (W2) ──
+
+    /// <summary>
+    /// Creates a fresh empty design, replacing the current one (no confirmation
+    /// in W2 — could be added later).
+    /// </summary>
+    private void OnDesignNew(object? sender, RoutedEventArgs e)
+    {
+        var fresh = new DesignGraph { Title = "Untitled Design" };
+        _designModeController.EnterDesignMode(fresh);
+        _designGraph = _designModeController.CurrentDesign;
+        RenderDesignModeGraph();
+        StatsText.Text = "New design created";
+    }
+
+    /// <summary>
+    /// Opens a .dgraph.json file via file picker.
+    /// </summary>
+    private async void OnDesignOpen(object? sender, RoutedEventArgs e)
+    {
+        var topLevel = GetTopLevel(this);
+        if (topLevel == null) return;
+
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Open Design",
+            AllowMultiple = false,
+            FileTypeFilter = new[] { new FilePickerFileType("Design Graph") { Patterns = new[] { "*.dgraph.json" } } }
+        });
+
+        if (files.Count == 0) return;
+        var path = files[0].Path.LocalPath;
+        var loaded = DesignSerialization.Load(path);
+        _designModeController.EnterDesignMode(loaded);
+        _designGraph = _designModeController.CurrentDesign;
+        RenderDesignModeGraph();
+        StatsText.Text = $"Opened: {Path.GetFileName(path)}";
+    }
+
+    /// <summary>
+    /// Saves to the current file path. If no path is set, falls back to Save As.
+    /// </summary>
+    private async void OnDesignSave(object? sender, RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        var path = _designFilePath;
+        if (string.IsNullOrEmpty(path))
+        {
+            await SaveDesignAsAsync();
+            return;
+        }
+        DesignSerialization.Save(_designGraph, path);
+        StatsText.Text = $"Saved: {Path.GetFileName(path)}";
+    }
+
+    /// <summary>
+    /// Saves to a new file via file picker.
+    /// </summary>
+    private async void OnDesignSaveAs(object? sender, RoutedEventArgs e)
+    {
+        await SaveDesignAsAsync();
+    }
+
+    private async System.Threading.Tasks.Task SaveDesignAsAsync()
+    {
+        if (_designGraph == null) return;
+        var topLevel = GetTopLevel(this);
+        if (topLevel == null) return;
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save Design As",
+            DefaultExtension = ".dgraph.json",
+            FileTypeChoices = new[] { new FilePickerFileType("Design Graph") { Patterns = new[] { "*.dgraph.json" } } }
+        });
+
+        if (file == null) return;
+        var path = file.Path.LocalPath;
+        DesignSerialization.Save(_designGraph, path);
+        _designFilePath = path;
+        StatsText.Text = $"Saved: {Path.GetFileName(path)}";
+    }
+
+    /// <summary>
+    /// Undoes the last mutation in Design Mode.
+    /// </summary>
+    private void OnDesignUndo(object? sender, RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        if (_designCanvasController.Undo(_designGraph))
+            StatsText.Text = "Undone";
+        else
+            StatsText.Text = "Nothing to undo";
+    }
+
+    /// <summary>
+    /// Redoes the most recently undone mutation.
+    /// </summary>
+    private void OnDesignRedo(object? sender, RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        if (_designCanvasController.Redo(_designGraph))
+            StatsText.Text = "Redone";
+        else
+            StatsText.Text = "Nothing to redo";
+    }
+
+    /// <summary>
+    /// Adds a new class at the center of the canvas.
+    /// </summary>
+    private void OnDesignAddClass(object? sender, RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        // Center of canvas (approximate — canvas is ~800x600 by default)
+        var centerX = 400f;
+        var centerY = 300f;
+        _designGraph.Classes.Add(new DesignClass
+        {
+            Name = "NewClass",
+            X = centerX - 100f,
+            Y = centerY - 30f,
+            Width = 200f,
+            Height = 60f
+        });
+        _designCanvasController.UndoManager.Clear();
+        RenderDesignModeGraph();
+        StatsText.Text = "Class added at canvas center";
+    }
+
+    /// <summary>
+    /// Placeholder: edge creation happens via drag-from-port on the canvas.
+    /// This button just shows a hint.
+    /// </summary>
+    private void OnDesignAddEdge(object? sender, RoutedEventArgs e)
+    {
+        StatsText.Text = "Drag from a class's edge port to another to create an edge";
+    }
+
+    /// <summary>
+    /// Exports the design to a .mmd file.
+    /// </summary>
+    private async void OnDesignExportMermaid(object? sender, RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        var topLevel = GetTopLevel(this);
+        if (topLevel == null) return;
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export Mermaid",
+            DefaultExtension = ".mmd",
+            FileTypeChoices = new[] { new FilePickerFileType("Mermaid") { Patterns = new[] { "*.mmd" } } }
+        });
+
+        if (file == null) return;
+        var path = file.Path.LocalPath;
+        var mermaid = DesignExporter.ToMermaid(_designGraph);
+        await System.IO.File.WriteAllTextAsync(path, mermaid);
+        StatsText.Text = $"Exported: {Path.GetFileName(path)}";
+    }
+
+    /// <summary>
+    /// Exports the design to a .cs stub file.
+    /// </summary>
+    private async void OnDesignExportCSharp(object? sender, RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        var topLevel = GetTopLevel(this);
+        if (topLevel == null) return;
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export C# Stub",
+            DefaultExtension = ".cs",
+            FileTypeChoices = new[] { new FilePickerFileType("C# Source") { Patterns = new[] { "*.cs" } } }
+        });
+
+        if (file == null) return;
+        var path = file.Path.LocalPath;
+        var stub = DesignExporter.ToCSharpStub(_designGraph);
+        await System.IO.File.WriteAllTextAsync(path, stub);
+        StatsText.Text = $"Exported: {Path.GetFileName(path)}";
+    }
+
+    /// <summary>
+    /// Exports the design to a .dgraph.json file.
+    /// </summary>
+    private async void OnDesignExportJson(object? sender, RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        var topLevel = GetTopLevel(this);
+        if (topLevel == null) return;
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export JSON",
+            DefaultExtension = ".dgraph.json",
+            FileTypeChoices = new[] { new FilePickerFileType("Design Graph") { Patterns = new[] { "*.dgraph.json" } } }
+        });
+
+        if (file == null) return;
+        var path = file.Path.LocalPath;
+        DesignSerialization.Save(_designGraph, path);
+        StatsText.Text = $"Exported: {Path.GetFileName(path)}";
     }
 
     /// <summary>

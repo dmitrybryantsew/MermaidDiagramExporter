@@ -100,17 +100,57 @@
           <TextBlock x:Name="StatsText" Text="" Margin="8" Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
         </StackPanel>
 
-        <!-- Design Mode controls (M0 placeholder) -->
+        <!-- Design Mode controls (W2) -->
         <StackPanel Grid.Row="2" x:Name="DesignModePanel" IsVisible="False">
+          <!-- File operations -->
           <StackPanel Margin="8">
-            <TextBlock Text="Design Mode" FontWeight="Bold" Foreground="#FFA040" Margin="0,0,0,4"/>
-            <TextBlock Text="Coming soon" FontSize="11" Opacity="0.6" TextWrapping="Wrap"/>
-            <TextBlock Text="(M1: data model + JSON save/load)" FontSize="11" Opacity="0.6" TextWrapping="Wrap"/>
-            <TextBlock Text="(M2: add/move/delete classes)" FontSize="11" Opacity="0.6" TextWrapping="Wrap"/>
-            <TextBlock Text="(M3: member editing)" FontSize="11" Opacity="0.6" TextWrapping="Wrap"/>
-            <TextBlock Text="(M4: edge creation)" FontSize="11" Opacity="0.6" TextWrapping="Wrap"/>
-            <TextBlock Text="(M5: export to Mermaid/JSON/C#)" FontSize="11" Opacity="0.6" TextWrapping="Wrap"/>
-            <TextBlock Text="(M6: undo/redo + polish)" FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,8"/>
+            <TextBlock Text="File" FontWeight="Bold" Margin="0,0,0,4"/>
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="New" Click="OnDesignNew" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="Open..." Click="OnDesignOpen" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="Save" Click="OnDesignSave" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="Save As..." Click="OnDesignSaveAs" MinWidth="80" Foreground="White" Margin="0,0,4,4"/>
+            </WrapPanel>
+          </StackPanel>
+
+          <!-- Editing tools -->
+          <StackPanel Margin="8">
+            <TextBlock Text="Edit" FontWeight="Bold" Margin="0,0,0,4"/>
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Undo" Click="OnDesignUndo" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="Redo" Click="OnDesignRedo" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+            </WrapPanel>
+          </StackPanel>
+
+          <!-- Add tools -->
+          <StackPanel Margin="8">
+            <TextBlock Text="Add" FontWeight="Bold" Margin="0,0,0,4"/>
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Class" Click="OnDesignAddClass" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="Edge" Click="OnDesignAddEdge" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+            </WrapPanel>
+            <TextBlock Text="Tip: drag from a class's edge port to another to create an edge" FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+          </StackPanel>
+
+          <!-- Export -->
+          <StackPanel Margin="8">
+            <TextBlock Text="Export" FontWeight="Bold" Margin="0,0,0,4"/>
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Mermaid" Click="OnDesignExportMermaid" MinWidth="70" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="C# Stub" Click="OnDesignExportCSharp" MinWidth="70" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="JSON" Click="OnDesignExportJson" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+            </WrapPanel>
+          </StackPanel>
+
+          <!-- Help -->
+          <StackPanel Margin="8">
+            <TextBlock Text="Tips" FontWeight="Bold" Margin="0,0,0,4"/>
+            <TextBlock Text="• Click empty canvas to add a class" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+            <TextBlock Text="• Drag class header to move" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+            <TextBlock Text="• Drag corner to resize" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+            <TextBlock Text="• Double-click class name to rename" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+            <TextBlock Text="• Delete key removes selection" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+            <TextBlock Text="• Escape cancels edge creation" FontSize="11" Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
           </StackPanel>
         </StackPanel>
       </Grid>
