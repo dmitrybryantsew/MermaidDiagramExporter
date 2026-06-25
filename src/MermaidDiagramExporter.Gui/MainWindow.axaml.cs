@@ -33,6 +33,10 @@ public partial class MainWindow : Window
     private readonly DesignCanvasController _designCanvasController;
     private DesignGraph? _designGraph;
     private string? _designFilePath;
+    private bool _designIsDirty;
+    private DateTime _lastAutoSaveUtc = DateTime.MinValue;
+    private const int AutoSaveIntervalSeconds = 30;
+    private readonly DesignRecentFiles _recentDesignFiles = new();
     private readonly TypeGraphCacheService _cacheService;
     private readonly SourceBundleService _bundleService;
     private readonly SymbolSearchEngine _searchEngine = new();
@@ -130,7 +134,32 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnDesignGraphMutated(object? sender, EventArgs e)
     {
+        _designIsDirty = true;
         RenderDesignModeGraph();
+        TryAutoSave();
+    }
+
+    /// <summary>
+    /// Auto-saves to a temp file every <see cref="AutoSaveIntervalSeconds"/>
+    /// seconds if the design is dirty. Per docs/design/07 W6.
+    /// </summary>
+    private void TryAutoSave()
+    {
+        if (!_designIsDirty || _designGraph == null) return;
+        if ((DateTime.UtcNow - _lastAutoSaveUtc).TotalSeconds < AutoSaveIntervalSeconds) return;
+
+        try
+        {
+            var tempDir = Path.Combine(Path.GetTempPath(), ".mermaid-diagram-exporter");
+            Directory.CreateDirectory(tempDir);
+            var autosavePath = Path.Combine(tempDir, $"autosave-{_designGraph.Title.GetHashCode():X}.dgraph.json");
+            DesignSerialization.Save(_designGraph, autosavePath);
+            _lastAutoSaveUtc = DateTime.UtcNow;
+        }
+        catch
+        {
+            // Auto-save failures are silent — user can still save manually
+        }
     }
 
     // ── Design Mode toolbar handlers (W2) ──
@@ -168,6 +197,9 @@ public partial class MainWindow : Window
         var loaded = DesignSerialization.Load(path);
         _designModeController.EnterDesignMode(loaded);
         _designGraph = _designModeController.CurrentDesign;
+        _designFilePath = path;
+        _designIsDirty = false;
+        _recentDesignFiles.Add(path);
         RenderDesignModeGraph();
         StatsText.Text = $"Opened: {Path.GetFileName(path)}";
     }
@@ -185,6 +217,7 @@ public partial class MainWindow : Window
             return;
         }
         DesignSerialization.Save(_designGraph, path);
+        _designIsDirty = false;
         StatsText.Text = $"Saved: {Path.GetFileName(path)}";
     }
 
@@ -213,6 +246,8 @@ public partial class MainWindow : Window
         var path = file.Path.LocalPath;
         DesignSerialization.Save(_designGraph, path);
         _designFilePath = path;
+        _designIsDirty = false;
+        _recentDesignFiles.Add(path);
         StatsText.Text = $"Saved: {Path.GetFileName(path)}";
     }
 
