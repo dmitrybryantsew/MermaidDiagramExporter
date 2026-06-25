@@ -425,7 +425,34 @@ public partial class MainWindow : Window
         }
 
         if (menu.Items.Count > 0)
-            menu.ShowAt(this);
+        {
+            // Use a Popup with PlacementMode.Pointer so the menu anchors to the
+            // cursor, not to the MainWindow. Per docs/design/09 BUG-3.
+            var popup = new Avalonia.Controls.Primitives.Popup
+            {
+                Placement = Avalonia.Controls.PlacementMode.Pointer,
+                Child = BuildMenuContentPanel(menu),
+                HorizontalOffset = 0,
+                VerticalOffset = 0
+            };
+            popup.IsOpen = true;
+        }
+    }
+
+    /// <summary>
+    /// Wraps a MenuFlyout's items in a StackPanel so they can be hosted
+    /// inside a Popup. MenuFlyout itself requires a control anchor and
+    /// doesn't support pointer-anchored placement.
+    /// </summary>
+    private static Avalonia.Controls.Panel BuildMenuContentPanel(Avalonia.Controls.MenuFlyout menu)
+    {
+        var panel = new Avalonia.Controls.StackPanel { Background = Avalonia.Media.Brush.Parse("#2A2E34") };
+        foreach (var item in menu.Items)
+        {
+            if (item is Avalonia.Controls.MenuItem mi)
+                panel.Children.Add(mi);
+        }
+        return panel;
     }
 
     /// <summary>

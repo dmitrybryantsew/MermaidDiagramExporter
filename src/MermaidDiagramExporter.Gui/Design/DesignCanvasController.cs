@@ -90,7 +90,7 @@ public sealed class DesignCanvasController
     /// describing what was hit (class, member, edge, or empty canvas). Used
     /// by the context menu handler to decide which actions to show.
     /// </summary>
-    public DesignContextTarget HitTestForContextMenu(SKPoint worldPos, DesignGraph graph)
+    public DesignContextTarget HitTestForContextMenu(SKPoint worldPos, SKPoint screenPos, DesignGraph graph)
     {
         var hit = DesignHitTestService.HitTest(worldPos, BuildRectangles(graph));
 
@@ -99,6 +99,7 @@ public sealed class DesignCanvasController
             return new DesignContextTarget(
                 DesignContextTargetKind.Class,
                 worldPos,
+                screenPos,
                 ClassId: hit.Rectangle.ClassId);
         }
 
@@ -107,13 +108,14 @@ public sealed class DesignCanvasController
             return new DesignContextTarget(
                 DesignContextTargetKind.Member,
                 worldPos,
+                screenPos,
                 ClassId: hit.Rectangle.ClassId,
                 MemberIndex: hit.MemberIndex);
         }
 
         // Edges aren't hit-tested yet (would need edge hit-testing service).
         // For now, treat anything else as empty canvas.
-        return new DesignContextTarget(DesignContextTargetKind.EmptyCanvas, worldPos);
+        return new DesignContextTarget(DesignContextTargetKind.EmptyCanvas, worldPos, screenPos);
     }
 
     /// <summary>
@@ -600,6 +602,7 @@ public enum DesignContextTargetKind
 public sealed record DesignContextTarget(
     DesignContextTargetKind Kind,
     SKPoint WorldPosition,
+    SKPoint ScreenPosition,
     string? ClassId = null,
     int? MemberIndex = null,
     string? EdgeId = null);

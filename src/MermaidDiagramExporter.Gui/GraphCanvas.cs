@@ -637,7 +637,7 @@ public class GraphCanvas : Control
             {
                 var rcPos = e.GetPosition(this);
                 var rcWorldPos = ScreenToWorld((float)rcPos.X, (float)rcPos.Y);
-                var target = _designController.HitTestForContextMenu(rcWorldPos, _designGraph);
+                var target = _designController.HitTestForContextMenu(rcWorldPos, new SKPoint((float)rcPos.X, (float)rcPos.Y), _designGraph);
                 DesignContextMenuRequested?.Invoke(target);
                 e.Handled = true;
                 return;
