@@ -79,6 +79,7 @@ public partial class MainWindow : Window
         // Wire Design Mode controller to canvas (W1)
         GraphCanvasView.SetDesignController(_designCanvasController);
         _designCanvasController.GraphMutated += OnDesignGraphMutated;
+        GraphCanvasView.DesignClassDoubleClicked += OnDesignClassDoubleClicked;
 
         // Initialize mode toggle UI (default is Analyze Mode)
         UpdateModeUi();
@@ -137,6 +138,93 @@ public partial class MainWindow : Window
         _designIsDirty = true;
         RenderDesignModeGraph();
         TryAutoSave();
+    }
+
+    /// <summary>
+    /// Shows the inline edit TextBox overlay positioned over a class header
+    /// when the user double-clicks it. Per docs/design/04 — the one real
+    /// Avalonia Control in Design Mode.
+    /// </summary>
+    private void OnDesignClassDoubleClicked(string classId)
+    {
+        if (_designGraph == null) return;
+        var cls = _designGraph.Classes.FirstOrDefault(c => c.Id == classId);
+        if (cls == null) return;
+
+        // Position the TextBox over the class header (world coords → screen coords)
+        // The canvas pan/zoom transforms are applied via the existing screen-to-world
+        // math in reverse. We need to read the current pan/zoom from the canvas.
+        // For simplicity, use a fixed offset from canvas top-left + class position.
+        var (panX, panY, zoom) = GraphCanvasView.GetViewportTransform();
+        var screenX = cls.X * zoom + panX;
+        var screenY = cls.Y * zoom + panY;
+
+        InlineEditTextBox.Text = cls.Name;
+        InlineEditTextBox.Width = Math.Max(120, cls.Width * zoom);
+        Canvas.SetLeft(InlineEditTextBox, screenX);
+        Canvas.SetTop(InlineEditTextBox, screenY);
+        InlineEditTextBox.IsVisible = true;
+        InlineEditTextBox.Tag = classId; // remember which class we're editing
+
+        // Focus and select all text
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            InlineEditTextBox.Focus();
+            InlineEditTextBox.SelectAll();
+        }, Avalonia.Threading.DispatcherPriority.Input);
+
+        // Wire up commit handlers (one-shot — detach after commit)
+        InlineEditTextBox.KeyDown -= OnInlineEditKeyDown;
+        InlineEditTextBox.LostFocus -= OnInlineEditLostFocus;
+        InlineEditTextBox.KeyDown += OnInlineEditKeyDown;
+        InlineEditTextBox.LostFocus += OnInlineEditLostFocus;
+    }
+
+    private void OnInlineEditKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
+    {
+        if (e.Key == Avalonia.Input.Key.Enter)
+        {
+            CommitInlineEdit();
+            e.Handled = true;
+        }
+        else if (e.Key == Avalonia.Input.Key.Escape)
+        {
+            CancelInlineEdit();
+            e.Handled = true;
+        }
+    }
+
+    private void OnInlineEditLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        CommitInlineEdit();
+    }
+
+    private void CommitInlineEdit()
+    {
+        if (_designGraph == null || !InlineEditTextBox.IsVisible) return;
+        var classId = InlineEditTextBox.Tag as string;
+        if (classId == null) return;
+
+        var newName = InlineEditTextBox.Text?.Trim();
+        if (!string.IsNullOrEmpty(newName))
+        {
+            var cls = _designGraph.Classes.FirstOrDefault(c => c.Id == classId);
+            if (cls != null && cls.Name != newName)
+            {
+                var cmd = new DesignCommands.RenameClass(classId, cls.Name, newName);
+                _designCanvasController.UndoManager.Execute(cmd, _designGraph);
+                _designCanvasController.ExecuteCommand(new DesignCommands.RenameClass(classId, cls.Name, newName), _designGraph);
+                RenderDesignModeGraph();
+            }
+        }
+        InlineEditTextBox.IsVisible = false;
+        InlineEditTextBox.Tag = null;
+    }
+
+    private void CancelInlineEdit()
+    {
+        InlineEditTextBox.IsVisible = false;
+        InlineEditTextBox.Tag = null;
     }
 
     /// <summary>

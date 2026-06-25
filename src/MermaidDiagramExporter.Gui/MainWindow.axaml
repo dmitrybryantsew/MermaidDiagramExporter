@@ -162,6 +162,14 @@
     <!-- Graph canvas -->
     <Grid Grid.Column="2">
       <local:GraphCanvas x:Name="GraphCanvasView" MinWidth="100" MinHeight="100"/>
+      <!-- Inline edit TextBox overlay (Design Mode only, positioned on top of canvas) -->
+      <TextBox x:Name="InlineEditTextBox"
+               IsVisible="False"
+               Background="#2A2E34" Foreground="White"
+               BorderBrush="#FFA040" BorderThickness="2"
+               Padding="4,2"
+               MinWidth="120"
+               FontSize="13"/>
       <!-- Minimap overlay -->
       <local:MinimapControl x:Name="MinimapView"
                             HorizontalAlignment="Right"

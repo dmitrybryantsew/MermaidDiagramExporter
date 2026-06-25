@@ -215,6 +215,13 @@ public class GraphCanvas : Control
     /// </summary>
     public event Action? ManualLayoutChanged;
 
+    /// <summary>
+    /// Raised when a class header is double-clicked in Design Mode. The
+    /// subscriber (MainWindow) handles inline editing by showing a TextBox
+    /// overlay. Per docs/design/04 — the one real Avalonia Control in Design Mode.
+    /// </summary>
+    public event Action<string>? DesignClassDoubleClicked;
+
     public GraphCanvas()
     {
         ClipToBounds = true;
@@ -401,6 +408,14 @@ public class GraphCanvas : Control
     {
         Invalidate();
     }
+
+    /// <summary>
+    /// Returns the current viewport transform (panX, panY, zoom) so external
+    /// code can convert world coordinates to screen coordinates. Used by the
+    /// inline edit TextBox overlay to position itself over a class header.
+    /// </summary>
+    public (float PanX, float PanY, float Zoom) GetViewportTransform()
+        => (_panX, _panY, _zoom);
 
     private void NotifyViewportChanged()
     {
@@ -677,6 +692,33 @@ public class GraphCanvas : Control
             _lastMouseY = (float)pos.Y;
             Cursor = new Cursor(StandardCursorType.SizeAll);
             e.Pointer.Capture(this);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Handles double-click in Design Mode — fires the DesignClassDoubleClicked
+    /// event when the user double-clicks on a class header. Per docs/design/04
+    /// inline editing flow.
+    /// </summary>
+    protected override void OnDoubleTapped(TappedEventArgs e)
+    {
+        base.OnDoubleTapped(e);
+
+        // Only handle in Design Mode
+        if (_designController == null) return;
+
+        var pos = e.GetPosition(this);
+        var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
+
+        // Hit-test to find which class was double-clicked
+        if (_designGraph == null) return;
+        var rectangles = _designController.BuildRectangles(_designGraph);
+        var hit = DesignHitTestService.HitTest(worldPos, rectangles);
+
+        if (hit.Kind == ClassRectangleHitTest.Header && hit.Rectangle != null)
+        {
+            DesignClassDoubleClicked?.Invoke(hit.Rectangle.ClassId);
             e.Handled = true;
         }
     }
