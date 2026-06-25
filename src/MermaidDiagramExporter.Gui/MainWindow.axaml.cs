@@ -410,15 +410,20 @@ public partial class MainWindow : Window
                 var addItem = new Avalonia.Controls.MenuItem { Header = "Add Class Here" };
                 addItem.Click += (_, _) =>
                 {
-                    _designGraph.Classes.Add(new DesignClass
+                    // Route through ExecuteCommand so undo + auto-save-dirty work.
+                    // Per docs/design/09 BUG-2.
+                    if (_designGraph == null) return;
+                    var newClass = new DesignClass
                     {
                         Name = "NewClass",
                         X = target.WorldPosition.X - 100f,
                         Y = target.WorldPosition.Y - 30f,
                         Width = 200f,
                         Height = 60f
-                    });
-                    RenderDesignModeGraph();
+                    };
+                    var cmd = new DesignCommands.AddClass(newClass);
+                    _designCanvasController.ExecuteCommand(cmd, _designGraph);
+                    // ExecuteCommand fires GraphMutated → OnDesignGraphMutated → dirty flag + auto-save
                 };
                 menu.Items.Add(addItem);
                 break;
