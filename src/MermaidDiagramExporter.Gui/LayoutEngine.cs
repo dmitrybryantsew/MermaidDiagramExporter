@@ -34,6 +34,22 @@ public class LayoutEngine
         {
             result = ManualLayoutApplier.ApplyOverrides(result, ManualOverrides, options);
         }
+
+        return ConvertToGraphNodes(graph, result);
+    }
+
+    /// <summary>
+    /// Converts a pre-built <see cref="LayoutResult"/> (with positions
+    /// already determined by the caller) into renderable GraphNodes/GraphEdges.
+    /// Used by Design Mode where positions are authoritative on
+    /// <see cref="MermaidDiagramExporter.Gui.Design.DesignClass"/> and must
+    /// NOT be recomputed by the layout algorithm. Per docs/design/09 BUG-1.
+    /// </summary>
+    public (List<GraphNode> nodes, List<GraphEdge> edges) LayoutFromLayoutResult(Core.TypeGraph graph, LayoutResult result)
+        => ConvertToGraphNodes(graph, result);
+
+    private (List<GraphNode> nodes, List<GraphEdge> edges) ConvertToGraphNodes(Core.TypeGraph graph, LayoutResult result)
+    {
         var nodeMap = new Dictionary<string, GraphNode>();
 
         foreach (var nd in graph.Nodes)

@@ -125,10 +125,95 @@ public partial class MainWindow : Window
 
         var typeGraph = DesignExporter.ToTypeGraph(_designGraph);
         GraphCanvasView.SetDesignGraph(_designGraph);
-        var (nodes, edges) = _layoutEngine.Layout(typeGraph);
+
+        // Build LayoutResult directly from DesignClass positions — do NOT run
+        // the layout algorithm, which would override DesignClass.X/Y. Per
+        // docs/design/05 (position authority), docs/design/08 D6, and
+        // docs/design/09 BUG-1.
+        var layoutResult = BuildLayoutResultFromDesignGraph(_designGraph);
+        var (nodes, edges) = _layoutEngine.LayoutFromLayoutResult(typeGraph, layoutResult);
+
         GraphCanvasView.SetGraph(nodes, edges);
         MinimapView.SetGraph(nodes, edges);
         StatsText.Text = $"Design: {_designGraph.Classes.Count} classes, {_designGraph.Edges.Count} edges";
+    }
+
+    /// <summary>
+    /// Builds a <see cref="MermaidDiagramExporter.Gui.Layout.LayoutResult"/>
+    /// directly from <see cref="DesignClass.X/Y/Width/Height"/>. Used in
+    /// Design Mode where manual positions are authoritative. Per
+    /// docs/design/09 BUG-1.
+    /// </summary>
+    private static MermaidDiagramExporter.Gui.Layout.LayoutResult BuildLayoutResultFromDesignGraph(DesignGraph graph)
+    {
+        var nodeBounds = new Dictionary<string, MermaidDiagramExporter.Gui.Layout.Rect>();
+        var clusterBounds = new Dictionary<string, MermaidDiagramExporter.Gui.Layout.Rect>();
+        var nodeClusterIds = new Dictionary<string, string>();
+        var clusterVisuals = new Dictionary<string, MermaidDiagramExporter.Gui.Layout.LayoutClusterVisual>();
+
+        // Place each class at its authoritative position
+        foreach (var cls in graph.Classes)
+        {
+            nodeBounds[cls.Id] = new MermaidDiagramExporter.Gui.Layout.Rect(cls.X, cls.Y, cls.Width, cls.Height);
+
+            // Map to namespace cluster if present
+            var ns = cls.Namespace ?? "";
+            if (!string.IsNullOrEmpty(ns))
+            {
+                var clusterId = $"Namespace:{ns}";
+                nodeClusterIds[cls.Id] = clusterId;
+            }
+        }
+
+        // Compute cluster bounds as the union of member class bounds
+        var byNamespace = graph.Classes
+            .Where(c => !string.IsNullOrEmpty(c.Namespace ?? ""))
+            .GroupBy(c => c.Namespace!);
+        foreach (var nsGroup in byNamespace)
+        {
+            var clusterId = $"Namespace:{nsGroup.Key}";
+            float minX = float.MaxValue, minY = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue;
+            foreach (var cls in nsGroup)
+            {
+                if (cls.X < minX) minX = cls.X;
+                if (cls.Y < minY) minY = cls.Y;
+                if (cls.X + cls.Width > maxX) maxX = cls.X + cls.Width;
+                if (cls.Y + cls.Height > maxY) maxY = cls.Y + cls.Height;
+            }
+            // Pad the cluster bounds so the cluster visually contains its members
+            const float padding = 20f;
+            clusterBounds[clusterId] = new MermaidDiagramExporter.Gui.Layout.Rect(
+                minX - padding, minY - padding,
+                (maxX - minX) + padding * 2f, (maxY - minY) + padding * 2f);
+            clusterVisuals[clusterId] = new MermaidDiagramExporter.Gui.Layout.LayoutClusterVisual
+            {
+                Label = nsGroup.Key
+            };
+        }
+
+        // Compute content size as the bounding box of all classes
+        float contentMinX = float.MaxValue, contentMinY = float.MaxValue;
+        float contentMaxX = float.MinValue, contentMaxY = float.MinValue;
+        foreach (var cls in graph.Classes)
+        {
+            if (cls.X < contentMinX) contentMinX = cls.X;
+            if (cls.Y < contentMinY) contentMinY = cls.Y;
+            if (cls.X + cls.Width > contentMaxX) contentMaxX = cls.X + cls.Width;
+            if (cls.Y + cls.Height > contentMaxY) contentMaxY = cls.Y + cls.Height;
+        }
+        var contentSize = new MermaidDiagramExporter.Gui.Layout.Vector2(
+            contentMaxX - contentMinX + 100f, contentMaxY - contentMinY + 100f);
+
+        return new MermaidDiagramExporter.Gui.Layout.LayoutResult
+        {
+            NodeBounds = nodeBounds,
+            ClusterBounds = clusterBounds,
+            NodeClusterIds = nodeClusterIds,
+            ClusterVisuals = clusterVisuals,
+            EdgePaths = Array.Empty<MermaidDiagramExporter.Gui.Layout.LayoutEdgePath>(),
+            ContentSize = contentSize
+        };
     }
 
     /// <summary>
