@@ -194,6 +194,151 @@ public sealed class DesignCanvasController
         return true;
     }
 
+    // ── Member operations (M3) ──
+
+    /// <summary>
+    /// Adds a new member to the currently selected class. The new member is
+    /// added at the end of the member list and is immediately selected for
+    /// inline editing.
+    /// </summary>
+    public DesignMember? AddMemberToSelectedClass(DesignGraph graph, MemberKind kind)
+    {
+        if (_selectedClassIds.Count != 1) return null;
+        var cls = graph.Classes.FirstOrDefault(c => c.Id == _selectedClassIds.First());
+        if (cls == null) return null;
+
+        var member = new DesignMember
+        {
+            Kind = kind,
+            Name = kind switch
+            {
+                MemberKind.Field => "NewField",
+                MemberKind.Property => "NewProperty",
+                MemberKind.Method => "NewMethod",
+                MemberKind.Constructor => cls.Name,
+                MemberKind.Event => "NewEvent",
+                _ => "NewMember"
+            },
+            TypeName = kind switch
+            {
+                MemberKind.Field => "object",
+                MemberKind.Property => "object",
+                MemberKind.Method => "void",
+                MemberKind.Constructor => "",
+                MemberKind.Event => "EventHandler",
+                _ => "object"
+            },
+            Visibility = Visibility.Public
+        };
+
+        // Constructors get a void return type and no type
+        if (kind == MemberKind.Constructor)
+            member.TypeName = "";
+
+        cls.Members.Add(member);
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return member;
+    }
+
+    /// <summary>
+    /// Removes a member from a class by index.
+    /// </summary>
+    public bool RemoveMember(DesignGraph graph, string classId, int memberIndex)
+    {
+        var cls = graph.Classes.FirstOrDefault(c => c.Id == classId);
+        if (cls == null) return false;
+        if (memberIndex < 0 || memberIndex >= cls.Members.Count) return false;
+
+        cls.Members.RemoveAt(memberIndex);
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Renames a member.
+    /// </summary>
+    public bool RenameMember(DesignGraph graph, string classId, int memberIndex, string newName)
+    {
+        var cls = graph.Classes.FirstOrDefault(c => c.Id == classId);
+        if (cls == null) return false;
+        if (memberIndex < 0 || memberIndex >= cls.Members.Count) return false;
+        if (string.IsNullOrWhiteSpace(newName)) return false;
+
+        cls.Members[memberIndex].Name = newName;
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Changes a member's type.
+    /// </summary>
+    public bool ChangeMemberType(DesignGraph graph, string classId, int memberIndex, string newType)
+    {
+        var cls = graph.Classes.FirstOrDefault(c => c.Id == classId);
+        if (cls == null) return false;
+        if (memberIndex < 0 || memberIndex >= cls.Members.Count) return false;
+        if (string.IsNullOrWhiteSpace(newType)) return false;
+
+        cls.Members[memberIndex].TypeName = newType;
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Cycles a member's visibility: Public → Private → Protected → Internal → Public.
+    /// </summary>
+    public bool CycleMemberVisibility(DesignGraph graph, string classId, int memberIndex)
+    {
+        var cls = graph.Classes.FirstOrDefault(c => c.Id == classId);
+        if (cls == null) return false;
+        if (memberIndex < 0 || memberIndex >= cls.Members.Count) return false;
+
+        var member = cls.Members[memberIndex];
+        member.Visibility = member.Visibility switch
+        {
+            Visibility.Public => Visibility.Private,
+            Visibility.Private => Visibility.Protected,
+            Visibility.Protected => Visibility.Internal,
+            Visibility.Internal => Visibility.Public,
+            _ => Visibility.Public
+        };
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Moves a member up or down within its class. Returns true if the move succeeded.
+    /// </summary>
+    public bool MoveMember(DesignGraph graph, string classId, int memberIndex, int delta)
+    {
+        var cls = graph.Classes.FirstOrDefault(c => c.Id == classId);
+        if (cls == null) return false;
+        if (memberIndex < 0 || memberIndex >= cls.Members.Count) return false;
+
+        int newIndex = memberIndex + delta;
+        if (newIndex < 0 || newIndex >= cls.Members.Count) return false;
+
+        var member = cls.Members[memberIndex];
+        cls.Members.RemoveAt(memberIndex);
+        cls.Members.Insert(newIndex, member);
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Renames a class.
+    /// </summary>
+    public bool RenameClass(DesignGraph graph, string classId, string newName)
+    {
+        var cls = graph.Classes.FirstOrDefault(c => c.Id == classId);
+        if (cls == null) return false;
+        if (string.IsNullOrWhiteSpace(newName)) return false;
+
+        cls.Name = newName;
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
     private void StartDrag(ClassRectangle rect, SKPoint worldPos)
     {
         _draggingRectangle = rect;
