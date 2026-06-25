@@ -37,7 +37,9 @@ public partial class MainWindow : Window
     private bool _designIsDirty;
     private DateTime _lastAutoSaveUtc = DateTime.MinValue;
     private const int AutoSaveIntervalSeconds = 30;
+    private DesignInspectorViewModel? _inspectorVm;
     private readonly DesignRecentFiles _recentDesignFiles = new();
+
     private readonly TypeGraphCacheService _cacheService;
     private readonly SourceBundleService _bundleService;
     private readonly SymbolSearchEngine _searchEngine = new();
@@ -82,6 +84,9 @@ public partial class MainWindow : Window
         _designCanvasController.GraphMutated += OnDesignGraphMutated;
         GraphCanvasView.DesignClassDoubleClicked += OnDesignClassDoubleClicked;
         GraphCanvasView.DesignContextMenuRequested += OnDesignContextMenuRequested;
+
+        // Inspector panel wiring (docs/design/10 GAP-1)
+        _designCanvasController.SelectionChanged += OnDesignSelectionChanged;
 
         // Initialize mode toggle UI (default is Analyze Mode)
         UpdateModeUi();
@@ -1091,12 +1096,8 @@ public partial class MainWindow : Window
     {
         SelectedNodeText.Text = $"{node.Namespace}.{node.DisplayName}\nKind: {node.Kind}\nFile: {Path.GetFileName(node.AssetPath)}";
 
-        InspectorNodeText.Text =
-            $"Name: {node.DisplayName}\n" +
-            $"Namespace: {node.Namespace}\n" +
-            $"Kind: {node.Kind}\n" +
-            $"File: {Path.GetFileName(node.AssetPath)}\n" +
-            (node.Stereotypes.Count > 0 ? $"Stereotypes: {string.Join(", ", node.Stereotypes)}\n" : "");
+        // InspectorNodeText was removed when the inspector was redesigned for Design Mode.
+        // The Analyze Mode inspector just shows the summary above.
 
         var memberItems = node.Members
             .Select(m => $"{m.Visibility} {m.Kind} {m.TypeName} {m.Name}{(m.Kind == TypeMemberKind.Method ? "()" : "")}")
@@ -1435,5 +1436,179 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+    }
+
+    // ── Inspector panel (docs/design/10) ──
+
+    /// <summary>
+    /// Rebuilds the inspector view model whenever the Design Mode selection
+    /// changes. Switches between the four states (Nothing/SingleClass/
+    /// MultiSelect) and populates the fields/lists.
+    /// </summary>
+    private void OnDesignSelectionChanged(object? sender, DesignSelection selection)
+    {
+        if (_designGraph == null) return;
+
+        // (Re)create the view model so it picks up the current state
+        _inspectorVm = new DesignInspectorViewModel(_designCanvasController, _designGraph);
+
+        // Switch the visible state
+        InspectorNothingState.IsVisible = selection.SelectedClassIds.Count == 0;
+        InspectorSingleClassState.IsVisible = selection.SelectedClassIds.Count == 1;
+        InspectorMultiSelectState.IsVisible = selection.SelectedClassIds.Count > 1;
+
+        if (selection.SelectedClassIds.Count == 0)
+        {
+            // Nothing state — show summary
+            InspectorClassCountText.Text = $"Classes: {_designGraph.Classes.Count}";
+            InspectorEdgeCountText.Text = $"Edges: {_designGraph.Edges.Count}";
+            if (_inspectorVm.UnnamedCount > 0)
+            {
+                InspectorUnnamedText.Text = $"⚠ {_inspectorVm.UnnamedCount} unnamed class(es)";
+                InspectorUnnamedText.IsVisible = true;
+            }
+            else
+            {
+                InspectorUnnamedText.IsVisible = false;
+            }
+        }
+        else if (selection.SelectedClassIds.Count == 1)
+        {
+            // Single class state — populate fields
+            var cls = _inspectorVm.SelectedClass;
+            if (cls != null)
+            {
+                InspectorClassNameLabel.Text = cls.Name;
+                InspectorNameBox.Text = cls.Name;
+                InspectorNamespaceBox.Text = cls.Namespace ?? "";
+                InspectorKindCombo.SelectedIndex = (int)cls.Kind;
+
+                // Wire commit handlers (one-shot — detach first to avoid duplicate handlers)
+                InspectorNameBox.LostFocus -= OnInspectorNameLostFocus;
+                InspectorNamespaceBox.LostFocus -= OnInspectorNamespaceLostFocus;
+                InspectorKindCombo.SelectionChanged -= OnInspectorKindChanged;
+                InspectorNameBox.LostFocus += OnInspectorNameLostFocus;
+                InspectorNamespaceBox.LostFocus += OnInspectorNamespaceLostFocus;
+                InspectorKindCombo.SelectionChanged += OnInspectorKindChanged;
+            }
+
+            // Populate member list — use a wrapper that exposes DisplayText
+            InspectorMembersList.ItemsSource = _inspectorVm.SelectedClass?.Members
+                .Select((m, i) => new MemberRow(FormatMember(m), i))
+                .ToList();
+
+            // Populate relations lists
+            InspectorOutgoingList.ItemsSource = _inspectorVm.OutgoingEdges
+                .Select(e => new EdgeRow(e.Id, e.Kind.ToString(),
+                    $"{_inspectorVm.GetOtherClassName(e)}  ({e.Kind})"))
+                .ToList();
+            InspectorIncomingList.ItemsSource = _inspectorVm.IncomingEdges
+                .Select(e => new EdgeRow(e.Id, e.Kind.ToString(),
+                    $"{_inspectorVm.GetOtherClassName(e)}  ({e.Kind})"))
+                .ToList();
+        }
+        else
+        {
+            // Multi-select state
+            InspectorMultiSelectCountText.Text = $"{selection.SelectedClassIds.Count} classes selected";
+            InspectorMultiSelectList.ItemsSource = _inspectorVm.SelectedClasses;
+        }
+    }
+
+    /// <summary>Formats a member for display in the inspector list.</summary>
+    private static string FormatMember(DesignMember m)
+    {
+        string vis = m.Visibility switch
+        {
+            Visibility.Public => "+",
+            Visibility.Private => "-",
+            Visibility.Protected => "#",
+            Visibility.Internal => "~",
+            _ => "+"
+        };
+        string typeStr = string.IsNullOrEmpty(m.TypeName) ? "" : $" : {m.TypeName}";
+        return $"{vis} {m.Name}{typeStr}";
+    }
+
+    /// <summary>Inspector name field — commits via RenameClass command (undoable).</summary>
+    private void OnInspectorNameLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null || _inspectorVm?.SelectedClass == null) return;
+        var newName = InspectorNameBox.Text?.Trim() ?? "";
+        if (string.IsNullOrEmpty(newName) || newName == _inspectorVm.SelectedClass.Name) return;
+        var cmd = new DesignCommands.RenameClass(
+            _inspectorVm.SelectedClass.Id,
+            _inspectorVm.SelectedClass.Name,
+            newName);
+        _designCanvasController.ExecuteCommand(cmd, _designGraph);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Inspector kind dropdown — commits via ChangeClassKind command (undoable).</summary>
+    private void OnInspectorKindChanged(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
+    {
+        if (_designGraph == null || _inspectorVm?.SelectedClass == null) return;
+        var newKind = (ClassKind)InspectorKindCombo.SelectedIndex;
+        if (newKind == _inspectorVm.SelectedClass.Kind) return;
+        _designCanvasController.ChangeClassKind(_designGraph, _inspectorVm.SelectedClass.Id, newKind);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Inspector namespace field — commits via ChangeNamespace command (undoable).</summary>
+    private void OnInspectorNamespaceLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null || _inspectorVm?.SelectedClass == null) return;
+        var newNamespace = InspectorNamespaceBox.Text ?? "";
+        if (newNamespace == (_inspectorVm.SelectedClass.Namespace ?? "")) return;
+        _designCanvasController.ChangeNamespace(_designGraph, _inspectorVm.SelectedClass.Id, newNamespace);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Inspector member delete button.</summary>
+    private void OnInspectorDeleteMember(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null || _inspectorVm?.SelectedClass == null) return;
+        if (sender is not Avalonia.Controls.Button btn) return;
+        if (btn.Tag is not MemberRow row) return;
+        _designCanvasController.RemoveMember(_designGraph, _inspectorVm.SelectedClass.Id, row.Index);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Inspector edge kind dropdown — commits via ChangeEdgeType command (undoable).</summary>
+    private void OnInspectorEdgeKindChanged(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
+    {
+        if (_designGraph == null || _inspectorVm?.SelectedClass == null) return;
+        if (sender is not Avalonia.Controls.ComboBox combo) return;
+        EdgeRow? edgeRow = combo.Tag as EdgeRow ?? combo.DataContext as EdgeRow;
+        if (edgeRow == null) return;
+        if (!Enum.TryParse<EdgeKind>(edgeRow.Kind, out var oldKind)) return;
+        if (!Enum.TryParse<EdgeKind>(combo.SelectedValue?.ToString() ?? "", out var newKind)) return;
+        if (oldKind == newKind) return;
+        _designCanvasController.ChangeEdgeType(_designGraph, edgeRow.Id, newKind);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Inspector "→" button — jumps to the class on the other end of the edge.</summary>
+    private void OnInspectorJumpToClass(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null || _inspectorVm?.SelectedClass == null) return;
+        if (sender is not Avalonia.Controls.Button btn) return;
+        var edgeRow = (btn.Tag as EdgeRow) ?? (btn.DataContext as EdgeRow);
+        if (edgeRow == null) return;
+        // Find the edge, get the other class ID
+        var edge = _designGraph.Edges.FirstOrDefault(e => e.Id == edgeRow.Id);
+        if (edge == null) return;
+        var otherId = edge.FromClassId == _inspectorVm.SelectedClass.Id
+            ? edge.ToClassId : edge.FromClassId;
+        _designCanvasController.SelectById(otherId);
+    }
+
+    /// <summary>Multi-select delete all button.</summary>
+    private void OnInspectorMultiDelete(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null || _inspectorVm == null) return;
+        foreach (var cls in _inspectorVm.SelectedClasses.ToList())
+            _designCanvasController.HandleDeleteKey(_designGraph);
+        RenderDesignModeGraph();
     }
 }

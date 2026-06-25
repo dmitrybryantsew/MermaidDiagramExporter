@@ -3,6 +3,8 @@
         xmlns:local="clr-namespace:MermaidDiagramExporter.Gui"
         xmlns:search="clr-namespace:MermaidDiagramExporter.Gui.Search"
         xmlns:matrix="clr-namespace:MermaidDiagramExporter.Gui.Matrix"
+        xmlns:design="clr-namespace:MermaidDiagramExporter.Gui.Design"
+        xmlns:core="clr-namespace:MermaidDiagramExporter.Core"
         x:Class="MermaidDiagramExporter.Gui.MainWindow"
         Title="Mermaid Diagram Exporter" Width="1400" Height="900"
         WindowState="Maximized">
@@ -200,52 +202,121 @@
     <!-- Right Splitter -->
     <GridSplitter Grid.Column="3" Background="#D0D0D0" Width="1"/>
 
-    <!-- Inspector Panel -->
+    <!-- Inspector Panel (Design Mode — selection-driven per docs/design/10) -->
     <ScrollViewer Grid.Column="4" Background="#F5F5F5">
-      <Grid RowDefinitions="Auto,Auto,Auto,Auto">
-        <TextBlock Grid.Row="0" Text="Inspector" FontWeight="Bold" Margin="8,8,8,4"/>
-        <Grid Grid.Row="1" Margin="4" RowDefinitions="Auto,*">
-          <TextBlock Grid.Row="0" Text="Node Details" FontWeight="SemiBold" Margin="0,0,0,2"/>
-          <ScrollViewer Grid.Row="1">
-            <StackPanel Margin="4">
-              <TextBlock x:Name="InspectorNodeText" Text="" TextWrapping="Wrap"/>
-            </StackPanel>
-          </ScrollViewer>
-        </Grid>
-        <Grid Grid.Row="2" Margin="4" RowDefinitions="Auto,*" MinHeight="100">
-          <TextBlock Grid.Row="0" Text="Members" FontWeight="SemiBold" Margin="4,0,4,2"/>
-          <ScrollViewer Grid.Row="1">
-            <ItemsControl x:Name="InspectorMembersList">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                  <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="4,1" FontFamily="Consolas,monospace" FontSize="11"/>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
-        </Grid>
-        <Grid Grid.Row="3" Margin="4" RowDefinitions="Auto,*,Auto,*" MinHeight="200">
-          <TextBlock Grid.Row="0" Text="Outgoing Relations" FontWeight="SemiBold" Margin="4,0,4,2"/>
-          <ScrollViewer Grid.Row="1">
-            <ItemsControl x:Name="InspectorOutgoingList">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                  <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="4,1" FontFamily="Consolas,monospace" FontSize="11"/>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
-          <TextBlock Grid.Row="2" Text="Incoming Relations" FontWeight="SemiBold" Margin="4,0,4,2"/>
-          <ScrollViewer Grid.Row="3">
-            <ItemsControl x:Name="InspectorIncomingList">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                  <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="4,1" FontFamily="Consolas,monospace" FontSize="11"/>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
-        </Grid>
+      <Grid x:Name="InspectorPanel" RowDefinitions="Auto">
+
+        <!-- State: Nothing selected — show summary + unnamed classes warning -->
+        <StackPanel x:Name="InspectorNothingState" IsVisible="False" Margin="8">
+          <TextBlock Text="Inspector" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+          <TextBlock Text="Design Summary" FontWeight="SemiBold" Margin="0,0,0,4"/>
+          <TextBlock x:Name="InspectorClassCountText" Text="" Margin="0,2"/>
+          <TextBlock x:Name="InspectorEdgeCountText" Text="" Margin="0,2"/>
+          <TextBlock x:Name="InspectorUnnamedText" Text="" Margin="0,8" Foreground="#CC6600"
+                     IsVisible="False"/>
+          <TextBlock Text="Click a class to edit its properties" Opacity="0.6" Margin="0,16,0,0"
+                     TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- State: Single class selected — show properties + members + relations -->
+        <StackPanel x:Name="InspectorSingleClassState" IsVisible="False" Margin="8">
+          <TextBlock Text="Class:" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+          <TextBlock x:Name="InspectorClassNameLabel" Text="" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+          <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="80"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition/><RowDefinition/><RowDefinition/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" VerticalAlignment="Center"/>
+            <TextBox  Grid.Row="0" Grid.Column="1" x:Name="InspectorNameBox"/>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Kind" VerticalAlignment="Center"/>
+            <ComboBox  Grid.Row="1" Grid.Column="1" x:Name="InspectorKindCombo">
+              <ComboBoxItem Content="Class"/>
+              <ComboBoxItem Content="Interface"/>
+              <ComboBoxItem Content="Enum"/>
+              <ComboBoxItem Content="Struct"/>
+              <ComboBoxItem Content="Static Class"/>
+              <ComboBoxItem Content="Abstract Class"/>
+            </ComboBox>
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Namespace" VerticalAlignment="Center"/>
+            <TextBox  Grid.Row="2" Grid.Column="1" x:Name="InspectorNamespaceBox"/>
+          </Grid>
+
+          <!-- Members -->
+          <TextBlock Text="Members" FontWeight="SemiBold" Margin="0,8,0,4"/>
+          <ItemsControl x:Name="InspectorMembersList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="design:MemberRow">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,1">
+                  <TextBlock Grid.Column="0" Text="{Binding DisplayText}" FontSize="11"
+                             FontFamily="Consolas,monospace" TextWrapping="Wrap"/>
+                  <Button Grid.Column="1" Content="×" MinWidth="24" Padding="4,0"
+                          Tag="{Binding}" Click="OnInspectorDeleteMember"/>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <!-- Outgoing relations -->
+          <TextBlock Text="Outgoing" FontWeight="SemiBold" Margin="0,8,0,4"/>
+          <ItemsControl x:Name="InspectorOutgoingList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="design:EdgeRow">
+                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+                  <TextBlock Grid.Column="0" Text="{Binding DisplayText}" FontSize="11"/>
+                  <ComboBox Grid.Column="1" SelectedValue="{Binding Kind, Mode=TwoWay}"
+                            SelectionChanged="OnInspectorEdgeKindChanged" MinWidth="100">
+                    <ComboBoxItem Content="Association"/>
+                    <ComboBoxItem Content="Inheritance"/>
+                    <ComboBoxItem Content="Implements"/>
+                  </ComboBox>
+                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24"/>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <!-- Incoming relations -->
+          <TextBlock Text="Incoming" FontWeight="SemiBold" Margin="0,8,0,4"/>
+          <ItemsControl x:Name="InspectorIncomingList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="design:EdgeRow">
+                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+                  <TextBlock Grid.Column="0" Text="{Binding DisplayText}" FontSize="11"/>
+                  <ComboBox Grid.Column="1" SelectedValue="{Binding Kind, Mode=TwoWay}"
+                            SelectionChanged="OnInspectorEdgeKindChanged" MinWidth="100">
+                    <ComboBoxItem Content="Association"/>
+                    <ComboBoxItem Content="Inheritance"/>
+                    <ComboBoxItem Content="Implements"/>
+                  </ComboBox>
+                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24"/>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- State: Multi-select — show bulk operations (gated on GAP-2) -->
+        <StackPanel x:Name="InspectorMultiSelectState" IsVisible="False" Margin="8">
+          <TextBlock Text="Multi-Select" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+          <TextBlock x:Name="InspectorMultiSelectCountText" Text="" Margin="0,0,0,8"/>
+          <Button Content="Delete All" Click="OnInspectorMultiDelete" Margin="0,4"/>
+          <TextBlock Text="Selected:" FontWeight="SemiBold" Margin="0,12,0,4"/>
+          <ItemsControl x:Name="InspectorMultiSelectList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="design:DesignClass">
+                <TextBlock Text="{Binding Name}" Margin="4,1" FontSize="11"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
       </Grid>
     </ScrollViewer>
   </Grid>
