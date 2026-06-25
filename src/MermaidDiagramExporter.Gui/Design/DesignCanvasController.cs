@@ -16,6 +16,7 @@ namespace MermaidDiagramExporter.Gui.Design;
 public sealed class DesignCanvasController
 {
     private readonly DesignModeController _modeController;
+    public DesignUndoManager UndoManager { get; } = new();
     private readonly HashSet<string> _selectedClassIds = new();
     private DesignSelection _selection = new DesignSelection(Array.Empty<string>());
     private ClassRectangle? _draggingRectangle;
@@ -227,6 +228,28 @@ public sealed class DesignCanvasController
     /// True while an edge is being created (rubber-band line visible).
     /// </summary>
     public bool IsCreatingEdge => _edgeSourceRectangle != null;
+
+    // ── Undo/Redo (M6) ──
+
+    /// <summary>
+    /// Undoes the most recent command. Returns true if a command was undone.
+    /// </summary>
+    public bool Undo(DesignGraph graph) => UndoManager.Undo(graph);
+
+    /// <summary>
+    /// Redoes the most recently undone command. Returns true if a command was redone.
+    /// </summary>
+    public bool Redo(DesignGraph graph) => UndoManager.Redo(graph);
+
+    /// <summary>
+    /// Executes a command (applies it and pushes onto the undo stack).
+    /// Fires GraphMutated after applying.
+    /// </summary>
+    public void ExecuteCommand(DesignCommand command, DesignGraph graph)
+    {
+        UndoManager.Execute(command, graph);
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>
     /// Returns the current edge-creation preview state for rendering.
