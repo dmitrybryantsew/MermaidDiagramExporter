@@ -25,6 +25,11 @@ public sealed class DesignCanvasController
     private float _resizeStartWidth;
     private float _resizeStartHeight;
 
+    // ── Edge creation state (M4) ──
+    private ClassRectangle? _edgeSourceRectangle;
+    private bool _edgeSourceIsRightPort;
+    private SKPoint _edgeCurrentCursor;
+
     /// <summary>
     /// Fired after any mutation to the design graph. Subscribers can rebuild
     /// the <see cref="ClassRectangle"/> list and trigger a redraw.
@@ -99,8 +104,9 @@ public sealed class DesignCanvasController
 
             case ClassRectangleHitTest.LeftPort:
             case ClassRectangleHitTest.RightPort:
-                // M4 — edge creation. For M2, just select the class.
-                Select(hit.Rectangle!);
+                // M4: start edge creation. The rubber-band line follows the
+                // cursor until released on a target port (or cancelled with Escape).
+                StartEdgeCreation(hit.Rectangle!, hit.Kind == ClassRectangleHitTest.RightPort, worldPos);
                 return true;
 
             case ClassRectangleHitTest.Header:
@@ -154,12 +160,18 @@ public sealed class DesignCanvasController
                 cls.Height = newHeight;
             }
         }
+        else if (_edgeSourceRectangle != null)
+        {
+            // Track cursor position for the rubber-band edge preview
+            _edgeCurrentCursor = worldPos;
+        }
     }
 
     /// <summary>
-    /// Handles a pointer release — commits drag/resize.
+    /// Handles a pointer release — commits drag/resize, or completes edge
+    /// creation if the release is on a target port.
     /// </summary>
-    public void HandlePointerReleased()
+    public void HandlePointerReleased(DesignGraph? graph, SKPoint worldPos)
     {
         if (_draggingRectangle != null)
         {
@@ -173,6 +185,60 @@ public sealed class DesignCanvasController
             _resizingRectangle = null;
             GraphMutated?.Invoke(this, EventArgs.Empty);
         }
+        if (_edgeSourceRectangle != null && graph != null)
+        {
+            // Check if the release is on a target port
+            var hit = DesignHitTestService.HitTest(worldPos, BuildRectangles(graph));
+            ClassRectangle? target = null;
+            bool targetIsRightPort = false;
+            if (hit.Kind == ClassRectangleHitTest.RightPort && hit.Rectangle != null && hit.Rectangle != _edgeSourceRectangle)
+            {
+                target = hit.Rectangle;
+                targetIsRightPort = true;
+            }
+            else if (hit.Kind == ClassRectangleHitTest.LeftPort && hit.Rectangle != null && hit.Rectangle != _edgeSourceRectangle)
+            {
+                target = hit.Rectangle;
+                targetIsRightPort = false;
+            }
+
+            if (target != null)
+            {
+                // Create the edge. Default to Association; the UI will let the
+                // user change the type via the edge type selector popup.
+                AddEdge(graph, _edgeSourceRectangle.ClassId, target.ClassId, EdgeKind.Association);
+            }
+
+            // Clear edge-creation state either way
+            _edgeSourceRectangle = null;
+            _edgeCurrentCursor = worldPos;
+        }
+    }
+
+    /// <summary>
+    /// Cancels an in-progress edge creation (called on Escape).
+    /// </summary>
+    public void CancelEdgeCreation()
+    {
+        _edgeSourceRectangle = null;
+    }
+
+    /// <summary>
+    /// True while an edge is being created (rubber-band line visible).
+    /// </summary>
+    public bool IsCreatingEdge => _edgeSourceRectangle != null;
+
+    /// <summary>
+    /// Returns the current edge-creation preview state for rendering.
+    /// Returns null if no edge is being created.
+    /// </summary>
+    public EdgeCreationPreview? GetEdgeCreationPreview()
+    {
+        if (_edgeSourceRectangle == null) return null;
+        return new EdgeCreationPreview(
+            _edgeSourceRectangle,
+            _edgeSourceIsRightPort,
+            _edgeCurrentCursor);
     }
 
     /// <summary>
@@ -355,6 +421,67 @@ public sealed class DesignCanvasController
         rect.IsResizing = true;
     }
 
+    private void StartEdgeCreation(ClassRectangle rect, bool isRightPort, SKPoint worldPos)
+    {
+        _edgeSourceRectangle = rect;
+        _edgeSourceIsRightPort = isRightPort;
+        _edgeCurrentCursor = worldPos;
+    }
+
+    // ── Edge operations (M4) ──
+
+    /// <summary>
+    /// Adds a new edge between two classes. Validates that both endpoints exist.
+    /// </summary>
+    public bool AddEdge(DesignGraph graph, string fromClassId, string toClassId, EdgeKind kind)
+    {
+        if (fromClassId == toClassId) return false; // self-loop not allowed
+        var classIds = new HashSet<string>(graph.Classes.Select(c => c.Id));
+        if (!classIds.Contains(fromClassId)) return false;
+        if (!classIds.Contains(toClassId)) return false;
+
+        graph.Edges.Add(new DesignEdge
+        {
+            FromClassId = fromClassId,
+            ToClassId = toClassId,
+            Kind = kind
+        });
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes an edge by ID.
+    /// </summary>
+    public bool RemoveEdge(DesignGraph graph, string edgeId)
+    {
+        int removed = graph.Edges.RemoveAll(e => e.Id == edgeId);
+        if (removed > 0)
+        {
+            GraphMutated?.Invoke(this, EventArgs.Empty);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Changes an edge's type.
+    /// </summary>
+    public bool ChangeEdgeType(DesignGraph graph, string edgeId, EdgeKind newKind)
+    {
+        var edge = graph.Edges.FirstOrDefault(e => e.Id == edgeId);
+        if (edge == null) return false;
+        edge.Kind = newKind;
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Returns the edge that connects two classes (if any), for hit-testing.
+    /// </summary>
+    public DesignEdge? FindEdgeBetween(DesignGraph graph, string fromClassId, string toClassId)
+        => graph.Edges.FirstOrDefault(e => e.FromClassId == fromClassId && e.ToClassId == toClassId);
+
     private void Select(ClassRectangle rect)
     {
         _selectedClassIds.Clear();
@@ -390,3 +517,12 @@ public sealed class DesignCanvasController
 /// Immutable snapshot of the current selection.
 /// </summary>
 public sealed record DesignSelection(IReadOnlyList<string> SelectedClassIds);
+
+/// <summary>
+/// State of an in-progress edge creation. The renderer uses this to draw the
+/// rubber-band line from the source port to the current cursor position.
+/// </summary>
+public sealed record EdgeCreationPreview(
+    ClassRectangle SourceRectangle,
+    bool SourceIsRightPort,
+    SKPoint CurrentCursor);

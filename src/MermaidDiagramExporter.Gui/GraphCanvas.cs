@@ -41,6 +41,7 @@ public class GraphCanvas : Control
 
     // ── Design Mode integration (M2) ──
     private DesignCanvasController? _designController;
+    private DesignGraph? _designGraph;
 
     /// <summary>
     /// Wires the Design Mode controller. Called from MainWindow when the mode
@@ -49,6 +50,16 @@ public class GraphCanvas : Control
     public void SetDesignController(DesignCanvasController? controller)
     {
         _designController = controller;
+        Invalidate();
+    }
+
+    /// <summary>
+    /// Sets the current design graph for Design Mode. Called when entering
+    /// Design Mode or when the design changes. Pass null to clear.
+    /// </summary>
+    public void SetDesignGraph(DesignGraph? graph)
+    {
+        _designGraph = graph;
         Invalidate();
     }
 
@@ -596,12 +607,7 @@ public class GraphCanvas : Control
         // produce duplicate/broken behavior.
         if (_designController != null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            var designGraph = _designController.Selection as object; // not used; we need the graph
-            // Get the current design graph via the controller's graph reference.
-            // For M2 we pass null for graph — the controller will look it up
-            // from its own state. M3+ will wire this properly.
-            // TODO(M3): pass the actual DesignGraph here.
-            if (_designController.HandlePointerPressed(worldPos, null, new List<SKPoint>()))
+            if (_designController.HandlePointerPressed(worldPos, _designGraph, new List<SKPoint>()))
             {
                 e.Pointer.Capture(this);
                 e.Handled = true;
@@ -763,9 +769,11 @@ public class GraphCanvas : Control
         base.OnPointerReleased(e);
 
         // Design Mode drag/resize commit (M2)
-        if (_designController != null && (_designController.IsDragging || _designController.IsResizing))
+        if (_designController != null && (_designController.IsDragging || _designController.IsResizing || _designController.IsCreatingEdge))
         {
-            _designController.HandlePointerReleased();
+            var pos = e.GetPosition(this);
+            var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
+            _designController.HandlePointerReleased(_designGraph, worldPos);
             e.Handled = true;
             Invalidate();
             return;
