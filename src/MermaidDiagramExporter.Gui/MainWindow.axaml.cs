@@ -30,6 +30,8 @@ public partial class MainWindow : Window
     private readonly GraphSeedSelectionState _seedSelectionState = new();
     private readonly SettingsService _settingsService;
     private readonly DesignModeController _designModeController = new();
+    private readonly DesignCanvasController _designCanvasController;
+    private DesignGraph? _designGraph;
     private readonly TypeGraphCacheService _cacheService;
     private readonly SourceBundleService _bundleService;
     private readonly SymbolSearchEngine _searchEngine = new();
@@ -57,6 +59,7 @@ public partial class MainWindow : Window
         _cacheService = new TypeGraphCacheService(_settingsService);
         _bundleService = new SourceBundleService(_settingsService);
         _scanCoordinator = new ScanCoordinator(_scanner, _cacheService, _bundleService, _settingsService);
+        _designCanvasController = new DesignCanvasController(_designModeController);
         _scanCoordinator.StatusChanged += OnScanStatusChanged;
 
         InitializeComponent();
@@ -68,6 +71,10 @@ public partial class MainWindow : Window
         SymbolSearchPanel.SearchCleared += OnSearchCleared;
         MinimapView.ViewportJumpRequested += OnMinimapViewportJump;
 
+        // Wire Design Mode controller to canvas (W1)
+        GraphCanvasView.SetDesignController(_designCanvasController);
+        _designCanvasController.GraphMutated += OnDesignGraphMutated;
+
         // Initialize mode toggle UI (default is Analyze Mode)
         UpdateModeUi();
         MatrixView.CellClicked += OnMatrixCellClicked;
@@ -77,14 +84,52 @@ public partial class MainWindow : Window
 
     private void OnAnalyzeModeClick(object? sender, RoutedEventArgs e)
     {
+        // Clear Design Mode wiring so Analyze Mode pointer routing takes over
+        GraphCanvasView.SetDesignGraph(null);
         _designModeController.EnterAnalyzeMode();
         UpdateModeUi();
+        // Restore the Analyze Mode graph (re-set it on the canvas)
+        if (_currentGraph != null)
+            SetDisplayedGraph(_currentGraph, reloadManualOverridesFromDisk: false);
     }
 
     private void OnDesignModeClick(object? sender, RoutedEventArgs e)
     {
-        _designModeController.EnterDesignMode();
+        // Create a fresh design if none exists yet (first entry to Design Mode)
+        if (_designModeController.CurrentDesign == null)
+            _designModeController.EnterDesignMode(new DesignGraph { Title = "Untitled Design" });
+
+        _designGraph = _designModeController.CurrentDesign;
+        _designModeController.EnterDesignMode(_designGraph);
         UpdateModeUi();
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>
+    /// Renders the current Design Mode graph by converting it to a TypeGraph,
+    /// running it through the layout engine, and feeding the result into the
+    /// canvas. Called on mode entry and after every mutation (via
+    /// <see cref="OnDesignGraphMutated"/>).
+    /// </summary>
+    private void RenderDesignModeGraph()
+    {
+        if (_designGraph == null) return;
+
+        var typeGraph = DesignExporter.ToTypeGraph(_designGraph);
+        GraphCanvasView.SetDesignGraph(_designGraph);
+        var (nodes, edges) = _layoutEngine.Layout(typeGraph);
+        GraphCanvasView.SetGraph(nodes, edges);
+        MinimapView.SetGraph(nodes, edges);
+        StatsText.Text = $"Design: {_designGraph.Classes.Count} classes, {_designGraph.Edges.Count} edges";
+    }
+
+    /// <summary>
+    /// Re-renders the canvas after any Design Mode mutation. Subscribed to
+    /// <see cref="DesignCanvasController.GraphMutated"/>.
+    /// </summary>
+    private void OnDesignGraphMutated(object? sender, EventArgs e)
+    {
+        RenderDesignModeGraph();
     }
 
     /// <summary>
