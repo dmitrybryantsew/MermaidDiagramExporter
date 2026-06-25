@@ -996,4 +996,88 @@ public partial class MainWindow : Window
                 MinimapView.IsVisible = _currentSettings.ShowMinimap;
         }
     }
+
+    // ── Keyboard shortcuts (W3) ──
+
+    /// <summary>
+    /// Handles keyboard shortcuts. Only active in Design Mode for most keys
+    /// (Analyze Mode shortcuts are handled elsewhere). Per docs/design/07 W3.
+    /// </summary>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        // Only handle Design Mode shortcuts when in Design Mode
+        if (_designModeController.CurrentMode != AppMode.Design)
+            return;
+
+        // Ignore shortcuts during inline text editing (so typing isn't intercepted)
+        if (e.Source is TextBox)
+            return;
+
+        var ctrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
+        var shift = (e.KeyModifiers & KeyModifiers.Shift) != 0;
+
+        // Ctrl+Z — Undo
+        if (ctrl && e.Key == Key.Z && !shift)
+        {
+            OnDesignUndo(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+Y or Ctrl+Shift+Z — Redo
+        if ((ctrl && e.Key == Key.Y) || (ctrl && shift && e.Key == Key.Z))
+        {
+            OnDesignRedo(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        // Delete or Backspace — delete selected
+        if (e.Key == Key.Delete || e.Key == Key.Back)
+        {
+            if (_designGraph != null && _designCanvasController.HandleDeleteKey(_designGraph))
+                RenderDesignModeGraph();
+            e.Handled = true;
+            return;
+        }
+
+        // Escape — cancel edge creation
+        if (e.Key == Key.Escape)
+        {
+            if (_designCanvasController.IsCreatingEdge)
+            {
+                _designCanvasController.CancelEdgeCreation();
+                GraphCanvasView.ForceRedraw();
+                StatsText.Text = "Edge creation cancelled";
+            }
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+S — Save
+        if (ctrl && e.Key == Key.S)
+        {
+            OnDesignSave(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+N — New design
+        if (ctrl && e.Key == Key.N)
+        {
+            OnDesignNew(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+O — Open design
+        if (ctrl && e.Key == Key.O)
+        {
+            OnDesignOpen(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+    }
 }

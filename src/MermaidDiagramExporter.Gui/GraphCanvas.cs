@@ -393,6 +393,15 @@ public class GraphCanvas : Control
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// Public wrapper to force a re-render. Used by external code (e.g. keyboard
+    /// shortcut handlers) that needs to trigger a redraw without changing the graph.
+    /// </summary>
+    public void ForceRedraw()
+    {
+        Invalidate();
+    }
+
     private void NotifyViewportChanged()
     {
         ViewportChanged?.Invoke(_zoom, _panX, _panY, (float)Bounds.Width, (float)Bounds.Height);
