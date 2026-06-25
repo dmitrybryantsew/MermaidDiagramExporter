@@ -173,6 +173,56 @@ public static class DesignCommands
     }
 
     /// <summary>
+    /// Changes a class's kind (Class/Interface/Enum/Struct/Static/Abstract).
+    /// Undo restores the original kind. Per docs/design/10.
+    /// </summary>
+    public sealed class ChangeClassKind : DesignCommand
+    {
+        private readonly string _classId;
+        private readonly ClassKind _oldKind, _newKind;
+        public ChangeClassKind(string classId, ClassKind oldKind, ClassKind newKind)
+        {
+            _classId = classId; _oldKind = oldKind; _newKind = newKind;
+        }
+        public override string Description => "Change class kind";
+        public override void Apply(DesignGraph graph)
+        {
+            var cls = graph.Classes.FirstOrDefault(c => c.Id == _classId);
+            if (cls != null) cls.Kind = _newKind;
+        }
+        public override void Undo(DesignGraph graph)
+        {
+            var cls = graph.Classes.FirstOrDefault(c => c.Id == _classId);
+            if (cls != null) cls.Kind = _oldKind;
+        }
+    }
+
+    /// <summary>
+    /// Changes a class's namespace. Undo restores the original namespace.
+    /// Per docs/design/10.
+    /// </summary>
+    public sealed class ChangeNamespace : DesignCommand
+    {
+        private readonly string _classId;
+        private readonly string _oldNamespace, _newNamespace;
+        public ChangeNamespace(string classId, string oldNamespace, string newNamespace)
+        {
+            _classId = classId; _oldNamespace = oldNamespace; _newNamespace = newNamespace;
+        }
+        public override string Description => "Change namespace";
+        public override void Apply(DesignGraph graph)
+        {
+            var cls = graph.Classes.FirstOrDefault(c => c.Id == _classId);
+            if (cls != null) cls.Namespace = _newNamespace;
+        }
+        public override void Undo(DesignGraph graph)
+        {
+            var cls = graph.Classes.FirstOrDefault(c => c.Id == _classId);
+            if (cls != null) cls.Namespace = _oldNamespace;
+        }
+    }
+
+    /// <summary>
     /// Adds an edge. Undo removes it.
     /// </summary>
     public sealed class AddEdge : DesignCommand

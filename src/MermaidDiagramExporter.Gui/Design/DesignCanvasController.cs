@@ -461,6 +461,51 @@ public sealed class DesignCanvasController
         return true;
     }
 
+    /// <summary>
+    /// Changes a class's kind (Class/Interface/Enum/Struct/Static/Abstract).
+    /// Per docs/design/10 — fills the gap where ClassKind was impossible
+    /// to change after creation.
+    /// </summary>
+    public bool ChangeClassKind(DesignGraph graph, string classId, ClassKind newKind)
+    {
+        var cls = graph.Classes.FirstOrDefault(c => c.Id == classId);
+        if (cls == null) return false;
+        if (cls.Kind == newKind) return false;
+
+        var cmd = new DesignCommands.ChangeClassKind(classId, cls.Kind, newKind);
+        UndoManager.Execute(cmd, graph);
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Changes a class's namespace. Per docs/design/10 — fills the gap
+    /// where Namespace was impossible to change after creation.
+    /// </summary>
+    public bool ChangeNamespace(DesignGraph graph, string classId, string newNamespace)
+    {
+        var cls = graph.Classes.FirstOrDefault(c => c.Id == classId);
+        if (cls == null) return false;
+        if (string.IsNullOrEmpty(newNamespace)) newNamespace = "";
+        if ((cls.Namespace ?? "") == newNamespace) return false;
+
+        var cmd = new DesignCommands.ChangeNamespace(classId, cls.Namespace ?? "", newNamespace);
+        UndoManager.Execute(cmd, graph);
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Public Select method — selects a class by ID. Used by the inspector
+    /// panel's "jump to class" button on relations.
+    /// </summary>
+    public void SelectById(string classId)
+    {
+        _selectedClassIds.Clear();
+        _selectedClassIds.Add(classId);
+        UpdateSelection();
+    }
+
     private void StartDrag(ClassRectangle rect, SKPoint worldPos)
     {
         _draggingRectangle = rect;
