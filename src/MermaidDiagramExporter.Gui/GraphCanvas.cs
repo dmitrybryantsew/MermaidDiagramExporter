@@ -654,7 +654,9 @@ public class GraphCanvas : Control
         // produce duplicate/broken behavior.
         if (_designController != null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            if (_designController.HandlePointerPressed(worldPos, _designGraph, new List<SKPoint>()))
+            // Shift/ctrl held → extend selection (multi-select). Per docs/design/09 GAP-2.
+            bool extendSelection = (e.KeyModifiers & (KeyModifiers.Shift | KeyModifiers.Control)) != 0;
+            if (_designController.HandlePointerPressed(worldPos, _designGraph, new List<SKPoint>(), extendSelection))
             {
                 e.Pointer.Capture(this);
                 e.Handled = true;

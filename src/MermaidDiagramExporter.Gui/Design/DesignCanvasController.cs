@@ -124,7 +124,7 @@ public sealed class DesignCanvasController
     /// Mode fallthrough). Returns false if the event should fall through to
     /// Analyze Mode behavior (pan, etc.).
     /// </summary>
-    public bool HandlePointerPressed(SKPoint worldPos, DesignGraph? graph, List<SKPoint> classRectanglesForHitTest)
+    public bool HandlePointerPressed(SKPoint worldPos, DesignGraph? graph, List<SKPoint> classRectanglesForHitTest, bool extendSelection = false)
     {
         if (graph == null) return false;
 
@@ -149,7 +149,7 @@ public sealed class DesignCanvasController
 
             case ClassRectangleHitTest.Body:
             case ClassRectangleHitTest.Member:
-                Select(hit.Rectangle!);
+                Select(hit.Rectangle!, extendSelection);
                 return true;
 
             case ClassRectangleHitTest.None:
@@ -583,10 +583,22 @@ public sealed class DesignCanvasController
     public DesignEdge? FindEdgeBetween(DesignGraph graph, string fromClassId, string toClassId)
         => graph.Edges.FirstOrDefault(e => e.FromClassId == fromClassId && e.ToClassId == toClassId);
 
-    private void Select(ClassRectangle rect)
+    /// <summary>
+    /// Selects a class. If <paramref name="extendSelection"/> is true (shift/ctrl held),
+    /// the class is added to the existing selection (or removed if already selected).
+    /// Otherwise the selection is cleared and replaced with just this class.
+    /// Per docs/design/09 GAP-2.
+    /// </summary>
+    private void Select(ClassRectangle rect, bool extendSelection = false)
     {
-        _selectedClassIds.Clear();
-        _selectedClassIds.Add(rect.ClassId);
+        if (!extendSelection)
+            _selectedClassIds.Clear();
+
+        if (_selectedClassIds.Contains(rect.ClassId))
+            _selectedClassIds.Remove(rect.ClassId); // toggle off
+        else
+            _selectedClassIds.Add(rect.ClassId);
+
         UpdateSelection();
     }
 
