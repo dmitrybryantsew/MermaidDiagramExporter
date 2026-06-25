@@ -222,6 +222,13 @@ public class GraphCanvas : Control
     /// </summary>
     public event Action<string>? DesignClassDoubleClicked;
 
+    /// <summary>
+    /// Raised when the user right-clicks in Design Mode. The subscriber
+    /// (MainWindow) shows a context menu appropriate for what was clicked
+    /// (class, edge, or empty canvas). Per docs/design/07 W6.
+    /// </summary>
+    public event Action<DesignContextTarget>? DesignContextMenuRequested;
+
     public GraphCanvas()
     {
         ClipToBounds = true;
@@ -621,6 +628,22 @@ public class GraphCanvas : Control
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+
+        // Right-click in Design Mode → fire context menu event (W6)
+        if (_designController != null && _designGraph != null)
+        {
+            var props = e.GetCurrentPoint(this).Properties;
+            if (props.IsRightButtonPressed)
+            {
+                var rcPos = e.GetPosition(this);
+                var rcWorldPos = ScreenToWorld((float)rcPos.X, (float)rcPos.Y);
+                var target = _designController.HitTestForContextMenu(rcWorldPos, _designGraph);
+                DesignContextMenuRequested?.Invoke(target);
+                e.Handled = true;
+                return;
+            }
+        }
+
         var pos = e.GetPosition(this);
         var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
 

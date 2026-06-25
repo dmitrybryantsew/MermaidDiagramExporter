@@ -86,6 +86,37 @@ public sealed class DesignCanvasController
     }
 
     /// <summary>
+    /// Hit-tests a world-space point and returns a <see cref="DesignContextTarget"/>
+    /// describing what was hit (class, member, edge, or empty canvas). Used
+    /// by the context menu handler to decide which actions to show.
+    /// </summary>
+    public DesignContextTarget HitTestForContextMenu(SKPoint worldPos, DesignGraph graph)
+    {
+        var hit = DesignHitTestService.HitTest(worldPos, BuildRectangles(graph));
+
+        if (hit.Kind == ClassRectangleHitTest.Body && hit.Rectangle != null)
+        {
+            return new DesignContextTarget(
+                DesignContextTargetKind.Class,
+                worldPos,
+                ClassId: hit.Rectangle.ClassId);
+        }
+
+        if (hit.Kind == ClassRectangleHitTest.Member && hit.Rectangle != null)
+        {
+            return new DesignContextTarget(
+                DesignContextTargetKind.Member,
+                worldPos,
+                ClassId: hit.Rectangle.ClassId,
+                MemberIndex: hit.MemberIndex);
+        }
+
+        // Edges aren't hit-tested yet (would need edge hit-testing service).
+        // For now, treat anything else as empty canvas.
+        return new DesignContextTarget(DesignContextTargetKind.EmptyCanvas, worldPos);
+    }
+
+    /// <summary>
     /// Handles a pointer press in Design Mode. Returns true if the event was
     /// handled (caller should set <c>e.Handled = true</c> and skip Analyze
     /// Mode fallthrough). Returns false if the event should fall through to
@@ -549,3 +580,26 @@ public sealed record EdgeCreationPreview(
     ClassRectangle SourceRectangle,
     bool SourceIsRightPort,
     SKPoint CurrentCursor);
+
+/// <summary>
+/// What was hit when the user right-clicked in Design Mode. Used by the
+/// context menu to decide which actions to show. Per docs/design/07 W6.
+/// </summary>
+public enum DesignContextTargetKind
+{
+    EmptyCanvas,
+    Class,
+    Member,
+    Edge
+}
+
+/// <summary>
+/// Describes what was right-clicked and where. Carries the relevant IDs so
+/// the context menu handler can act on them.
+/// </summary>
+public sealed record DesignContextTarget(
+    DesignContextTargetKind Kind,
+    SKPoint WorldPosition,
+    string? ClassId = null,
+    int? MemberIndex = null,
+    string? EdgeId = null);

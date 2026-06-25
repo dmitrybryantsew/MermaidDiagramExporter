@@ -19,6 +19,7 @@ using MermaidDiagramExporter.Gui.Search;
 using MermaidDiagramExporter.Gui.Settings;
 using MermaidDiagramExporter.Gui.Persistence;
 using MermaidDiagramExporter.Gui.Matrix;
+using SkiaSharp;
 
 namespace MermaidDiagramExporter.Gui;
 
@@ -80,6 +81,7 @@ public partial class MainWindow : Window
         GraphCanvasView.SetDesignController(_designCanvasController);
         _designCanvasController.GraphMutated += OnDesignGraphMutated;
         GraphCanvasView.DesignClassDoubleClicked += OnDesignClassDoubleClicked;
+        GraphCanvasView.DesignContextMenuRequested += OnDesignContextMenuRequested;
 
         // Initialize mode toggle UI (default is Analyze Mode)
         UpdateModeUi();
@@ -225,6 +227,120 @@ public partial class MainWindow : Window
     {
         InlineEditTextBox.IsVisible = false;
         InlineEditTextBox.Tag = null;
+    }
+
+    /// <summary>
+    /// Shows a context menu appropriate for what was right-clicked. Implements
+    /// class/member/canvas actions per docs/design/07 W6.
+    /// </summary>
+    private void OnDesignContextMenuRequested(DesignContextTarget target)
+    {
+        if (_designGraph == null) return;
+
+        var menu = new Avalonia.Controls.MenuFlyout();
+
+        switch (target.Kind)
+        {
+            case DesignContextTargetKind.Class:
+                if (target.ClassId != null)
+                {
+                    var classId = target.ClassId;
+
+                    var renameItem = new Avalonia.Controls.MenuItem { Header = "Rename" };
+                    renameItem.Click += (_, _) => OnDesignClassDoubleClicked(classId);
+                    menu.Items.Add(renameItem);
+
+                    var deleteItem = new Avalonia.Controls.MenuItem { Header = "Delete" };
+                    deleteItem.Click += (_, _) =>
+                    {
+                        // Select the class first, then delete
+                        _designCanvasController.HandlePointerPressed(
+                            new SKPoint(target.WorldPosition.X, target.WorldPosition.Y),
+                            _designGraph, new System.Collections.Generic.List<SKPoint>());
+                        if (_designCanvasController.HandleDeleteKey(_designGraph))
+                            RenderDesignModeGraph();
+                    };
+                    menu.Items.Add(deleteItem);
+
+                    var addMemberItem = new Avalonia.Controls.MenuItem { Header = "Add Member →" };
+
+                    var fieldItem = new Avalonia.Controls.MenuItem { Header = "Field" };
+                    fieldItem.Click += (_, _) => _designCanvasController.AddMemberToSelectedClass(_designGraph, MemberKind.Field);
+                    addMemberItem.Items.Add(fieldItem);
+
+                    var propertyItem = new Avalonia.Controls.MenuItem { Header = "Property" };
+                    propertyItem.Click += (_, _) => _designCanvasController.AddMemberToSelectedClass(_designGraph, MemberKind.Property);
+                    addMemberItem.Items.Add(propertyItem);
+
+                    var methodItem = new Avalonia.Controls.MenuItem { Header = "Method" };
+                    methodItem.Click += (_, _) => _designCanvasController.AddMemberToSelectedClass(_designGraph, MemberKind.Method);
+                    addMemberItem.Items.Add(methodItem);
+
+                    menu.Items.Add(addMemberItem);
+                }
+                break;
+
+            case DesignContextTargetKind.Member:
+                if (target.ClassId != null && target.MemberIndex.HasValue)
+                {
+                    var classId = target.ClassId;
+                    var memberIndex = target.MemberIndex.Value;
+
+                    var deleteItem = new Avalonia.Controls.MenuItem { Header = "Delete Member" };
+                    deleteItem.Click += (_, _) =>
+                    {
+                        _designCanvasController.RemoveMember(_designGraph, classId, memberIndex);
+                        RenderDesignModeGraph();
+                    };
+                    menu.Items.Add(deleteItem);
+
+                    var visItem = new Avalonia.Controls.MenuItem { Header = "Cycle Visibility" };
+                    visItem.Click += (_, _) =>
+                    {
+                        _designCanvasController.CycleMemberVisibility(_designGraph, classId, memberIndex);
+                        RenderDesignModeGraph();
+                    };
+                    menu.Items.Add(visItem);
+
+                    var upItem = new Avalonia.Controls.MenuItem { Header = "Move Up" };
+                    upItem.Click += (_, _) =>
+                    {
+                        _designCanvasController.MoveMember(_designGraph, classId, memberIndex, -1);
+                        RenderDesignModeGraph();
+                    };
+                    menu.Items.Add(upItem);
+
+                    var downItem = new Avalonia.Controls.MenuItem { Header = "Move Down" };
+                    downItem.Click += (_, _) =>
+                    {
+                        _designCanvasController.MoveMember(_designGraph, classId, memberIndex, 1);
+                        RenderDesignModeGraph();
+                    };
+                    menu.Items.Add(downItem);
+                }
+                break;
+
+            case DesignContextTargetKind.EmptyCanvas:
+            default:
+                var addItem = new Avalonia.Controls.MenuItem { Header = "Add Class Here" };
+                addItem.Click += (_, _) =>
+                {
+                    _designGraph.Classes.Add(new DesignClass
+                    {
+                        Name = "NewClass",
+                        X = target.WorldPosition.X - 100f,
+                        Y = target.WorldPosition.Y - 30f,
+                        Width = 200f,
+                        Height = 60f
+                    });
+                    RenderDesignModeGraph();
+                };
+                menu.Items.Add(addItem);
+                break;
+        }
+
+        if (menu.Items.Count > 0)
+            menu.ShowAt(this);
     }
 
     /// <summary>
