@@ -115,6 +115,16 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
             },
         };
 
+        // MSAGL's Sugiyama layout defaults to top-to-bottom. To match the
+        // user's LayoutDirection preference, apply a post-layout rotation:
+        // 90° CCW transforms TB → LR (root goes from top to left, children
+        // flow rightward). MSAGL applies the inverse before layout (to adjust
+        // label sizes) and the forward transform after layout to all geometry.
+        if (options.Direction == LayoutDirection.LeftToRight)
+        {
+            settings.Transformation = new PlaneTransformation(0, -1, 0, 1, 0, 0);
+        }
+
         LayoutHelpers.CalculateLayout(geomGraph, settings, null);
 
         // ── Read back, flipping Y from MSAGL's Y-up to our Y-down ──
