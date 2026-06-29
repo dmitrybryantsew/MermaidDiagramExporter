@@ -101,6 +101,13 @@ public sealed class ProjectSettings
     public bool UseMsaglEngine { get; set; } = false;
 
     /// <summary>
+    /// When true, edges are re-routed automatically after node/cluster drag
+    /// (and after Design Mode mutations). When false, press Ctrl+R to redraw.
+    /// Default true for testing; can be disabled if re-routing is too slow.
+    /// </summary>
+    public bool AutoRedrawEdges { get; set; } = true;
+
+    /// <summary>
     /// Per-kind edge visual style (color + arrowhead shape). Null = use built-in
     /// UML defaults.
     /// </summary>

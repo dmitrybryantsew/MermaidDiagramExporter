@@ -74,6 +74,7 @@
               <CheckBox x:Name="ShowImplementsCheck" Content="Implements" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0" Foreground="White"/>
               <CheckBox x:Name="ShowAssociationsCheck" Content="Associations" IsChecked="True" Click="OnEdgeFilterChanged" Foreground="White"/>
             </WrapPanel>
+            <CheckBox x:Name="AutoRedrawCheck" Content="Auto-redraw edges on move (Ctrl+R = manual)" IsChecked="True" Click="OnAutoRedrawChanged" Margin="0,4,0,0" Foreground="White" FontSize="11"/>
           </StackPanel>
 
           <!-- Search -->
@@ -112,6 +113,7 @@
               <Button Content="Open..." Click="OnDesignOpen" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
               <Button Content="Save" Click="OnDesignSave" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
               <Button Content="Save As..." Click="OnDesignSaveAs" MinWidth="80" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="Settings" Click="OnOpenSettings" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
             </WrapPanel>
           </StackPanel>
 

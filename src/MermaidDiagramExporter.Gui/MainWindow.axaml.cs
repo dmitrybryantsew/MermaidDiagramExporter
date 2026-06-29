@@ -178,6 +178,16 @@ public partial class MainWindow : Window
         // docs/design/05 (position authority), docs/design/08 D6, and
         // docs/design/09 BUG-1.
         var layoutResult = BuildLayoutResultFromDesignGraph(_designGraph);
+
+        // Route edges so they get proper orthogonal/cluster-aware paths instead
+        // of straight lines. This populates EdgePaths which the renderer uses.
+        var options = _layoutEngine.LayoutOptions ?? new LayoutOptions
+        {
+            UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
+            UseMsaglEngine = _currentSettings.UseMsaglEngine,
+        };
+        layoutResult.EdgePaths = _layoutEngine.RouteEdges(typeGraph, layoutResult, options);
+
         var (nodes, edges) = _layoutEngine.LayoutFromLayoutResult(typeGraph, layoutResult);
 
         GraphCanvasView.SetGraph(nodes, edges, preserveViewport);
@@ -1011,6 +1021,7 @@ public partial class MainWindow : Window
             UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
             UseMsaglEngine = _currentSettings.UseMsaglEngine
         };
+        AutoRedrawCheck.IsChecked = _currentSettings.AutoRedrawEdges;
 
         var (nodes, edges) = _layoutEngine.Layout(graph);
         _allNodes = nodes;
@@ -1250,6 +1261,11 @@ public partial class MainWindow : Window
             ShowAssociationsCheck.IsChecked == true);
     }
 
+    private void OnAutoRedrawChanged(object? sender, RoutedEventArgs e)
+    {
+        _currentSettings.AutoRedrawEdges = AutoRedrawCheck.IsChecked == true;
+    }
+
     // --- Inspector ---
 
     private void UpdateInspector(TypeNodeData node)
@@ -1312,6 +1328,30 @@ public partial class MainWindow : Window
         {
             _cacheService.SaveManualOverrides(GraphCanvasView.ManualOverrides, _currentSettings);
         }
+
+        // Auto-redraw edges if enabled (re-routes with current node positions)
+        if (_currentSettings.AutoRedrawEdges && _currentGraph != null && _allNodes.Count > 0)
+        {
+            RedrawEdgesNow();
+        }
+    }
+
+    /// <summary>
+    /// Re-routes all edges using current node positions. Called on Ctrl+R
+    /// (manual) or after drag (if AutoRedrawEdges is on).
+    /// </summary>
+    private void RedrawEdgesNow()
+    {
+        if (_currentGraph == null || _allNodes.Count == 0) return;
+
+        var options = _layoutEngine.LayoutOptions ?? new LayoutOptions
+        {
+            UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
+            UseMsaglEngine = _currentSettings.UseMsaglEngine,
+        };
+
+        _layoutEngine.RedrawEdges(_currentGraph, _allNodes, _allEdges, options);
+        GraphCanvasView.SetGraph(_allNodes, _allEdges, preserveViewport: true);
     }
 
     private void OnResetLayout(object? sender, RoutedEventArgs e)
@@ -1548,6 +1588,24 @@ public partial class MainWindow : Window
     {
         base.OnKeyDown(e);
 
+        var ctrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
+        var shift = (e.KeyModifiers & KeyModifiers.Shift) != 0;
+
+        // Ctrl+R — Redraw edges (works in both Analyze and Design modes)
+        if (ctrl && e.Key == Key.R)
+        {
+            if (_designModeController.CurrentMode == AppMode.Design && _designGraph != null)
+            {
+                RenderDesignModeGraph(preserveViewport: true);
+            }
+            else
+            {
+                RedrawEdgesNow();
+            }
+            e.Handled = true;
+            return;
+        }
+
         // Only handle Design Mode shortcuts when in Design Mode
         if (_designModeController.CurrentMode != AppMode.Design)
             return;
@@ -1555,9 +1613,6 @@ public partial class MainWindow : Window
         // Ignore shortcuts during inline text editing (so typing isn't intercepted)
         if (e.Source is TextBox)
             return;
-
-        var ctrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
-        var shift = (e.KeyModifiers & KeyModifiers.Shift) != 0;
 
         // Ctrl+Z — Undo
         if (ctrl && e.Key == Key.Z && !shift)

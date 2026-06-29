@@ -1027,6 +1027,10 @@ public class GraphCanvas : Control
         _dragStartNodeX = node.X;
         _dragStartNodeY = node.Y;
         _draggedNodeIdDuringRender = node.Id;
+        // Clear stale routed Points on edges connected to this node so the
+        // renderer falls back to EdgePortAssigner (dynamic closest-perimeter)
+        // during drag. Without this, edges use the old polyline coordinates.
+        ClearEdgePointsForNodes(new HashSet<string> { node.Id });
         _staticContentDirty = true; // Re-record static content without the dragged node
         Cursor = new Cursor(StandardCursorType.Hand);
     }
@@ -1041,15 +1045,38 @@ public class GraphCanvas : Control
         _dragStartMouseY = worldPos.Y;
         _clusterDragStartPositions.Clear();
 
-        // Record start positions of all nodes in this cluster
+        var clusterNodeIds = new HashSet<string>();
         foreach (var node in _nodes)
         {
             if (GetNodeClusterId(node) == clusterId)
             {
                 _clusterDragStartPositions[node.Id] = new Vector2(node.X, node.Y);
+                clusterNodeIds.Add(node.Id);
             }
         }
+        // Clear stale routed Points on edges connected to any cluster node
+        ClearEdgePointsForNodes(clusterNodeIds);
+        _staticContentDirty = true;
         Cursor = new Cursor(StandardCursorType.Hand);
+    }
+
+    /// <summary>
+    /// Clears <see cref="GraphEdge.Points"/> on all edges connected to any of
+    /// the given node IDs. This makes the renderer fall back to
+    /// <see cref="EdgePortAssigner"/> (dynamic closest-perimeter ports) instead
+    /// of using stale routed polylines from the original layout.
+    /// </summary>
+    private void ClearEdgePointsForNodes(HashSet<string> nodeIds)
+    {
+        if (_edges == null) return;
+        foreach (var edge in _edges)
+        {
+            if (edge.FromNode == null || edge.ToNode == null) continue;
+            if (nodeIds.Contains(edge.FromNode.Id) || nodeIds.Contains(edge.ToNode.Id))
+            {
+                edge.Points = System.Array.Empty<Vector2>();
+            }
+        }
     }
 
     private string? GetNodeClusterId(GraphNode node)

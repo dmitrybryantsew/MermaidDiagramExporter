@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using MermaidDiagramExporter.Gui.Layout.Compound;
 
@@ -90,5 +91,16 @@ public sealed class GraphLayoutCoordinator
             });
         layoutResult.EdgePaths = _edgeRoutingService.BuildPaths(graph, layoutResult, resolvedOptions);
         return layoutResult;
+    }
+
+    /// <summary>
+    /// Re-routes edges for an existing LayoutResult without re-running the
+    /// layout engine. Used after manual node moves (drag) to refresh edge
+    /// paths with current node positions.
+    /// </summary>
+    public IReadOnlyList<LayoutEdgePath> RouteEdges(Core.TypeGraph graph, LayoutResult result, LayoutOptions? options = null)
+    {
+        var opts = options ?? new LayoutOptions();
+        return _edgeRoutingService.BuildPaths(graph, result, opts);
     }
 }
