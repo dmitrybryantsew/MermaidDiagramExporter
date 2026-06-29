@@ -49,4 +49,13 @@ public sealed class LayoutOptions
 
     /// <summary>Number of coordinate-assignment passes (docs/08 Part A2).</summary>
     public int CoordinateAssignmentPasses { get; set; } = 6;
+
+    // ── MSAGL layout engine (prototype) ──
+    /// <summary>
+    /// Feature flag: when true, uses the MSAGL-based engine
+    /// (Microsoft Automatic Graph Layout, Sugiyama framework + cluster support).
+    /// Default false while being evaluated. When true, UseCompoundLayoutEngine
+    /// is ignored and the MSAGL engine runs instead.
+    /// </summary>
+    public bool UseMsaglEngine { get; set; } = false;
 }

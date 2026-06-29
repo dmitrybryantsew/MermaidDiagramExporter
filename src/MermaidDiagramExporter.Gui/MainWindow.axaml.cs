@@ -1007,7 +1007,8 @@ public partial class MainWindow : Window
         // (and any future per-setting overrides) actually reaches the engine.
         _layoutEngine.LayoutOptions = new LayoutOptions
         {
-            UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine
+            UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
+            UseMsaglEngine = _currentSettings.UseMsaglEngine
         };
 
         var (nodes, edges) = _layoutEngine.Layout(graph);

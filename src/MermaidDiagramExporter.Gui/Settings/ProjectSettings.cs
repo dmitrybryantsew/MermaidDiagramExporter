@@ -93,6 +93,14 @@ public sealed class ProjectSettings
     public bool UseCompoundLayoutEngine { get; set; } = false;
 
     /// <summary>
+    /// Whether to use the MSAGL-based layout engine (Microsoft Automatic Graph
+    /// Layout, Sugiyama framework with native cluster + orthogonal routing
+    /// support). Prototype — default false while being evaluated. When true,
+    /// UseCompoundLayoutEngine is ignored.
+    /// </summary>
+    public bool UseMsaglEngine { get; set; } = false;
+
+    /// <summary>
     /// User-defined keyboard shortcut bindings for Design Mode tools.
     /// Keys are tool names (e.g. "Class", "EdgeInheritance"), values are key names
     /// (e.g. "C", "H"). Only bindings that differ from defaults need to be stored.

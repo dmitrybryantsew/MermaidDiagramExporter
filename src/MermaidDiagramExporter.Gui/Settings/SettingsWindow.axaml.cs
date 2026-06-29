@@ -83,6 +83,7 @@ public partial class SettingsWindow : Window
         EnableDraggingCheck.IsChecked = _settings.EnableNodeDragging;
         ShowMinimapCheck.IsChecked = _settings.ShowMinimap;
         UseCompoundEngineCheck.IsChecked = _settings.UseCompoundLayoutEngine;
+        UseMsaglEngineCheck.IsChecked = _settings.UseMsaglEngine;
 
         _shortcutBindings = new Dictionary<string, string>(_settings.DesignShortcutBindings);
         LoadShortcutFields();
@@ -142,6 +143,7 @@ public partial class SettingsWindow : Window
         _settings.EnableNodeDragging = EnableDraggingCheck.IsChecked == true;
         _settings.ShowMinimap = ShowMinimapCheck.IsChecked == true;
         _settings.UseCompoundLayoutEngine = UseCompoundEngineCheck.IsChecked == true;
+        _settings.UseMsaglEngine = UseMsaglEngineCheck.IsChecked == true;
         _settings.StereotypeRules = _stereotypeRules.ToList();
 
         _settings.DesignShortcutBindings = CollectShortcutBindings();
@@ -173,6 +175,7 @@ public partial class SettingsWindow : Window
         EnableDraggingCheck.IsChecked = true;
         ShowMinimapCheck.IsChecked = true;
         UseCompoundEngineCheck.IsChecked = false;
+        UseMsaglEngineCheck.IsChecked = false;
     }
 
     private void OnRemoveStereotypeRule(object? sender, RoutedEventArgs e)
