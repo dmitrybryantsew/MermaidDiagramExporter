@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using SkiaSharp;
 using MermaidDiagramExporter.Core;
+using MermaidDiagramExporter.Gui.Settings;
+using MermaidDiagramExporter.Gui.Layout;
 
 namespace MermaidDiagramExporter.Gui;
 
@@ -25,6 +27,10 @@ public sealed class ViewportState
     public string SearchText { get; init; } = string.Empty;
     /// <summary>Set to true to enable Design Mode visual affordances (handles, ports).</summary>
     public bool IsDesignMode { get; init; }
+    /// <summary>
+    /// Per-kind edge visual style (color + arrowhead). Null = use built-in UML defaults.
+    /// </summary>
+    public EdgeStyleSettings? EdgeStyles { get; init; }
 }
 
 /// <summary>
@@ -192,9 +198,14 @@ public sealed class CanvasRenderer
 
     /// <summary>
     /// Draws all edges, optionally excluding edges connected to a specific node (for drag optimization).
+    /// Uses routed Points when available (from the layout engine); otherwise computes
+    /// closest-perimeter ports with overlap spreading via <see cref="EdgePortAssigner"/>.
     /// </summary>
     public void DrawEdges(SKCanvas canvas, List<GraphEdge> edges, ViewportState vp, string? excludeNodeId = null)
     {
+        // Pre-compute ports for edges without routed points (spreads overlaps).
+        var portMap = EdgePortAssigner.AssignPorts(edges);
+
         foreach (var edge in edges)
         {
             if (edge.FromNode == null || edge.ToNode == null) continue;
@@ -210,44 +221,139 @@ public sealed class CanvasRenderer
             };
             if (!visible) continue;
 
-            float fromX = edge.FromNode.X + edge.FromNode.Width;
-            float fromY = edge.FromNode.Y + edge.FromNode.Height / 2;
-            float toX = edge.ToNode.X;
-            float toY = edge.ToNode.Y + edge.ToNode.Height / 2;
+            var style = ResolveEdgeStyle(edge.Kind, vp);
+            DrawSingleEdgePath(canvas, edge, portMap, style, isSelected: IsEdgeHighlighted(edge, vp));
+        }
+    }
 
-            SKColor edgeColor = edge.Kind switch
-            {
-                TypeEdgeKind.Inheritance => ColorEdgeInheritance,
-                TypeEdgeKind.Implements => ColorEdgeImplements,
-                _ => ColorEdgeAssociation
-            };
-            float strokeWidth = edge.Kind == TypeEdgeKind.Association ? 1.2f : 2.0f;
+    private static bool IsEdgeHighlighted(GraphEdge edge, ViewportState vp)
+    {
+        if (vp.IsDesignMode)
+        {
+            var sel = vp.SelectedDesignNodeIds;
+            if (sel != null && (sel.Contains(edge.FromNode!.Id) || sel.Contains(edge.ToNode!.Id)))
+                return true;
+            return false;
+        }
+        return vp.SelectedNode != null
+            && (edge.FromNode!.Id == vp.SelectedNode.Id || edge.ToNode!.Id == vp.SelectedNode.Id);
+    }
 
-            if (vp.SelectedNode != null && (edge.FromNode.Id == vp.SelectedNode.Id || edge.ToNode.Id == vp.SelectedNode.Id))
-            {
-                strokeWidth += 0.5f;
-            }
+    private static (SKColor color, float strokeWidth, EdgeArrowheadStyle arrow) ResolveEdgeStyle(TypeEdgeKind kind, ViewportState vp)
+    {
+        var s = vp.EdgeStyles?.ForKind(kind);
+        var color = TryParseColor(s?.ColorHex) ?? DefaultColorForKind(kind);
+        var arrow = s?.Arrowhead ?? DefaultArrowForKind(kind);
+        float strokeWidth = kind == TypeEdgeKind.Association ? 1.2f : 2.0f;
+        return (color, strokeWidth, arrow);
+    }
 
-            EdgeStrokePaint.Color = edgeColor;
-            EdgeStrokePaint.StrokeWidth = strokeWidth;
+    private static SKColor DefaultColorForKind(TypeEdgeKind kind) => kind switch
+    {
+        TypeEdgeKind.Inheritance => ColorEdgeInheritance,
+        TypeEdgeKind.Implements => ColorEdgeImplements,
+        _ => ColorEdgeAssociation,
+    };
 
-            float dx = toX - fromX;
-            float controlOffset = Math.Max(40, Math.Min(150, Math.Abs(dx) * 0.4f));
+    private static EdgeArrowheadStyle DefaultArrowForKind(TypeEdgeKind kind) => kind switch
+    {
+        TypeEdgeKind.Inheritance => EdgeArrowheadStyle.HollowTriangle,
+        TypeEdgeKind.Implements => EdgeArrowheadStyle.HollowTriangle,
+        _ => EdgeArrowheadStyle.SolidArrow,
+    };
+
+    private static SKColor? TryParseColor(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex)) return null;
+        if (hex.StartsWith("#") && hex.Length == 7
+            && SKColor.TryParse(hex, out var c))
+            return c;
+        return null;
+    }
+
+    /// <summary>
+    /// Draws a single edge using routed Points (polyline) when available, or
+    /// assigned port points (smooth bezier) otherwise. Renders the appropriate
+    /// arrowhead shape oriented along the final segment.
+    /// </summary>
+    private void DrawSingleEdgePath(
+        SKCanvas canvas,
+        GraphEdge edge,
+        Dictionary<GraphEdge, (Vector2 from, Vector2 to)> portMap,
+        (SKColor color, float strokeWidth, EdgeArrowheadStyle arrow) style,
+        bool isSelected)
+    {
+        float strokeWidth = style.strokeWidth + (isSelected ? 0.5f : 0f);
+        EdgeStrokePaint.Color = style.color;
+        EdgeStrokePaint.StrokeWidth = strokeWidth;
+        // Dashed for Implements (UML realization convention)
+        if (edge.Kind == TypeEdgeKind.Implements)
+            EdgeStrokePaint.PathEffect = SKPathEffect.CreateDash(new[] { 6f, 4f }, 0);
+        else
+            EdgeStrokePaint.PathEffect = null;
+
+        Vector2 from, to, arrowDir;
+
+        if (edge.Points.Count >= 2)
+        {
+            // Routed polyline — draw straight segments through all points.
+            var pts = edge.Points;
+            from = pts[0];
+            to = pts[pts.Count - 1];
+            arrowDir = pts.Count >= 2 ? (to - pts[pts.Count - 2]) : (to - from);
 
             using var path = new SKPath();
-            path.MoveTo(fromX, fromY);
-            path.CubicTo(fromX + controlOffset, fromY, toX - controlOffset, toY, toX, toY);
+            path.MoveTo(from.X, from.Y);
+            for (int i = 1; i < pts.Count; i++)
+                path.LineTo(pts[i].X, pts[i].Y);
+            canvas.DrawPath(path, EdgeStrokePaint);
+
+            if (!string.IsNullOrEmpty(edge.Label) && pts.Count >= 2)
+            {
+                int mid = pts.Count / 2;
+                var a = pts[mid - 1];
+                var b = pts[mid];
+                float mx = (a.X + b.X) * 0.5f;
+                float my = (a.Y + b.Y) * 0.5f;
+                canvas.DrawText(edge.Label, mx, my - 4, EdgeLabelPaint);
+            }
+        }
+        else
+        {
+            // No routed points — use assigned ports, draw a smooth bezier.
+            if (!portMap.TryGetValue(edge, out var ports))
+                return;
+            from = ports.from;
+            to = ports.to;
+            arrowDir = to - from;
+
+            float dx = to.X - from.X;
+            float dy = to.Y - from.Y;
+            float dist = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (dist < 0.001f) return;
+            float controlOffset = Math.Max(20, Math.Min(80, dist * 0.35f));
+            var nx = dx / dist;
+            var ny = dy / dist;
+
+            using var path = new SKPath();
+            path.MoveTo(from.X, from.Y);
+            path.CubicTo(
+                from.X + nx * controlOffset, from.Y + ny * controlOffset,
+                to.X - nx * controlOffset, to.Y - ny * controlOffset,
+                to.X, to.Y);
             canvas.DrawPath(path, EdgeStrokePaint);
 
             if (!string.IsNullOrEmpty(edge.Label))
             {
-                float midX = (fromX + toX) / 2;
-                float midY = (fromY + toY) / 2;
+                float midX = (from.X + to.X) * 0.5f;
+                float midY = (from.Y + to.Y) * 0.5f;
                 canvas.DrawText(edge.Label, midX, midY - 4, EdgeLabelPaint);
             }
-
-            DrawArrowhead(canvas, toX, toY, edgeColor);
         }
+
+        // Reset path effect so it doesn't leak into the arrowhead fill
+        EdgeStrokePaint.PathEffect = null;
+        DrawArrowhead(canvas, to.X, to.Y, arrowDir, style.color, style.arrow);
     }
 
     /// <summary>
@@ -365,18 +471,22 @@ public sealed class CanvasRenderer
 
     /// <summary>
     /// Draws a single node (and its connected edges) during drag operations.
+    /// Reuses <see cref="EdgePortAssigner"/> so drag-time edges also use
+    /// closest-perimeter ports with overlap spreading.
     /// </summary>
     public void DrawSingleNode(SKCanvas canvas, List<GraphEdge> edges, GraphNode node, ViewportState vp)
     {
         float x = node.X, y = node.Y, w = node.Width, h = node.Height;
 
-        // Draw connected edges first
-        foreach (var edge in edges)
-        {
-            if (edge.FromNode == null || edge.ToNode == null) continue;
-            bool connected = edge.FromNode.Id == node.Id || edge.ToNode.Id == node.Id;
-            if (!connected) continue;
+        // Draw connected edges first — only those touching this node.
+        var connectedEdges = edges
+            .Where(e => e.FromNode != null && e.ToNode != null
+                && (e.FromNode.Id == node.Id || e.ToNode.Id == node.Id))
+            .ToList();
+        var portMap = EdgePortAssigner.AssignPorts(connectedEdges);
 
+        foreach (var edge in connectedEdges)
+        {
             bool visible = edge.Kind switch
             {
                 TypeEdgeKind.Inheritance => vp.ShowInheritanceEdges,
@@ -386,31 +496,8 @@ public sealed class CanvasRenderer
             };
             if (!visible) continue;
 
-            SKColor edgeColor = edge.Kind switch
-            {
-                TypeEdgeKind.Inheritance => ColorEdgeInheritance,
-                TypeEdgeKind.Implements => ColorEdgeImplements,
-                _ => ColorEdgeAssociation
-            };
-            float strokeWidth = edge.Kind == TypeEdgeKind.Association ? 1.2f : 2.0f;
-
-            float fromX = edge.FromNode.X + edge.FromNode.Width;
-            float fromY = edge.FromNode.Y + edge.FromNode.Height / 2;
-            float toX = edge.ToNode.X;
-            float toY = edge.ToNode.Y + edge.ToNode.Height / 2;
-
-            EdgeStrokePaint.Color = edgeColor;
-            EdgeStrokePaint.StrokeWidth = strokeWidth;
-
-            float dx = toX - fromX;
-            float controlOffset = Math.Max(40, Math.Min(150, Math.Abs(dx) * 0.4f));
-
-            using var path = new SKPath();
-            path.MoveTo(fromX, fromY);
-            path.CubicTo(fromX + controlOffset, fromY, toX - controlOffset, toY, toX, toY);
-            canvas.DrawPath(path, EdgeStrokePaint);
-
-            DrawArrowhead(canvas, toX, toY, edgeColor);
+            var style = ResolveEdgeStyle(edge.Kind, vp);
+            DrawSingleEdgePath(canvas, edge, portMap, style, isSelected: IsEdgeHighlighted(edge, vp));
         }
 
         // Draw the node itself (with Design Mode selection support)
@@ -451,18 +538,101 @@ public sealed class CanvasRenderer
         }
     }
 
-    private static void DrawArrowhead(SKCanvas canvas, float x, float y, SKColor color)
+    /// <summary>
+    /// Draws an arrowhead of the given style at <paramref name="x"/>,<paramref name="y"/>,
+    /// oriented along <paramref name="direction"/> (the incoming edge tangent).
+    /// </summary>
+    private static void DrawArrowhead(SKCanvas canvas, float x, float y, Vector2 direction, SKColor color, EdgeArrowheadStyle style)
     {
-        float arrowLen = ArrowheadLength;
-        float arrowWidth = ArrowheadHalfWidth;
+        if (style == EdgeArrowheadStyle.None) return;
 
-        ArrowheadPaint.Color = color;
+        float len = direction.sqrMagnitude;
+        if (len < 0.0001f) return;
+        len = (float)Math.Sqrt(len);
+        float nx = direction.X / len; // unit direction (pointing INTO the target)
+        float ny = direction.Y / len;
+
+        // Perpendicular (for width)
+        float px = -ny;
+        float py = nx;
+
+        float aLen = ArrowheadLength;
+        float aHalf = ArrowheadHalfWidth;
+
+        // Tip is at (x, y). Base is aLen back along the incoming direction.
+        float baseX = x - nx * aLen;
+        float baseY = y - ny * aLen;
+        // Width corners: base ± perpendicular * aHalf
+        float w1X = baseX + px * aHalf;
+        float w1Y = baseY + py * aHalf;
+        float w2X = baseX - px * aHalf;
+        float w2Y = baseY - py * aHalf;
+
         var path = new SKPath();
         path.MoveTo(x, y);
-        path.LineTo(x - arrowLen, y - arrowWidth);
-        path.LineTo(x - arrowLen, y + arrowWidth);
+        path.LineTo(w1X, w1Y);
+        path.LineTo(w2X, w2Y);
         path.Close();
-        canvas.DrawPath(path, ArrowheadPaint);
+
+        switch (style)
+        {
+            case EdgeArrowheadStyle.HollowTriangle:
+                ArrowheadPaint.Color = color;
+                ArrowheadPaint.Style = SKPaintStyle.Stroke;
+                ArrowheadPaint.StrokeWidth = 1.5f;
+                canvas.DrawPath(path, ArrowheadPaint);
+                // Reset for next use
+                ArrowheadPaint.Style = SKPaintStyle.Fill;
+                break;
+            case EdgeArrowheadStyle.HollowDiamond:
+                // Diamond: tip + base + two side points twice as wide
+                float dHalf = aHalf * 1.6f;
+                float midX = baseX + nx * aLen * 0.5f;
+                float midY = baseY + ny * aLen * 0.5f;
+                float s1X = midX + px * dHalf;
+                float s1Y = midY + py * dHalf;
+                float s2X = midX - px * dHalf;
+                float s2Y = midY - py * dHalf;
+                float tailX = baseX - nx * aLen * 0.4f;
+                float tailY = baseY - ny * aLen * 0.4f;
+                var diamond = new SKPath();
+                diamond.MoveTo(x, y);
+                diamond.LineTo(s1X, s1Y);
+                diamond.LineTo(tailX, tailY);
+                diamond.LineTo(s2X, s2Y);
+                diamond.Close();
+                ArrowheadPaint.Color = color;
+                ArrowheadPaint.Style = SKPaintStyle.Stroke;
+                ArrowheadPaint.StrokeWidth = 1.5f;
+                canvas.DrawPath(diamond, ArrowheadPaint);
+                ArrowheadPaint.Style = SKPaintStyle.Fill;
+                break;
+            case EdgeArrowheadStyle.FilledDiamond:
+                dHalf = aHalf * 1.6f;
+                midX = baseX + nx * aLen * 0.5f;
+                midY = baseY + ny * aLen * 0.5f;
+                s1X = midX + px * dHalf;
+                s1Y = midY + py * dHalf;
+                s2X = midX - px * dHalf;
+                s2Y = midY - py * dHalf;
+                tailX = baseX - nx * aLen * 0.4f;
+                tailY = baseY - ny * aLen * 0.4f;
+                var filledDiamond = new SKPath();
+                filledDiamond.MoveTo(x, y);
+                filledDiamond.LineTo(s1X, s1Y);
+                filledDiamond.LineTo(tailX, tailY);
+                filledDiamond.LineTo(s2X, s2Y);
+                filledDiamond.Close();
+                ArrowheadPaint.Color = color;
+                ArrowheadPaint.Style = SKPaintStyle.Fill;
+                canvas.DrawPath(filledDiamond, ArrowheadPaint);
+                break;
+            default: // SolidArrow
+                ArrowheadPaint.Color = color;
+                ArrowheadPaint.Style = SKPaintStyle.Fill;
+                canvas.DrawPath(path, ArrowheadPaint);
+                break;
+        }
     }
 
     /// <summary>

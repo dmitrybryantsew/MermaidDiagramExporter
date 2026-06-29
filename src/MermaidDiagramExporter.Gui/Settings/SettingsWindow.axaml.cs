@@ -84,6 +84,7 @@ public partial class SettingsWindow : Window
         ShowMinimapCheck.IsChecked = _settings.ShowMinimap;
         UseCompoundEngineCheck.IsChecked = _settings.UseCompoundLayoutEngine;
         UseMsaglEngineCheck.IsChecked = _settings.UseMsaglEngine;
+        LoadEdgeStyleFields();
 
         _shortcutBindings = new Dictionary<string, string>(_settings.DesignShortcutBindings);
         LoadShortcutFields();
@@ -144,6 +145,7 @@ public partial class SettingsWindow : Window
         _settings.ShowMinimap = ShowMinimapCheck.IsChecked == true;
         _settings.UseCompoundLayoutEngine = UseCompoundEngineCheck.IsChecked == true;
         _settings.UseMsaglEngine = UseMsaglEngineCheck.IsChecked == true;
+        _settings.EdgeStyles = CollectEdgeStyles();
         _settings.StereotypeRules = _stereotypeRules.ToList();
 
         _settings.DesignShortcutBindings = CollectShortcutBindings();
@@ -176,6 +178,7 @@ public partial class SettingsWindow : Window
         ShowMinimapCheck.IsChecked = true;
         UseCompoundEngineCheck.IsChecked = false;
         UseMsaglEngineCheck.IsChecked = false;
+        ResetEdgeStyleFields();
     }
 
     private void OnRemoveStereotypeRule(object? sender, RoutedEventArgs e)
@@ -237,5 +240,47 @@ public partial class SettingsWindow : Window
         {
             targetTextBox.Text = path;
         }
+    }
+
+    // ── Edge style helpers ──
+
+    private void LoadEdgeStyleFields()
+    {
+        var styles = _settings.EdgeStyles ?? new EdgeStyleSettings();
+        SetStyleRow(InheritanceColorText, InheritanceArrowCombo, styles.Inheritance);
+        SetStyleRow(ImplementsColorText, ImplementsArrowCombo, styles.Implements);
+        SetStyleRow(AssociationColorText, AssociationArrowCombo, styles.Association);
+    }
+
+    private static void SetStyleRow(TextBox colorText, ComboBox arrowCombo, EdgeKindStyle style)
+    {
+        colorText.Text = style.ColorHex;
+        arrowCombo.SelectedIndex = (int)style.Arrowhead;
+    }
+
+    private EdgeStyleSettings CollectEdgeStyles()
+    {
+        var styles = new EdgeStyleSettings();
+        styles.Inheritance = ReadStyleRow(InheritanceColorText, InheritanceArrowCombo, styles.Inheritance);
+        styles.Implements = ReadStyleRow(ImplementsColorText, ImplementsArrowCombo, styles.Implements);
+        styles.Association = ReadStyleRow(AssociationColorText, AssociationArrowCombo, styles.Association);
+        return styles;
+    }
+
+    private static EdgeKindStyle ReadStyleRow(TextBox colorText, ComboBox arrowCombo, EdgeKindStyle fallback)
+    {
+        var hex = colorText.Text?.Trim() ?? "";
+        if (!hex.StartsWith("#") || hex.Length != 7) hex = fallback.ColorHex;
+        var arrowIdx = arrowCombo.SelectedIndex;
+        var arrow = arrowIdx >= 0 ? (EdgeArrowheadStyle)arrowIdx : fallback.Arrowhead;
+        return new EdgeKindStyle { ColorHex = hex, Arrowhead = arrow };
+    }
+
+    private void ResetEdgeStyleFields()
+    {
+        var defaults = new EdgeStyleSettings();
+        SetStyleRow(InheritanceColorText, InheritanceArrowCombo, defaults.Inheritance);
+        SetStyleRow(ImplementsColorText, ImplementsArrowCombo, defaults.Implements);
+        SetStyleRow(AssociationColorText, AssociationArrowCombo, defaults.Association);
     }
 }

@@ -951,6 +951,7 @@ public partial class MainWindow : Window
             _currentGraph = graph;
             _focusNavigationController.SetRootGraph(_currentGraph, _currentSettings.SourceFolderPath);
             _seedSelectionState.Clear();
+            GraphCanvasView.SetEdgeStyles(_currentSettings.EdgeStyles);
 
             // Phase 4: Update UI on the main thread (touches Avalonia controls)
             SetDisplayedGraph(_currentGraph);
@@ -1533,6 +1534,7 @@ public partial class MainWindow : Window
             // Apply settings that affect UI immediately
             if (MinimapView != null)
                 MinimapView.IsVisible = _currentSettings.ShowMinimap;
+            GraphCanvasView.SetEdgeStyles(_currentSettings.EdgeStyles);
         }
     }
 

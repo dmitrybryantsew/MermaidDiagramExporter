@@ -117,6 +117,9 @@ public class GraphCanvas : Control
     private bool _showImplementsEdges = true;
     private bool _showAssociationEdges = true;
 
+    // Per-kind edge visual style (color + arrowhead). Null = use renderer defaults.
+    private Settings.EdgeStyleSettings? _edgeStyles;
+
     // Search highlight color (bright yellow)
     private static readonly SKColor ColorNodeStrokeSearchMatch = new(0xFF, 0xE0, 0x40);
 
@@ -415,6 +418,17 @@ public class GraphCanvas : Control
     }
 
     /// <summary>
+    /// Sets the per-kind edge visual style (color + arrowhead). Null restores
+    /// built-in UML defaults. Triggers a re-render.
+    /// </summary>
+    public void SetEdgeStyles(Settings.EdgeStyleSettings? styles)
+    {
+        _edgeStyles = styles;
+        _staticContentDirty = true;
+        Invalidate();
+    }
+
+    /// <summary>
     /// Pans the canvas so the given node is centered in the viewport.
     /// </summary>
     public void CenterOnNode(GraphNode node)
@@ -474,6 +488,7 @@ public class GraphCanvas : Control
         SelectedDesignNodeIds = _designGraph != null ? _designSelectedNodeIds : null,
         HoveredDesignNodeIds = _designGraph != null ? _designHoveredNodeIds : null,
         IsDesignMode = _designGraph != null,
+        EdgeStyles = _edgeStyles,
     };
 
     private void ComputeContentBounds()
@@ -1102,4 +1117,11 @@ public class GraphEdge
     public bool IsStrongRelation { get; set; }
     public TypeEdgeKind Kind { get; set; } = TypeEdgeKind.Association;
     public string Label { get; set; } = "";
+
+    /// <summary>
+    /// Routed polyline points (start = source perimeter, end = target perimeter).
+    /// Empty for Design Mode edges that have no layout-engine routing — the
+    /// renderer falls back to computing closest-perimeter points dynamically.
+    /// </summary>
+    public IReadOnlyList<Vector2> Points { get; set; } = System.Array.Empty<Vector2>();
 }

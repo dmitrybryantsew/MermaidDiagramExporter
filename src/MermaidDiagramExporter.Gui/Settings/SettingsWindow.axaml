@@ -132,6 +132,42 @@
           <TextBlock Text="Backed by Microsoft Automatic Graph Layout (Sugiyama framework, same family as Mermaid's dagre). Native cluster containment + orthogonal routing. Takes precedence over the compound engine when on." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="20,2,0,0" />
           <CheckBox x:Name="UseCompoundEngineCheck" Content="Use compound layout engine (experimental)" Margin="0,8,0,0" />
           <TextBlock Text="Ranks all nodes globally with cluster-contiguity constraints. Ignored when MSAGL is enabled. Requires re-scan to take effect." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="20,2,0,0" />
+
+          <!-- Edge Styles -->
+          <TextBlock Text="Edge Styles" FontWeight="Bold" FontSize="16" Margin="0,16,0,0" />
+          <TextBlock Text="Per-kind color (hex) and arrowhead shape. UML defaults: inheritance/implements = hollow triangle, association = solid arrow." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,8" />
+
+          <Grid ColumnDefinitions="Auto,140,160" RowDefinitions="Auto,Auto,Auto" Margin="0,0,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Inheritance" VerticalAlignment="Center" Margin="0,0,12,4" />
+            <TextBox  Grid.Row="0" Grid.Column="1" x:Name="InheritanceColorText" Watermark="#RRGGBB" Margin="0,0,8,4" />
+            <ComboBox  Grid.Row="0" Grid.Column="2" x:Name="InheritanceArrowCombo" Margin="0,0,0,4">
+              <ComboBoxItem Content="Solid Arrow" />
+              <ComboBoxItem Content="Hollow Triangle" />
+              <ComboBoxItem Content="Hollow Diamond" />
+              <ComboBoxItem Content="Filled Diamond" />
+              <ComboBoxItem Content="None" />
+            </ComboBox>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Implements" VerticalAlignment="Center" Margin="0,0,12,4" />
+            <TextBox  Grid.Row="1" Grid.Column="1" x:Name="ImplementsColorText" Watermark="#RRGGBB" Margin="0,0,8,4" />
+            <ComboBox  Grid.Row="1" Grid.Column="2" x:Name="ImplementsArrowCombo" Margin="0,0,0,4">
+              <ComboBoxItem Content="Solid Arrow" />
+              <ComboBoxItem Content="Hollow Triangle" />
+              <ComboBoxItem Content="Hollow Diamond" />
+              <ComboBoxItem Content="Filled Diamond" />
+              <ComboBoxItem Content="None" />
+            </ComboBox>
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Association" VerticalAlignment="Center" Margin="0,0,12,4" />
+            <TextBox  Grid.Row="2" Grid.Column="1" x:Name="AssociationColorText" Watermark="#RRGGBB" Margin="0,0,8,4" />
+            <ComboBox  Grid.Row="2" Grid.Column="2" x:Name="AssociationArrowCombo" Margin="0,0,0,4">
+              <ComboBoxItem Content="Solid Arrow" />
+              <ComboBoxItem Content="Hollow Triangle" />
+              <ComboBoxItem Content="Hollow Diamond" />
+              <ComboBoxItem Content="Filled Diamond" />
+              <ComboBoxItem Content="None" />
+            </ComboBox>
+          </Grid>
         </StackPanel>
       </ScrollViewer>
 

@@ -83,19 +83,25 @@ public class LayoutEngine
             nodeMap[nd.Id] = node;
         }
 
+        var edgePointsByEdgeId = result.EdgePaths
+            .Where(p => !string.IsNullOrEmpty(p.EdgeId))
+            .ToDictionary(p => p.EdgeId, p => p.Points);
+
         var edges = new List<GraphEdge>();
         foreach (var e in graph.Edges)
         {
             if (nodeMap.TryGetValue(e.FromNodeId, out var from) &&
                 nodeMap.TryGetValue(e.ToNodeId, out var to))
             {
+                edgePointsByEdgeId.TryGetValue(Core.TypeEdgeData.CreateEdgeId(e.FromNodeId, e.ToNodeId, e.Kind), out var points);
                 edges.Add(new GraphEdge
                 {
                     FromNode = from,
                     ToNode = to,
                     Kind = e.Kind,
                     Label = e.Label ?? "",
-                    IsStrongRelation = e.Kind == Core.TypeEdgeKind.Inheritance || e.Kind == Core.TypeEdgeKind.Implements
+                    IsStrongRelation = e.Kind == Core.TypeEdgeKind.Inheritance || e.Kind == Core.TypeEdgeKind.Implements,
+                    Points = points ?? System.Array.Empty<Vector2>()
                 });
             }
         }

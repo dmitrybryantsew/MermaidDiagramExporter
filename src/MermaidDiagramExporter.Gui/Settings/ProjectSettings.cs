@@ -101,6 +101,12 @@ public sealed class ProjectSettings
     public bool UseMsaglEngine { get; set; } = false;
 
     /// <summary>
+    /// Per-kind edge visual style (color + arrowhead shape). Null = use built-in
+    /// UML defaults.
+    /// </summary>
+    public EdgeStyleSettings? EdgeStyles { get; set; } = null;
+
+    /// <summary>
     /// User-defined keyboard shortcut bindings for Design Mode tools.
     /// Keys are tool names (e.g. "Class", "EdgeInheritance"), values are key names
     /// (e.g. "C", "H"). Only bindings that differ from defaults need to be stored.
