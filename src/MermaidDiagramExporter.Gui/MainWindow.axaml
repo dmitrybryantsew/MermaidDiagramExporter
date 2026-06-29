@@ -80,9 +80,7 @@
           <!-- Namespace Focus -->
           <StackPanel Margin="8,0,8,4">
             <TextBlock Text="Namespace Focus" FontWeight="Bold" Margin="0,0,0,4"/>
-            <ComboBox x:Name="NamespaceFocusCombo" MinWidth="160" SelectionChanged="OnNamespaceFocusChanged" Margin="0,0,0,4">
-              <ComboBoxItem Content="(all namespaces)" IsSelected="True"/>
-            </ComboBox>
+            <ComboBox x:Name="NamespaceFocusCombo" MinWidth="160" SelectionChanged="OnNamespaceFocusChanged" Margin="0,0,0,4" />
             <WrapPanel Orientation="Horizontal">
               <CheckBox x:Name="ShowConnectedNamespacesCheck" Content="Show connected" Click="OnNamespaceFocusToggleChanged" Margin="0,0,8,0" Foreground="White" FontSize="11"/>
             </WrapPanel>

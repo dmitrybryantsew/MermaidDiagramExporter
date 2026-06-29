@@ -57,6 +57,7 @@ public partial class MainWindow : Window
     private int _focusDepth = 1;
     private string _currentSelectedNodeId = string.Empty;
     private int _namespaceFocusDepth = 1;
+    private bool _isPopulatingNamespaceCombo;
 
     public ProjectSettings CurrentSettings => _currentSettings;
 
@@ -961,12 +962,12 @@ public partial class MainWindow : Window
             _currentSettings = _settingsService.LoadSettings(graph.Metadata.SourceDescription);
             _currentGraph = graph;
             _focusNavigationController.SetRootGraph(_currentGraph, _currentSettings.SourceFolderPath);
-            PopulateNamespaceFocusDropdown(_currentGraph);
             _seedSelectionState.Clear();
             GraphCanvasView.SetEdgeStyles(_currentSettings.EdgeStyles);
 
             // Phase 4: Update UI on the main thread (touches Avalonia controls)
             SetDisplayedGraph(_currentGraph);
+            PopulateNamespaceFocusDropdown(_currentGraph);
             GraphCanvasView.WaitForRender();
             UpdateStats(_currentGraph);
 
@@ -1274,11 +1275,13 @@ public partial class MainWindow : Window
 
     private void PopulateNamespaceFocusDropdown(Core.TypeGraph? graph)
     {
+        _isPopulatingNamespaceCombo = true;
         var namespaces = NamespaceFocusHelper.GetTopLevelNamespaces(graph);
         var items = new List<string> { "(all namespaces)" };
         items.AddRange(namespaces);
         NamespaceFocusCombo.ItemsSource = items;
         NamespaceFocusCombo.SelectedIndex = 0;
+        _isPopulatingNamespaceCombo = false;
     }
 
     private void OnNamespaceFocusChanged(object? sender, SelectionChangedEventArgs e)
@@ -1297,6 +1300,7 @@ public partial class MainWindow : Window
 
     private void ApplyNamespaceFocus()
     {
+        if (_isPopulatingNamespaceCombo) return;
         if (_currentGraph == null) return;
         if (NamespaceFocusCombo.SelectedIndex <= 0)
         {
