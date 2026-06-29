@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -19,14 +20,20 @@ public static class NamespaceFocusHelper
     {
         if (graph == null || graph.Nodes.Count == 0) return new();
 
+        // Collect namespace segment arrays, filtering out empty/global namespaces
+        // that would break the common-prefix detection.
         var allParts = graph.Nodes
-            .Select(n => (n.Namespace ?? "").Split('.'))
+            .Select(n => n.Namespace ?? "")
+            .Where(ns => !string.IsNullOrWhiteSpace(ns)
+                         && !ns.Equals("global namespace", StringComparison.OrdinalIgnoreCase)
+                         && !ns.Equals("global", StringComparison.OrdinalIgnoreCase))
+            .Select(ns => ns.Split('.'))
             .Where(parts => parts.Length > 0 && !string.IsNullOrEmpty(parts[0]))
             .ToList();
 
         if (allParts.Count == 0) return new();
 
-        // Find longest common prefix
+        // Find longest common prefix across all real namespaces.
         int prefixLen = 0;
         int minLen = allParts.Min(p => p.Length);
         for (int i = 0; i < minLen; i++)
@@ -36,7 +43,7 @@ public static class NamespaceFocusHelper
             prefixLen++;
         }
 
-        // Group by prefix + next segment
+        // Group by prefix + next segment (e.g. PFE + Character = PFE.Character)
         var seen = new HashSet<string>();
         var result = new List<string>();
         foreach (var parts in allParts)
@@ -44,10 +51,8 @@ public static class NamespaceFocusHelper
             string key;
             if (parts.Length > prefixLen)
                 key = string.Join('.', parts, 0, prefixLen + 1);
-            else if (parts.Length > 0)
-                key = string.Join('.', parts);
             else
-                continue;
+                key = string.Join('.', parts);
 
             if (seen.Add(key))
                 result.Add(key);
