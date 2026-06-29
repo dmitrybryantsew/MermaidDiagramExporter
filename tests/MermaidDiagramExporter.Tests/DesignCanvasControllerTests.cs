@@ -498,4 +498,134 @@ public class DesignCanvasControllerTests
         Assert.Single(graph.Edges);
         Assert.Equal(EdgeKind.Composition, graph.Edges[0].Kind);
     }
+
+    // ── Undo/Redo for all mutation types ──
+
+    [Fact]
+    public void AddClass_IsUndoable()
+    {
+        var graph = new DesignGraph();
+        var controller = CreateController();
+        controller.ArmTool(DesignTool.Class, sticky: false);
+        controller.HandlePointerPressed(new SKPoint(200, 200), graph, new System.Collections.Generic.List<SKPoint>());
+
+        Assert.Single(graph.Classes);
+        var classId = graph.Classes[0].Id;
+
+        Assert.True(controller.Undo(graph));
+        Assert.Empty(graph.Classes);
+
+        Assert.True(controller.Redo(graph));
+        Assert.Single(graph.Classes);
+        Assert.Equal(classId, graph.Classes[0].Id);
+    }
+
+    [Fact]
+    public void AddEdge_IsUndoable()
+    {
+        var graph = new DesignGraph();
+        graph.Classes.Add(new DesignClass { Id = "a", Name = "A", X = 100, Y = 100, Width = 200, Height = 100 });
+        graph.Classes.Add(new DesignClass { Id = "b", Name = "B", X = 400, Y = 100, Width = 200, Height = 100 });
+        var controller = CreateController();
+
+        controller.AddEdge(graph, "a", "b", EdgeKind.Inheritance);
+        Assert.Single(graph.Edges);
+        var edgeId = graph.Edges[0].Id;
+
+        Assert.True(controller.Undo(graph));
+        Assert.Empty(graph.Edges);
+
+        Assert.True(controller.Redo(graph));
+        Assert.Single(graph.Edges);
+        Assert.Equal(edgeId, graph.Edges[0].Id);
+    }
+
+    [Fact]
+    public void DeleteClass_IsUndoable()
+    {
+        var graph = new DesignGraph();
+        graph.Classes.Add(new DesignClass { Id = "a", Name = "A", X = 100, Y = 100, Width = 200, Height = 100 });
+        graph.Classes.Add(new DesignClass { Id = "b", Name = "B", X = 400, Y = 100, Width = 200, Height = 100 });
+        graph.Edges.Add(new DesignEdge { FromClassId = "a", ToClassId = "b", Kind = EdgeKind.Association });
+        var controller = CreateController();
+        controller.SelectById("a");
+
+        controller.HandleDeleteKey(graph);
+        Assert.Single(graph.Classes);
+        Assert.Empty(graph.Edges);
+
+        Assert.True(controller.Undo(graph));
+        Assert.Equal(2, graph.Classes.Count);
+        Assert.Single(graph.Edges);
+    }
+
+    [Fact]
+    public void RemoveEdge_IsUndoable()
+    {
+        var graph = new DesignGraph();
+        graph.Classes.Add(new DesignClass { Id = "a", Name = "A", X = 100, Y = 100, Width = 200, Height = 100 });
+        graph.Classes.Add(new DesignClass { Id = "b", Name = "B", X = 400, Y = 100, Width = 200, Height = 100 });
+        var controller = CreateController();
+        controller.AddEdge(graph, "a", "b", EdgeKind.Association);
+        var edgeId = graph.Edges[0].Id;
+
+        controller.RemoveEdge(graph, edgeId);
+        Assert.Empty(graph.Edges);
+
+        Assert.True(controller.Undo(graph));
+        Assert.Single(graph.Edges);
+        Assert.Equal("a", graph.Edges[0].FromClassId);
+    }
+
+    [Fact]
+    public void AddMember_IsUndoable()
+    {
+        var graph = new DesignGraph();
+        graph.Classes.Add(new DesignClass { Id = "a", Name = "A", X = 100, Y = 100, Width = 200, Height = 100 });
+        var controller = CreateController();
+        controller.SelectById("a");
+
+        controller.AddMemberToSelectedClass(graph, MemberKind.Field);
+        Assert.Single(graph.Classes[0].Members);
+
+        Assert.True(controller.Undo(graph));
+        Assert.Empty(graph.Classes[0].Members);
+
+        Assert.True(controller.Redo(graph));
+        Assert.Single(graph.Classes[0].Members);
+    }
+
+    [Fact]
+    public void RemoveMember_IsUndoable()
+    {
+        var graph = new DesignGraph();
+        var cls = new DesignClass { Id = "a", Name = "A", X = 100, Y = 100, Width = 200, Height = 100 };
+        cls.Members.Add(new DesignMember { Name = "Foo", TypeName = "int", Kind = MemberKind.Field, Visibility = Visibility.Public });
+        graph.Classes.Add(cls);
+        var controller = CreateController();
+
+        controller.RemoveMember(graph, "a", 0);
+        Assert.Empty(graph.Classes[0].Members);
+
+        Assert.True(controller.Undo(graph));
+        Assert.Single(graph.Classes[0].Members);
+        Assert.Equal("Foo", graph.Classes[0].Members[0].Name);
+    }
+
+    [Fact]
+    public void ChangeEdgeType_IsUndoable()
+    {
+        var graph = new DesignGraph();
+        graph.Classes.Add(new DesignClass { Id = "a", Name = "A", X = 100, Y = 100, Width = 200, Height = 100 });
+        graph.Classes.Add(new DesignClass { Id = "b", Name = "B", X = 400, Y = 100, Width = 200, Height = 100 });
+        var controller = CreateController();
+        controller.AddEdge(graph, "a", "b", EdgeKind.Association);
+        var edgeId = graph.Edges[0].Id;
+
+        controller.ChangeEdgeType(graph, edgeId, EdgeKind.Inheritance);
+        Assert.Equal(EdgeKind.Inheritance, graph.Edges[0].Kind);
+
+        Assert.True(controller.Undo(graph));
+        Assert.Equal(EdgeKind.Association, graph.Edges[0].Kind);
+    }
 }

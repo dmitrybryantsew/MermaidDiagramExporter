@@ -1773,9 +1773,9 @@ public partial class MainWindow : Window
                 InspectorKindCombo.SelectionChanged += OnInspectorKindChanged;
             }
 
-            // Populate member list — use a wrapper that exposes DisplayText
+            // Populate member list — editable rows with class ID for commit-back
             InspectorMembersList.ItemsSource = _inspectorVm.SelectedClass?.Members
-                .Select((m, i) => new MemberRow(FormatMember(m), i))
+                .Select((m, i) => new MemberRow(_inspectorVm.SelectedClass.Id, m, i))
                 .ToList();
 
             // Populate relations lists
@@ -1797,21 +1797,8 @@ public partial class MainWindow : Window
 
         UpdateStatusBar();
     }
-    private static string FormatMember(DesignMember m)
-    {
-        string vis = m.Visibility switch
-        {
-            Visibility.Public => "+",
-            Visibility.Private => "-",
-            Visibility.Protected => "#",
-            Visibility.Internal => "~",
-            _ => "+"
-        };
-        string typeStr = string.IsNullOrEmpty(m.TypeName) ? "" : $" : {m.TypeName}";
-        return $"{vis} {m.Name}{typeStr}";
-    }
 
-    /// <summary>Inspector name field — commits via RenameClass command (undoable).</summary>
+
     private void OnInspectorNameLostFocus(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_designGraph == null || _inspectorVm?.SelectedClass == null) return;
@@ -1852,6 +1839,72 @@ public partial class MainWindow : Window
         if (sender is not Avalonia.Controls.Button btn) return;
         if (btn.Tag is not MemberRow row) return;
         _designCanvasController.RemoveMember(_designGraph, _inspectorVm.SelectedClass.Id, row.Index);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Cycles member visibility on badge click.</summary>
+    private void OnInspectorCycleVisibility(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null || _inspectorVm?.SelectedClass == null) return;
+        if (sender is not Avalonia.Controls.Button btn) return;
+        if (btn.Tag is not MemberRow row) return;
+        _designCanvasController.CycleMemberVisibility(_designGraph, row.ClassId, row.Index);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Commits member name change on focus loss.</summary>
+    private void OnInspectorMemberNameChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null || _inspectorVm?.SelectedClass == null) return;
+        if (sender is not Avalonia.Controls.TextBox tb) return;
+        if (tb.Tag is not MemberRow row) return;
+        var newName = tb.Text?.Trim() ?? "";
+        if (string.IsNullOrEmpty(newName)) return;
+        _designCanvasController.RenameMember(_designGraph, row.ClassId, row.Index, newName);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Commits member type change on focus loss.</summary>
+    private void OnInspectorMemberTypeChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null || _inspectorVm?.SelectedClass == null) return;
+        if (sender is not Avalonia.Controls.TextBox tb) return;
+        if (tb.Tag is not MemberRow row) return;
+        var newType = tb.Text?.Trim() ?? "";
+        if (string.IsNullOrEmpty(newType)) return;
+        _designCanvasController.ChangeMemberType(_designGraph, row.ClassId, row.Index, newType);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Adds a field to the selected class via inspector button.</summary>
+    private void OnInspectorAddField(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        _designCanvasController.AddMemberToSelectedClass(_designGraph, MemberKind.Field);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Adds a property to the selected class via inspector button.</summary>
+    private void OnInspectorAddProperty(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        _designCanvasController.AddMemberToSelectedClass(_designGraph, MemberKind.Property);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Adds a method to the selected class via inspector button.</summary>
+    private void OnInspectorAddMethod(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        _designCanvasController.AddMemberToSelectedClass(_designGraph, MemberKind.Method);
+        RenderDesignModeGraph();
+    }
+
+    /// <summary>Adds a constructor to the selected class via inspector button.</summary>
+    private void OnInspectorAddConstructor(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        _designCanvasController.AddMemberToSelectedClass(_designGraph, MemberKind.Constructor);
         RenderDesignModeGraph();
     }
 

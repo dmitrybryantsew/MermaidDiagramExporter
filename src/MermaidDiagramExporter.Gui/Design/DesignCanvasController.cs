@@ -58,6 +58,11 @@ public sealed class DesignCanvasController
     private SKPoint _resizeStartWorld;
     private float _resizeStartWidth;
     private float _resizeStartHeight;
+    // Capture the class ID and original position at drag/resize start for undo
+    private string? _dragStartClassId;
+    private string? _resizeStartClassId;
+    private float _resizeStartRectX;
+    private float _resizeStartRectY;
     private EdgeKind _defaultEdgeKind = EdgeKind.Association;
 
     // ── Tool state (UIContract §4) ──
@@ -437,16 +442,50 @@ public sealed class DesignCanvasController
     /// </summary>
     public void HandlePointerReleased(DesignGraph? graph, SKPoint worldPos)
     {
-        if (_draggingRectangle != null)
+        if (_draggingRectangle != null && graph != null && _dragStartClassId != null)
+        {
+            // Create undo command for the completed drag
+            var cls = graph.Classes.FirstOrDefault(c => c.Id == _dragStartClassId);
+            if (cls != null)
+            {
+                UndoManager.Execute(
+                    new DesignCommands.MoveClass(_dragStartClassId,
+                        _dragStartRectX, _dragStartRectY, cls.X, cls.Y),
+                    graph);
+            }
+            _draggingRectangle.IsDragging = false;
+            _draggingRectangle = null;
+            _dragStartClassId = null;
+            GraphMutated?.Invoke(this, EventArgs.Empty);
+        }
+        else if (_draggingRectangle != null)
         {
             _draggingRectangle.IsDragging = false;
             _draggingRectangle = null;
+            _dragStartClassId = null;
             GraphMutated?.Invoke(this, EventArgs.Empty);
         }
-        if (_resizingRectangle != null)
+        if (_resizingRectangle != null && graph != null && _resizeStartClassId != null)
+        {
+            // Create undo command for the completed resize
+            var cls = graph.Classes.FirstOrDefault(c => c.Id == _resizeStartClassId);
+            if (cls != null)
+            {
+                UndoManager.Execute(
+                    new DesignCommands.ResizeClass(_resizeStartClassId,
+                        _resizeStartWidth, _resizeStartHeight, cls.Width, cls.Height),
+                    graph);
+            }
+            _resizingRectangle.IsResizing = false;
+            _resizingRectangle = null;
+            _resizeStartClassId = null;
+            GraphMutated?.Invoke(this, EventArgs.Empty);
+        }
+        else if (_resizingRectangle != null)
         {
             _resizingRectangle.IsResizing = false;
             _resizingRectangle = null;
+            _resizeStartClassId = null;
             GraphMutated?.Invoke(this, EventArgs.Empty);
         }
         if (_edgeSourceRectangle != null)
@@ -546,10 +585,12 @@ public sealed class DesignCanvasController
         if (_selectedClassIds.Count == 0) return false;
         var toRemove = _selectedClassIds.ToList();
 
-        // Remove edges that reference any removed class
-        graph.Edges.RemoveAll(e => toRemove.Contains(e.FromClassId) || toRemove.Contains(e.ToClassId));
-        // Remove the classes themselves
-        graph.Classes.RemoveAll(c => toRemove.Contains(c.Id));
+        // Push each removal through the undo manager so it's undoable
+        foreach (var classId in toRemove)
+        {
+            var cmd = new DesignCommands.RemoveClass(graph, classId);
+            UndoManager.Execute(cmd, graph);
+        }
 
         _selectedClassIds.Clear();
         UpdateSelection();
@@ -598,7 +639,7 @@ public sealed class DesignCanvasController
         if (kind == MemberKind.Constructor)
             member.TypeName = "";
 
-        cls.Members.Add(member);
+        UndoManager.Execute(new DesignCommands.AddMember(cls.Id, member), graph);
         GraphMutated?.Invoke(this, EventArgs.Empty);
         return member;
     }
@@ -612,7 +653,7 @@ public sealed class DesignCanvasController
         if (cls == null) return false;
         if (memberIndex < 0 || memberIndex >= cls.Members.Count) return false;
 
-        cls.Members.RemoveAt(memberIndex);
+        UndoManager.Execute(new DesignCommands.RemoveMember(graph, classId, memberIndex), graph);
         GraphMutated?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -627,7 +668,9 @@ public sealed class DesignCanvasController
         if (memberIndex < 0 || memberIndex >= cls.Members.Count) return false;
         if (string.IsNullOrWhiteSpace(newName)) return false;
 
-        cls.Members[memberIndex].Name = newName;
+        var member = cls.Members[memberIndex];
+        if (member.Name == newName) return false;
+        UndoManager.Execute(new DesignCommands.RenameMember(classId, member.Id, member.Name, newName), graph);
         GraphMutated?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -642,7 +685,9 @@ public sealed class DesignCanvasController
         if (memberIndex < 0 || memberIndex >= cls.Members.Count) return false;
         if (string.IsNullOrWhiteSpace(newType)) return false;
 
-        cls.Members[memberIndex].TypeName = newType;
+        var member = cls.Members[memberIndex];
+        if (member.TypeName == newType) return false;
+        UndoManager.Execute(new DesignCommands.ChangeMemberType(classId, member.Id, member.TypeName ?? "", newType), graph);
         GraphMutated?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -657,7 +702,7 @@ public sealed class DesignCanvasController
         if (memberIndex < 0 || memberIndex >= cls.Members.Count) return false;
 
         var member = cls.Members[memberIndex];
-        member.Visibility = member.Visibility switch
+        var newVis = member.Visibility switch
         {
             Visibility.Public => Visibility.Private,
             Visibility.Private => Visibility.Protected,
@@ -665,6 +710,7 @@ public sealed class DesignCanvasController
             Visibility.Internal => Visibility.Public,
             _ => Visibility.Public
         };
+        UndoManager.Execute(new DesignCommands.CycleMemberVisibility(classId, member.Id, member.Visibility, newVis), graph);
         GraphMutated?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -682,8 +728,7 @@ public sealed class DesignCanvasController
         if (newIndex < 0 || newIndex >= cls.Members.Count) return false;
 
         var member = cls.Members[memberIndex];
-        cls.Members.RemoveAt(memberIndex);
-        cls.Members.Insert(newIndex, member);
+        UndoManager.Execute(new DesignCommands.MoveMember(classId, member.Id, memberIndex, newIndex), graph);
         GraphMutated?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -753,6 +798,7 @@ public sealed class DesignCanvasController
         _dragStartWorld = worldPos;
         _dragStartRectX = rect.X;
         _dragStartRectY = rect.Y;
+        _dragStartClassId = rect.ClassId;
         rect.IsDragging = true;
     }
 
@@ -762,6 +808,9 @@ public sealed class DesignCanvasController
         _resizeStartWorld = worldPos;
         _resizeStartWidth = rect.Width;
         _resizeStartHeight = rect.Height;
+        _resizeStartClassId = rect.ClassId;
+        _resizeStartRectX = rect.X;
+        _resizeStartRectY = rect.Y;
         rect.IsResizing = true;
     }
 
@@ -796,12 +845,13 @@ public sealed class DesignCanvasController
         if (!classIds.Contains(fromClassId)) return false;
         if (!classIds.Contains(toClassId)) return false;
 
-        graph.Edges.Add(new DesignEdge
+        var edge = new DesignEdge
         {
             FromClassId = fromClassId,
             ToClassId = toClassId,
             Kind = kind
-        });
+        };
+        UndoManager.Execute(new DesignCommands.AddEdge(edge), graph);
         GraphMutated?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -811,13 +861,11 @@ public sealed class DesignCanvasController
     /// </summary>
     public bool RemoveEdge(DesignGraph graph, string edgeId)
     {
-        int removed = graph.Edges.RemoveAll(e => e.Id == edgeId);
-        if (removed > 0)
-        {
-            GraphMutated?.Invoke(this, EventArgs.Empty);
-            return true;
-        }
-        return false;
+        var edge = graph.Edges.FirstOrDefault(e => e.Id == edgeId);
+        if (edge == null) return false;
+        UndoManager.Execute(new DesignCommands.RemoveEdge(graph, edgeId), graph);
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
     }
 
     /// <summary>
@@ -827,7 +875,9 @@ public sealed class DesignCanvasController
     {
         var edge = graph.Edges.FirstOrDefault(e => e.Id == edgeId);
         if (edge == null) return false;
-        edge.Kind = newKind;
+        if (edge.Kind == newKind) return false;
+        var cmd = new DesignCommands.ChangeEdgeType(edgeId, edge.Kind, newKind);
+        UndoManager.Execute(cmd, graph);
         GraphMutated?.Invoke(this, EventArgs.Empty);
         return true;
     }
@@ -923,7 +973,9 @@ public sealed class DesignCanvasController
             Width = 200f,
             Height = 60f
         };
-        graph.Classes.Add(newClass);
+
+        // Push through undo manager so class creation is undoable
+        UndoManager.Execute(new DesignCommands.AddClass(newClass), graph);
         _selectedClassIds.Clear();
         _selectedClassIds.Add(newClass.Id);
         UpdateSelection();
