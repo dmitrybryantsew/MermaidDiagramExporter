@@ -84,6 +84,7 @@ public partial class SettingsWindow : Window
         ShowMinimapCheck.IsChecked = _settings.ShowMinimap;
         UseCompoundEngineCheck.IsChecked = _settings.UseCompoundLayoutEngine;
         UseMsaglEngineCheck.IsChecked = _settings.UseMsaglEngine;
+        SeparateAppAndTestsCheck.IsChecked = _settings.SeparateAppAndTests;
         LoadEdgeStyleFields();
 
         _shortcutBindings = new Dictionary<string, string>(_settings.DesignShortcutBindings);
@@ -145,6 +146,7 @@ public partial class SettingsWindow : Window
         _settings.ShowMinimap = ShowMinimapCheck.IsChecked == true;
         _settings.UseCompoundLayoutEngine = UseCompoundEngineCheck.IsChecked == true;
         _settings.UseMsaglEngine = UseMsaglEngineCheck.IsChecked == true;
+        _settings.SeparateAppAndTests = SeparateAppAndTestsCheck.IsChecked == true;
         _settings.EdgeStyles = CollectEdgeStyles();
         _settings.StereotypeRules = _stereotypeRules.ToList();
 
@@ -178,6 +180,7 @@ public partial class SettingsWindow : Window
         ShowMinimapCheck.IsChecked = true;
         UseCompoundEngineCheck.IsChecked = false;
         UseMsaglEngineCheck.IsChecked = false;
+        SeparateAppAndTestsCheck.IsChecked = false;
         ResetEdgeStyleFields();
     }
 

@@ -1019,7 +1019,8 @@ public partial class MainWindow : Window
         _layoutEngine.LayoutOptions = new LayoutOptions
         {
             UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
-            UseMsaglEngine = _currentSettings.UseMsaglEngine
+            UseMsaglEngine = _currentSettings.UseMsaglEngine,
+            SeparateAppAndTests = _currentSettings.SeparateAppAndTests,
         };
         AutoRedrawCheck.IsChecked = _currentSettings.AutoRedrawEdges;
 

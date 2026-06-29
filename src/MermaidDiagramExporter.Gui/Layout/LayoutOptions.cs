@@ -58,4 +58,12 @@ public sealed class LayoutOptions
     /// is ignored and the MSAGL engine runs instead.
     /// </summary>
     public bool UseMsaglEngine { get; set; } = false;
+
+    /// <summary>
+    /// When true (MSAGL engine only), creates two synthetic top-level clusters
+    /// — "Application" and "Tests" — and re-parents namespace clusters under
+    /// them based on namespace pattern matching (e.g. *.Tests, *.Test).
+    /// Produces a left/right visual separation of app vs test classes.
+    /// </summary>
+    public bool SeparateAppAndTests { get; set; } = false;
 }

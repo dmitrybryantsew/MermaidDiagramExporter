@@ -29,6 +29,13 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
         var realNodes = graph.Nodes.Where(n => n.Role == LayoutNodeRole.Real).ToList();
         if (realNodes.Count == 0) return new LayoutResult();
 
+        // When SeparateAppAndTests is on, build a modified cluster list with two
+        // synthetic top-level clusters ("Application" and "Tests") and re-parent
+        // existing namespace clusters under them. MSAGL will lay them out as
+        // separate regions with proper spacing + cross-cluster edge routing.
+        var originalClusterIds = new HashSet<string>(graph.Clusters.Select(c => c.Id));
+        var clusters = PartitionClustersIfEnabled(graph, options);
+
         // ── Build MSAGL GeometryGraph ──
         var geomGraph = new GeometryGraph();
         geomGraph.RootCluster.UserData = "root";
@@ -47,7 +54,7 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
 
         // Map our cluster Id → MSAGL Cluster, wire containment
         var msaglClusterById = new Dictionary<string, Cluster>();
-        foreach (var lc in graph.Clusters)
+        foreach (var lc in clusters)
         {
             var cluster = new Cluster { UserData = lc.Id };
             msaglClusterById[lc.Id] = cluster;
@@ -61,12 +68,12 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
         }
 
         // Wire cluster hierarchy (parent → child clusters) and attach to root
-        var childClusterIdsByParent = graph.Clusters
+        var childClusterIdsByParent = clusters
             .Where(c => !string.IsNullOrEmpty(c.ParentClusterId))
             .GroupBy(c => c.ParentClusterId!)
             .ToDictionary(g => g.Key, g => g.Select(c => c.Id).ToList());
 
-        foreach (var lc in graph.Clusters)
+        foreach (var lc in clusters)
         {
             var cluster = msaglClusterById[lc.Id];
             if (childClusterIdsByParent.TryGetValue(lc.Id, out var childIds))
@@ -80,7 +87,7 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
         }
 
         // Top-level clusters (no parent) attach to RootCluster
-        foreach (var lc in graph.Clusters)
+        foreach (var lc in clusters)
         {
             if (string.IsNullOrEmpty(lc.ParentClusterId))
                 geomGraph.RootCluster.AddChild(msaglClusterById[lc.Id]);
@@ -180,5 +187,75 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
             ClusterBounds = clusterBounds,
             ContentSize = new Vector2(finalW, finalH),
         };
+    }
+
+    // ── App/Test partitioning ──
+
+    private const string AppClusterId = "__App";
+    private const string TestClusterId = "__Tests";
+
+    /// <summary>
+    /// When SeparateAppAndTests is enabled, creates two synthetic top-level
+    /// clusters and re-parents existing namespace clusters under them based
+    /// on namespace pattern matching. Returns the (possibly modified) cluster
+    /// list for MSAGL graph building.
+    /// </summary>
+    private List<LayoutCluster> PartitionClustersIfEnabled(LayoutGraph graph, LayoutOptions options)
+    {
+        var clusters = new List<LayoutCluster>(graph.Clusters);
+
+        if (!options.SeparateAppAndTests || clusters.Count == 0)
+            return clusters;
+
+        // Don't partition if there's only a fallback "Ungrouped" cluster
+        if (clusters.Count == 1 && clusters[0].Id == "fallback")
+            return clusters;
+
+        var appCluster = new LayoutCluster
+        {
+            Id = AppClusterId,
+            Label = "Application",
+            Kind = MermaidDiagramExporter.Core.TypeGroupKind.Assembly,
+        };
+        var testCluster = new LayoutCluster
+        {
+            Id = TestClusterId,
+            Label = "Tests",
+            Kind = MermaidDiagramExporter.Core.TypeGroupKind.Assembly,
+        };
+
+        foreach (var lc in clusters)
+        {
+            // Skip synthetic clusters themselves (in case of re-runs)
+            if (lc.Id == AppClusterId || lc.Id == TestClusterId) continue;
+
+            lc.ParentClusterId = IsTestNamespace(lc.Label) ? TestClusterId : AppClusterId;
+        }
+
+        clusters.Add(appCluster);
+        clusters.Add(testCluster);
+        return clusters;
+    }
+
+    /// <summary>
+    /// Detects whether a namespace label indicates a test namespace.
+    /// Matches: *.Tests, *.Test, *.Tests.*, *.Test.*, Tests, Test
+    /// </summary>
+    private static bool IsTestNamespace(string ns)
+    {
+        if (string.IsNullOrWhiteSpace(ns)) return false;
+        var parts = ns.Split('.');
+        foreach (var part in parts)
+        {
+            if (string.Equals(part, "Tests", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(part, "Test", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(part, "TestSuite", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(part, "Specs", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(part, "Specification", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 }

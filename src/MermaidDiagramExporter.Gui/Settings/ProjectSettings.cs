@@ -101,6 +101,13 @@ public sealed class ProjectSettings
     public bool UseMsaglEngine { get; set; } = false;
 
     /// <summary>
+    /// When true (MSAGL engine only), partitions classes into "Application" and
+    /// "Tests" top-level clusters based on namespace patterns. Produces a
+    /// left/right visual separation.
+    /// </summary>
+    public bool SeparateAppAndTests { get; set; } = false;
+
+    /// <summary>
     /// When true, edges are re-routed automatically after node/cluster drag
     /// (and after Design Mode mutations). When false, press Ctrl+R to redraw.
     /// Default true for testing; can be disabled if re-routing is too slow.

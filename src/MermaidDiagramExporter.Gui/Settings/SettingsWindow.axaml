@@ -130,6 +130,8 @@
           <TextBlock Text="Experimental" FontWeight="Bold" FontSize="16" Margin="0,16,0,0" Foreground="#FFA040" />
           <CheckBox x:Name="UseMsaglEngineCheck" Content="Use MSAGL layout engine (prototype)" />
           <TextBlock Text="Backed by Microsoft Automatic Graph Layout (Sugiyama framework, same family as Mermaid's dagre). Native cluster containment + orthogonal routing. Takes precedence over the compound engine when on." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="20,2,0,0" />
+          <CheckBox x:Name="SeparateAppAndTestsCheck" Content="Separate app / test classes (MSAGL only)" Margin="0,8,0,0" />
+          <TextBlock Text="Creates two top-level clusters — Application and Tests — based on namespace patterns (*.Tests, *.Test). Produces a left/right visual separation." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="20,2,0,0" />
           <CheckBox x:Name="UseCompoundEngineCheck" Content="Use compound layout engine (experimental)" Margin="0,8,0,0" />
           <TextBlock Text="Ranks all nodes globally with cluster-contiguity constraints. Ignored when MSAGL is enabled. Requires re-scan to take effect." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="20,2,0,0" />
 
