@@ -266,15 +266,18 @@ public class GraphCanvas : Control
         Invalidate();
     }
 
-    public void SetGraph(List<GraphNode> nodes, List<GraphEdge> edges)
+    public void SetGraph(List<GraphNode> nodes, List<GraphEdge> edges, bool preserveViewport = false)
     {
         _nodes = nodes;
         _edges = edges;
         _selectedNode = null;
         _hoveredNode = null;
-        _fitToScreenOnNextRender = true;
         _staticContentDirty = true;
-        FitToScreen();
+        if (!preserveViewport)
+        {
+            _fitToScreenOnNextRender = true;
+            FitToScreen();
+        }
         Invalidate();
     }
 

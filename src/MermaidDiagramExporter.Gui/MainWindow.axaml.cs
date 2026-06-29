@@ -155,7 +155,8 @@ public partial class MainWindow : Window
     /// canvas. Called on mode entry and after every mutation (via
     /// <see cref="OnDesignGraphMutated"/>).
     /// </summary>
-    private void RenderDesignModeGraph()
+    /// <param name="preserveViewport">If true, keeps the current pan/zoom instead of fitting to screen.</param>
+    private void RenderDesignModeGraph(bool preserveViewport = false)
     {
         if (_designGraph == null) return;
         if (_designModeController.CurrentMode != AppMode.Design) return;
@@ -170,7 +171,7 @@ public partial class MainWindow : Window
         var layoutResult = BuildLayoutResultFromDesignGraph(_designGraph);
         var (nodes, edges) = _layoutEngine.LayoutFromLayoutResult(typeGraph, layoutResult);
 
-        GraphCanvasView.SetGraph(nodes, edges);
+        GraphCanvasView.SetGraph(nodes, edges, preserveViewport);
         MinimapView.SetGraph(nodes, edges);
         GraphCanvasView.SetDesignSelection(new HashSet<string>(_designCanvasController.Selection.SelectedClassIds));
         StatsText.Text = $"Design: {_designGraph.Classes.Count} classes, {_designGraph.Edges.Count} edges";
@@ -262,7 +263,7 @@ public partial class MainWindow : Window
     {
         if (_designModeController.CurrentMode != AppMode.Design) return;
         _designIsDirty = true;
-        RenderDesignModeGraph();
+        RenderDesignModeGraph(preserveViewport: true);
         TryAutoSave();
         UpdateStatusBar();
     }
