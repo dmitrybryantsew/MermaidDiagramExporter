@@ -66,4 +66,13 @@ public sealed class LayoutOptions
     /// Produces a left/right visual separation of app vs test classes.
     /// </summary>
     public bool SeparateAppAndTests { get; set; } = false;
+
+    /// <summary>
+    /// When true (MSAGL engine only), auto-detects the topmost common namespace
+    /// prefix and creates synthetic top-level clusters for each distinct
+    /// first-level sub-namespace (e.g. PFE.Data, PFE.Systems, PFE.Tests).
+    /// Produces a left/right visual separation by subsystem. Mutually exclusive
+    /// with SeparateAppAndTests.
+    /// </summary>
+    public bool PartitionByFirstLevelNamespace { get; set; } = false;
 }

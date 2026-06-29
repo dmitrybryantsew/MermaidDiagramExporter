@@ -108,6 +108,13 @@ public sealed class ProjectSettings
     public bool SeparateAppAndTests { get; set; } = false;
 
     /// <summary>
+    /// When true (MSAGL engine only), auto-detects the topmost namespace prefix
+    /// and partitions classes into synthetic clusters by first-level sub-namespace
+    /// (e.g. PFE.Data, PFE.Systems). Mutually exclusive with SeparateAppAndTests.
+    /// </summary>
+    public bool PartitionByFirstLevelNamespace { get; set; } = false;
+
+    /// <summary>
     /// When true, edges are re-routed automatically after node/cluster drag
     /// (and after Design Mode mutations). When false, press Ctrl+R to redraw.
     /// Default true for testing; can be disabled if re-routing is too slow.

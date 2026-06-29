@@ -85,6 +85,19 @@ public partial class SettingsWindow : Window
         UseCompoundEngineCheck.IsChecked = _settings.UseCompoundLayoutEngine;
         UseMsaglEngineCheck.IsChecked = _settings.UseMsaglEngine;
         SeparateAppAndTestsCheck.IsChecked = _settings.SeparateAppAndTests;
+        PartitionByFirstLevelNsCheck.IsChecked = _settings.PartitionByFirstLevelNamespace;
+
+        // Wire mutual exclusivity: checking one partition toggle unchecks the other
+        SeparateAppAndTestsCheck.Click += (s, e) =>
+        {
+            if (SeparateAppAndTestsCheck.IsChecked == true)
+                PartitionByFirstLevelNsCheck.IsChecked = false;
+        };
+        PartitionByFirstLevelNsCheck.Click += (s, e) =>
+        {
+            if (PartitionByFirstLevelNsCheck.IsChecked == true)
+                SeparateAppAndTestsCheck.IsChecked = false;
+        };
         LoadEdgeStyleFields();
 
         _shortcutBindings = new Dictionary<string, string>(_settings.DesignShortcutBindings);
@@ -147,6 +160,7 @@ public partial class SettingsWindow : Window
         _settings.UseCompoundLayoutEngine = UseCompoundEngineCheck.IsChecked == true;
         _settings.UseMsaglEngine = UseMsaglEngineCheck.IsChecked == true;
         _settings.SeparateAppAndTests = SeparateAppAndTestsCheck.IsChecked == true;
+        _settings.PartitionByFirstLevelNamespace = PartitionByFirstLevelNsCheck.IsChecked == true;
         _settings.EdgeStyles = CollectEdgeStyles();
         _settings.StereotypeRules = _stereotypeRules.ToList();
 
@@ -181,6 +195,7 @@ public partial class SettingsWindow : Window
         UseCompoundEngineCheck.IsChecked = false;
         UseMsaglEngineCheck.IsChecked = false;
         SeparateAppAndTestsCheck.IsChecked = false;
+        PartitionByFirstLevelNsCheck.IsChecked = false;
         ResetEdgeStyleFields();
     }
 

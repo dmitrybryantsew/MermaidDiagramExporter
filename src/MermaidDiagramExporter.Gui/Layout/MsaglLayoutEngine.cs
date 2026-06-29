@@ -29,10 +29,9 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
         var realNodes = graph.Nodes.Where(n => n.Role == LayoutNodeRole.Real).ToList();
         if (realNodes.Count == 0) return new LayoutResult();
 
-        // When SeparateAppAndTests is on, build a modified cluster list with two
-        // synthetic top-level clusters ("Application" and "Tests") and re-parent
-        // existing namespace clusters under them. MSAGL will lay them out as
-        // separate regions with proper spacing + cross-cluster edge routing.
+        // When a partitioning option is on, build a modified cluster list with
+        // synthetic top-level clusters and re-parent namespace clusters under them.
+        // MSAGL lays out each region independently and packs them side-by-side.
         var originalClusterIds = new HashSet<string>(graph.Clusters.Select(c => c.Id));
         var clusters = PartitionClustersIfEnabled(graph, options);
 
@@ -199,28 +198,41 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
         };
     }
 
-    // ── App/Test partitioning ──
+    // ── Cluster partitioning ──
 
     private const string AppClusterId = "__App";
     private const string TestClusterId = "__Tests";
+    private const string PartitionPrefix = "__NS:";
 
     /// <summary>
-    /// When SeparateAppAndTests is enabled, creates two synthetic top-level
-    /// clusters and re-parents existing namespace clusters under them based
-    /// on namespace pattern matching. Returns the (possibly modified) cluster
-    /// list for MSAGL graph building.
+    /// When a partitioning option is enabled, creates synthetic top-level
+    /// clusters and re-parents existing namespace clusters under them.
+    /// Two modes:
+    /// - SeparateAppAndTests: two buckets (Application / Tests) by test-namespace pattern.
+    /// - PartitionByFirstLevelNamespace: N buckets by first-level sub-namespace
+    ///   after auto-detecting the topmost common prefix (e.g. PFE.Data, PFE.Systems).
     /// </summary>
     private List<LayoutCluster> PartitionClustersIfEnabled(LayoutGraph graph, LayoutOptions options)
     {
         var clusters = new List<LayoutCluster>(graph.Clusters);
 
-        if (!options.SeparateAppAndTests || clusters.Count == 0)
-            return clusters;
+        if (clusters.Count == 0) return clusters;
 
         // Don't partition if there's only a fallback "Ungrouped" cluster
         if (clusters.Count == 1 && clusters[0].Id == "fallback")
             return clusters;
 
+        // PartitionByFirstLevelNamespace takes precedence (mutually exclusive)
+        if (options.PartitionByFirstLevelNamespace)
+            return PartitionByFirstLevel(clusters);
+        if (options.SeparateAppAndTests)
+            return PartitionByAppAndTests(clusters);
+
+        return clusters;
+    }
+
+    private List<LayoutCluster> PartitionByAppAndTests(List<LayoutCluster> clusters)
+    {
         var appCluster = new LayoutCluster
         {
             Id = AppClusterId,
@@ -236,14 +248,70 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
 
         foreach (var lc in clusters)
         {
-            // Skip synthetic clusters themselves (in case of re-runs)
             if (lc.Id == AppClusterId || lc.Id == TestClusterId) continue;
-
             lc.ParentClusterId = IsTestNamespace(lc.Label) ? TestClusterId : AppClusterId;
         }
 
         clusters.Add(appCluster);
         clusters.Add(testCluster);
+        return clusters;
+    }
+
+    private List<LayoutCluster> PartitionByFirstLevel(List<LayoutCluster> clusters)
+    {
+        // Phase 1: collect all namespace labels to find the topmost common prefix.
+        var allParts = clusters
+            .Where(c => !c.Id.StartsWith(PartitionPrefix))
+            .Select(c => c.Label.Split('.'))
+            .Where(parts => parts.Length > 0)
+            .ToList();
+
+        if (allParts.Count == 0) return clusters;
+
+        // Find longest common prefix across all namespace segment arrays.
+        int prefixLen = 0;
+        int minLen = allParts.Min(p => p.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            string segment = allParts[0][i];
+            if (allParts.Any(p => p[i] != segment)) break;
+            prefixLen++;
+        }
+
+        // Phase 2: group clusters by the segment right after the common prefix.
+        // If a namespace has no segment beyond the prefix, use the last prefix
+        // segment as its group key.
+        var syntheticById = new Dictionary<string, LayoutCluster>();
+        var clusterToParent = new Dictionary<string, string>();
+
+        foreach (var lc in clusters)
+        {
+            if (lc.Id.StartsWith(PartitionPrefix)) continue;
+
+            var parts = lc.Label.Split('.');
+            string groupKey;
+            if (parts.Length > prefixLen)
+                groupKey = string.Join('.', parts, 0, prefixLen + 1);
+            else if (parts.Length > 0)
+                groupKey = lc.Label;
+            else
+                continue;
+
+            if (!syntheticById.TryGetValue(groupKey, out var synthetic))
+            {
+                synthetic = new LayoutCluster
+                {
+                    Id = PartitionPrefix + groupKey,
+                    Label = groupKey,
+                    Kind = MermaidDiagramExporter.Core.TypeGroupKind.Assembly,
+                };
+                syntheticById[groupKey] = synthetic;
+            }
+
+            lc.ParentClusterId = synthetic.Id;
+        }
+
+        clusters.AddRange(syntheticById.Values);
         return clusters;
     }
 

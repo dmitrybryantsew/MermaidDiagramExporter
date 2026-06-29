@@ -1021,6 +1021,7 @@ public partial class MainWindow : Window
             UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
             UseMsaglEngine = _currentSettings.UseMsaglEngine,
             SeparateAppAndTests = _currentSettings.SeparateAppAndTests,
+            PartitionByFirstLevelNamespace = _currentSettings.PartitionByFirstLevelNamespace,
         };
         AutoRedrawCheck.IsChecked = _currentSettings.AutoRedrawEdges;
 
