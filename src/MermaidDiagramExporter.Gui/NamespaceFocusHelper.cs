@@ -25,10 +25,9 @@ public static class NamespaceFocusHelper
         var allParts = graph.Nodes
             .Select(n => n.Namespace ?? "")
             .Where(ns => !string.IsNullOrWhiteSpace(ns)
-                         && !ns.Equals("global namespace", StringComparison.OrdinalIgnoreCase)
-                         && !ns.Equals("global", StringComparison.OrdinalIgnoreCase))
+                         && !ns.StartsWith("<", StringComparison.OrdinalIgnoreCase)) // skip "<global namespace>" etc.
             .Select(ns => ns.Split('.'))
-            .Where(parts => parts.Length > 0 && !string.IsNullOrEmpty(parts[0]))
+            .Where(parts => parts.Length > 0 && !string.IsNullOrEmpty(parts[0]) && !parts[0].StartsWith("<"))
             .ToList();
 
         if (allParts.Count == 0) return new();
