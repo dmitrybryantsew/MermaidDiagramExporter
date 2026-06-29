@@ -273,6 +273,8 @@ public partial class MainWindow : Window
         if (_designModeController.CurrentMode != AppMode.Design) return;
         _designIsDirty = true;
         RenderDesignModeGraph(preserveViewport: true);
+        // Refresh the inspector to reflect member/class changes
+        OnDesignSelectionChanged(this, _designCanvasController.Selection);
         TryAutoSave();
         UpdateStatusBar();
     }

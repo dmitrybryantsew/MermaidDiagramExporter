@@ -817,9 +817,9 @@ public class GraphCanvas : Control
         var pos = e.GetPosition(this);
         var designWorldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
 
-        // Design Mode drag/resize routing (M2)
+        // Design Mode drag/resize/edge-creation routing (M2)
         // Guard: require both _designController AND _designGraph
-        if (_designController != null && _designGraph != null && (_designController.IsDragging || _designController.IsResizing))
+        if (_designController != null && _designGraph != null && (_designController.IsDragging || _designController.IsResizing || _designController.IsCreatingEdge))
         {
             _designController.HandlePointerMoved(designWorldPos);
             // Sync GraphNode positions from DesignClass during drag for smooth live-redraw rendering.

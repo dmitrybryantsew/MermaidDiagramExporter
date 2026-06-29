@@ -134,6 +134,13 @@ public sealed class DesignCanvasController
     public bool IsResizing => _resizingRectangle != null;
 
     /// <summary>
+    /// True if the user is dragging an edge from a port to a target class.
+    /// Used by <c>GraphCanvas</c> to route pointer-move events for the
+    /// rubber-band preview arrow.
+    /// </summary>
+    public bool IsCreatingEdge => _edgeSourceRectangle != null || _edgeSourceClassId != null;
+
+    /// <summary>
     /// Returns the ClassId of the class currently being dragged or resized,
     /// or null if no drag/resize is active. Used by GraphCanvas to sync
     /// GraphNode positions during live-redraw drag operations.
@@ -533,11 +540,6 @@ public sealed class DesignCanvasController
     }
 
     /// <summary>
-    /// True while an edge is being created (rubber-band line visible or keyboard source set).
-    /// </summary>
-    public bool IsCreatingEdge => _edgeSourceRectangle != null || _edgeSourceClassId != null;
-
-    /// <summary>
     /// If a keyboard-initiated edge creation is in progress, returns the source class ID.
     /// </summary>
     public string? EdgeSourceClassId => _edgeSourceClassId;
@@ -570,11 +572,32 @@ public sealed class DesignCanvasController
     /// </summary>
     public EdgeCreationPreview? GetEdgeCreationPreview()
     {
-        if (_edgeSourceRectangle == null) return null;
-        return new EdgeCreationPreview(
-            _edgeSourceRectangle,
-            _edgeSourceIsRightPort,
-            _edgeCurrentCursor);
+        if (_edgeSourceRectangle != null)
+        {
+            return new EdgeCreationPreview(
+                _edgeSourceRectangle,
+                _edgeSourceIsRightPort,
+                _edgeCurrentCursor);
+        }
+
+        // Keyboard-initiated edge creation: build preview from _edgeSourceClassId
+        if (_edgeSourceClassId != null)
+        {
+            // Find the class rectangle for the source class
+            var graph = _modeController?.CurrentDesign;
+            if (graph != null)
+            {
+                var rects = BuildRectangles(graph);
+                var srcRect = rects.FirstOrDefault(r => r.ClassId == _edgeSourceClassId);
+                if (srcRect != null)
+                {
+                    // Default to right port for keyboard-initiated edges
+                    return new EdgeCreationPreview(srcRect, true, _edgeCurrentCursor);
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
