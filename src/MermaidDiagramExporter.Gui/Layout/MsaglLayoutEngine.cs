@@ -107,6 +107,9 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
             NodeSeparation = Math.Max(options.NodeSpacing, 20),
             LayerSeparation = Math.Max(options.RankSpacing, 20),
             ClusterMargin = Math.Max(options.GroupSpacing, 10),
+            PackingMethod = (options.SeparateAppAndTests || options.PartitionByFirstLevelNamespace)
+                ? PackingMethod.Columns
+                : PackingMethod.Compact,
             EdgeRoutingSettings = new EdgeRoutingSettings
             {
                 EdgeRoutingMode = EdgeRoutingMode.SugiyamaSplines,

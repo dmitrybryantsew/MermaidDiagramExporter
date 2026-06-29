@@ -56,6 +56,7 @@ public partial class MainWindow : Window
     private GraphFocusTraversalMode _currentTraversalMode = GraphFocusTraversalMode.UndirectedAssociations;
     private int _focusDepth = 1;
     private string _currentSelectedNodeId = string.Empty;
+    private int _namespaceFocusDepth = 1;
 
     public ProjectSettings CurrentSettings => _currentSettings;
 
@@ -960,6 +961,7 @@ public partial class MainWindow : Window
             _currentSettings = _settingsService.LoadSettings(graph.Metadata.SourceDescription);
             _currentGraph = graph;
             _focusNavigationController.SetRootGraph(_currentGraph, _currentSettings.SourceFolderPath);
+            PopulateNamespaceFocusDropdown(_currentGraph);
             _seedSelectionState.Clear();
             GraphCanvasView.SetEdgeStyles(_currentSettings.EdgeStyles);
 
@@ -1266,6 +1268,79 @@ public partial class MainWindow : Window
     private void OnAutoRedrawChanged(object? sender, RoutedEventArgs e)
     {
         _currentSettings.AutoRedrawEdges = AutoRedrawCheck.IsChecked == true;
+    }
+
+    // --- Namespace Focus ---
+
+    private void PopulateNamespaceFocusDropdown(Core.TypeGraph? graph)
+    {
+        var namespaces = NamespaceFocusHelper.GetTopLevelNamespaces(graph);
+        var items = new List<string> { "(all namespaces)" };
+        items.AddRange(namespaces);
+        NamespaceFocusCombo.ItemsSource = items;
+        NamespaceFocusCombo.SelectedIndex = 0;
+    }
+
+    private void OnNamespaceFocusChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        ApplyNamespaceFocus();
+    }
+
+    private void OnNamespaceFocusToggleChanged(object? sender, RoutedEventArgs e)
+    {
+        ApplyNamespaceFocus();
+    }
+
+    private void OnNamespaceFocusD1(object? sender, RoutedEventArgs e) { _namespaceFocusDepth = 1; ApplyNamespaceFocus(); }
+    private void OnNamespaceFocusD2(object? sender, RoutedEventArgs e) { _namespaceFocusDepth = 2; ApplyNamespaceFocus(); }
+    private void OnNamespaceFocusD3(object? sender, RoutedEventArgs e) { _namespaceFocusDepth = 3; ApplyNamespaceFocus(); }
+
+    private void ApplyNamespaceFocus()
+    {
+        if (_currentGraph == null) return;
+        if (NamespaceFocusCombo.SelectedIndex <= 0)
+        {
+            // "(all namespaces)" selected — reset to root
+            var rootGraph = _focusNavigationController.ResetToRoot();
+            if (rootGraph != null) SetDisplayedGraph(rootGraph);
+            return;
+        }
+
+        string? ns = NamespaceFocusCombo.SelectedItem as string;
+        if (string.IsNullOrEmpty(ns) || ns == "(all namespaces)") return;
+
+        bool showConnected = ShowConnectedNamespacesCheck.IsChecked == true;
+
+        if (!showConnected)
+        {
+            // Just the selected namespace — filter nodes directly
+            var nsNodeIds = NamespaceFocusHelper.GetNodeIdsInNamespace(_currentGraph, ns);
+            var filteredNodes = _allNodes.Where(n => nsNodeIds.Contains(n.Id)).ToList();
+            var nodeIds = new HashSet<string>(filteredNodes.Select(n => n.Id));
+            var filteredEdges = _allEdges.Where(e =>
+                nodeIds.Contains(e.FromNode?.Id ?? "") && nodeIds.Contains(e.ToNode?.Id ?? "")).ToList();
+            GraphCanvasView.SetGraph(filteredNodes, filteredEdges);
+            StatsText.Text = $"Namespace: {ns} ({filteredNodes.Count} classes)";
+            return;
+        }
+
+        // Show connected — use the focus BFS from all nodes in the namespace
+        var seedIds = NamespaceFocusHelper.GetNodeIdsInNamespace(
+            _focusNavigationController.RootGraph ?? _currentGraph, ns);
+        if (seedIds.Count == 0) return;
+
+        // Reset to root first so the BFS explores the full graph, not a
+        // potentially already-focused subgraph
+        _focusNavigationController.ResetToRoot();
+        if (!_focusNavigationController.CanFocusSelection(seedIds.ToList())) return;
+
+        var focused = _focusNavigationController.FocusSelection(
+            seedIds.ToList(), _namespaceFocusDepth, GraphFocusTraversalMode.AllVisibleRelations);
+        if (focused != null)
+        {
+            SetDisplayedGraph(focused);
+            StatsText.Text = $"Namespace: {ns} + connected D{_namespaceFocusDepth} ({focused.Nodes.Count} classes)";
+        }
     }
 
     // --- Inspector ---

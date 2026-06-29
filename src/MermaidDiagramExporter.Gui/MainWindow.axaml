@@ -77,6 +77,22 @@
             <CheckBox x:Name="AutoRedrawCheck" Content="Auto-redraw edges on move (Ctrl+R = manual)" IsChecked="True" Click="OnAutoRedrawChanged" Margin="0,4,0,0" Foreground="White" FontSize="11"/>
           </StackPanel>
 
+          <!-- Namespace Focus -->
+          <StackPanel Margin="8,0,8,4">
+            <TextBlock Text="Namespace Focus" FontWeight="Bold" Margin="0,0,0,4"/>
+            <ComboBox x:Name="NamespaceFocusCombo" MinWidth="160" SelectionChanged="OnNamespaceFocusChanged" Margin="0,0,0,4">
+              <ComboBoxItem Content="(all namespaces)" IsSelected="True"/>
+            </ComboBox>
+            <WrapPanel Orientation="Horizontal">
+              <CheckBox x:Name="ShowConnectedNamespacesCheck" Content="Show connected" Click="OnNamespaceFocusToggleChanged" Margin="0,0,8,0" Foreground="White" FontSize="11"/>
+            </WrapPanel>
+            <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+              <Button Content="D1" Click="OnNamespaceFocusD1" MinWidth="40" Foreground="White" Margin="0,0,4,2" FontSize="11"/>
+              <Button Content="D2" Click="OnNamespaceFocusD2" MinWidth="40" Foreground="White" Margin="0,0,4,2" FontSize="11"/>
+              <Button Content="D3" Click="OnNamespaceFocusD3" MinWidth="40" Foreground="White" Margin="0,0,4,2" FontSize="11"/>
+            </WrapPanel>
+          </StackPanel>
+
           <!-- Search -->
           <StackPanel Margin="8,0,8,4">
             <TextBlock Text="Search" FontWeight="Bold" Margin="0,0,0,4"/>
