@@ -8,6 +8,37 @@ using SkiaSharp;
 namespace MermaidDiagramExporter.Gui.Design;
 
 /// <summary>
+/// Tools available in Design Mode. Maps to UIContract §4 tool table.
+/// </summary>
+public enum DesignTool
+{
+    Select,
+    Class,
+    Interface,
+    Enum,
+    Struct,
+    AbstractClass,
+    StaticClass,
+    Namespace,
+    EdgeInheritance,
+    EdgeImplements,
+    EdgeAssociation,
+    EdgeDependency,
+    EdgeAggregation,
+    EdgeComposition,
+    Pan
+}
+
+/// <summary>
+/// Whether a tool is armed for single use or sticky mode.
+/// </summary>
+public enum ToolArmingMode
+{
+    SingleUse,
+    Sticky
+}
+
+/// <summary>
 /// Owns Design Mode canvas interaction. Handles pointer events (click,
 /// drag, resize, delete), maintains selection, and publishes changes to the
 /// <see cref="DesignGraph"/>. Wired into <c>GraphCanvas</c>'s existing pointer
@@ -22,14 +53,48 @@ public sealed class DesignCanvasController
     private ClassRectangle? _draggingRectangle;
     private ClassRectangle? _resizingRectangle;
     private SKPoint _dragStartWorld;
+    private float _dragStartRectX;
+    private float _dragStartRectY;
     private SKPoint _resizeStartWorld;
     private float _resizeStartWidth;
     private float _resizeStartHeight;
+    private EdgeKind _defaultEdgeKind = EdgeKind.Association;
+
+    // ── Tool state (UIContract §4) ──
+    private DesignTool _currentTool = DesignTool.Select;
+    private bool _isToolSticky;
 
     // ── Edge creation state (M4) ──
     private ClassRectangle? _edgeSourceRectangle;
     private bool _edgeSourceIsRightPort;
     private SKPoint _edgeCurrentCursor;
+    private string? _edgeSourceClassId; // for keyboard-initiated edge creation
+
+    /// <summary>
+    /// The currently armed tool.
+    /// </summary>
+    public DesignTool CurrentTool => _currentTool;
+
+    /// <summary>
+    /// True if the current tool is in sticky mode (won't auto-revert to Select after use).
+    /// </summary>
+    public bool IsToolSticky => _isToolSticky;
+
+    /// <summary>
+    /// The edge kind used when creating edges via port-drag or the Connect
+    /// button. Set by arming an edge tool or by selecting a type in the
+    /// edge-type dropdown. Defaults to Association.
+    /// </summary>
+    public EdgeKind DefaultEdgeKind
+    {
+        get => _defaultEdgeKind;
+        set => _defaultEdgeKind = value;
+    }
+
+    /// <summary>
+    /// Fired when the current tool changes, so the status bar can update.
+    /// </summary>
+    public event EventHandler? ToolChanged;
 
     /// <summary>
     /// Fired after any mutation to the design graph. Subscribers can rebuild
@@ -64,6 +129,100 @@ public sealed class DesignCanvasController
     public bool IsResizing => _resizingRectangle != null;
 
     /// <summary>
+    /// Returns the ClassId of the class currently being dragged or resized,
+    /// or null if no drag/resize is active. Used by GraphCanvas to sync
+    /// GraphNode positions during live-redraw drag operations.
+    /// </summary>
+    public string? GetDraggedOrResizingClassId()
+        => _draggingRectangle?.ClassId ?? _resizingRectangle?.ClassId;
+
+    // ── Tool management (UIContract §4) ──
+
+    /// <summary>
+    /// Arms a tool. If <paramref name="sticky"/> is false (default), the tool
+    /// reverts to Select after one use. If true, the tool stays armed until Esc
+    /// or another tool is chosen.
+    /// </summary>
+    public void ArmTool(DesignTool tool, bool sticky = false)
+    {
+        _currentTool = tool;
+        _isToolSticky = sticky;
+        _edgeSourceClassId = null;
+        // When arming an edge tool, update the default edge kind so port-drag
+        // and Connect button use the selected type (UIContract §6 Method B).
+        if (IsEdgeTool(tool))
+            _defaultEdgeKind = ToolToEdgeKind(tool);
+        // Cancelling any in-progress edge creation when switching tools
+        CancelEdgeCreation();
+        ToolChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Reverts the tool to Select (called on Esc).
+    /// </summary>
+    public void ResetTool()
+    {
+        ArmTool(DesignTool.Select, false);
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="tool"/> is a creation tool (Class, Interface, etc.).
+    /// </summary>
+    public static bool IsCreationTool(DesignTool tool) => tool switch
+    {
+        DesignTool.Class => true,
+        DesignTool.Interface => true,
+        DesignTool.Enum => true,
+        DesignTool.Struct => true,
+        DesignTool.AbstractClass => true,
+        DesignTool.StaticClass => true,
+        DesignTool.Namespace => true,
+        _ => false
+    };
+
+    /// <summary>
+    /// Returns true if <paramref name="tool"/> is an edge tool.
+    /// </summary>
+    public static bool IsEdgeTool(DesignTool tool) => tool switch
+    {
+        DesignTool.EdgeInheritance => true,
+        DesignTool.EdgeImplements => true,
+        DesignTool.EdgeAssociation => true,
+        DesignTool.EdgeDependency => true,
+        DesignTool.EdgeAggregation => true,
+        DesignTool.EdgeComposition => true,
+        _ => false
+    };
+
+    /// <summary>
+    /// Maps DesignTool to ClassKind for creation tools.
+    /// </summary>
+    private static ClassKind ToolToClassKind(DesignTool tool) => tool switch
+    {
+        DesignTool.Class => ClassKind.Class,
+        DesignTool.Interface => ClassKind.Interface,
+        DesignTool.Enum => ClassKind.Enum,
+        DesignTool.Struct => ClassKind.Struct,
+        DesignTool.AbstractClass => ClassKind.AbstractClass,
+        DesignTool.StaticClass => ClassKind.StaticClass,
+        _ => ClassKind.Class
+    };
+
+    /// <summary>
+    /// Maps DesignTool to EdgeKind.
+    /// </summary>
+    public static EdgeKind ToolToEdgeKind(DesignTool tool) => tool switch
+    {
+        DesignTool.EdgeInheritance => EdgeKind.Inheritance,
+        DesignTool.EdgeImplements => EdgeKind.Implements,
+        DesignTool.EdgeAssociation => EdgeKind.Association,
+        DesignTool.EdgeDependency => EdgeKind.Dependency,
+        DesignTool.EdgeAggregation => EdgeKind.Aggregation,
+        DesignTool.EdgeComposition => EdgeKind.Composition,
+        _ => EdgeKind.Association
+    };
+
+    /// <summary>
     /// Builds the list of <see cref="ClassRectangle"/> objects from the current
     /// design graph. Called by the canvas controller on every render frame
     /// in Design Mode.
@@ -79,7 +238,9 @@ public sealed class DesignCanvasController
                 Y = cls.Y,
                 Width = cls.Width,
                 Height = cls.Height,
-                IsSelected = _selectedClassIds.Contains(cls.Id)
+                IsSelected = _selectedClassIds.Contains(cls.Id),
+                IsDragging = _draggingRectangle != null && _draggingRectangle.ClassId == cls.Id,
+                IsResizing = _resizingRectangle != null && _resizingRectangle.ClassId == cls.Id,
             });
         }
         return list;
@@ -130,6 +291,47 @@ public sealed class DesignCanvasController
 
         var hit = DesignHitTestService.HitTest(worldPos, BuildRectangles(graph));
 
+        // ── Edge tool flow (UIContract §6 Method A) ──
+        // When an edge tool is armed:
+        //   1. If no source selected yet → clicking a class sets it as source.
+        //   2. If source already set → clicking a different class completes the edge.
+        //   3. Clicking empty canvas cancels.
+        if (IsEdgeTool(_currentTool) && _edgeSourceClassId != null)
+        {
+            var srcCls = graph.Classes.FirstOrDefault(c => c.Id == _edgeSourceClassId);
+            if (srcCls != null)
+            {
+                if (hit.Rectangle != null && hit.Rectangle.ClassId != _edgeSourceClassId)
+                {
+                    var edgeKind = ToolToEdgeKind(_currentTool);
+                    AddEdge(graph, _edgeSourceClassId, hit.Rectangle.ClassId, edgeKind);
+                    _edgeSourceClassId = null;
+                    if (!_isToolSticky)
+                        ArmTool(DesignTool.Select, false);
+                    return true;
+                }
+                // Clicked same class or empty — cancel edge creation
+                _edgeSourceClassId = null;
+                return true;
+            }
+        }
+
+        // Edge tool with no source yet: clicking a class sets it as source
+        if (IsEdgeTool(_currentTool) && _edgeSourceClassId == null)
+        {
+            if (hit.Rectangle != null)
+            {
+                _edgeSourceClassId = hit.Rectangle.ClassId;
+                // Visually select the source class so the user sees which one they picked
+                Select(hit.Rectangle, false);
+                return true;
+            }
+            // Clicked empty canvas — cancel edge tool
+            if (!_isToolSticky)
+                ArmTool(DesignTool.Select, false);
+            return true;
+        }
+
         switch (hit.Kind)
         {
             case ClassRectangleHitTest.ResizeHandle:
@@ -144,17 +346,42 @@ public sealed class DesignCanvasController
                 return true;
 
             case ClassRectangleHitTest.Header:
+                // If an edge tool is armed, header click selects as source
+                if (IsEdgeTool(_currentTool))
+                {
+                    _edgeSourceClassId = hit.Rectangle!.ClassId;
+                    Select(hit.Rectangle, false);
+                    return true;
+                }
                 StartDrag(hit.Rectangle!, worldPos);
                 return true;
 
             case ClassRectangleHitTest.Body:
             case ClassRectangleHitTest.Member:
+                // If an edge tool is armed, body click selects as source
+                if (IsEdgeTool(_currentTool))
+                {
+                    _edgeSourceClassId = hit.Rectangle!.ClassId;
+                    Select(hit.Rectangle, false);
+                    return true;
+                }
                 Select(hit.Rectangle!, extendSelection);
                 return true;
 
             case ClassRectangleHitTest.None:
-                // Click on empty canvas: add a new class at this position
-                AddClassAt(graph, worldPos);
+                // ── UIContract §4: empty canvas behavior depends on current tool ──
+                if (IsCreationTool(_currentTool))
+                {
+                    CreateAt(graph, worldPos, _currentTool);
+                    if (!_isToolSticky)
+                        ArmTool(DesignTool.Select, false);
+                }
+                else
+                {
+                    // Select tool: clear selection on empty canvas click
+                    _selectedClassIds.Clear();
+                    UpdateSelection();
+                }
                 return true;
         }
         return false;
@@ -167,10 +394,13 @@ public sealed class DesignCanvasController
     {
         if (_draggingRectangle != null)
         {
+            // Preserve the grab offset: move by the delta from drag start,
+            // not snap the top-left corner to the cursor. This matches Analyze
+            // Mode behavior (which records _dragStartNodeX/Y and adds the delta).
             float dx = worldPos.X - _dragStartWorld.X;
             float dy = worldPos.Y - _dragStartWorld.Y;
-            _draggingRectangle.X = _dragStartWorld.X + dx;
-            _draggingRectangle.Y = _dragStartWorld.Y + dy;
+            _draggingRectangle.X = _dragStartRectX + dx;
+            _draggingRectangle.Y = _dragStartRectY + dy;
             // Mirror to graph
             var cls = _draggingRectangle.Graph.Classes.FirstOrDefault(c => c.Id == _draggingRectangle.ClassId);
             if (cls != null)
@@ -219,34 +449,39 @@ public sealed class DesignCanvasController
             _resizingRectangle = null;
             GraphMutated?.Invoke(this, EventArgs.Empty);
         }
-        if (_edgeSourceRectangle != null && graph != null)
+        if (_edgeSourceRectangle != null)
         {
-            // Check if the release is on a target port
-            var hit = DesignHitTestService.HitTest(worldPos, BuildRectangles(graph));
-            ClassRectangle? target = null;
-            bool targetIsRightPort = false;
-            if (hit.Kind == ClassRectangleHitTest.RightPort && hit.Rectangle != null && hit.Rectangle != _edgeSourceRectangle)
+            if (graph != null)
             {
-                target = hit.Rectangle;
-                targetIsRightPort = true;
-            }
-            else if (hit.Kind == ClassRectangleHitTest.LeftPort && hit.Rectangle != null && hit.Rectangle != _edgeSourceRectangle)
-            {
-                target = hit.Rectangle;
-                targetIsRightPort = false;
-            }
+                var hit = DesignHitTestService.HitTest(worldPos, BuildRectangles(graph));
+                ClassRectangle? target = null;
+                if ((hit.Kind == ClassRectangleHitTest.RightPort || hit.Kind == ClassRectangleHitTest.LeftPort) && hit.Rectangle != null && hit.Rectangle != _edgeSourceRectangle)
+                {
+                    target = hit.Rectangle;
+                }
 
-            if (target != null)
-            {
-                // Create the edge. Default to Association; the UI will let the
-                // user change the type via the edge type selector popup.
-                AddEdge(graph, _edgeSourceRectangle.ClassId, target.ClassId, EdgeKind.Association);
+                if (target != null)
+                {
+                    AddEdge(graph, _edgeSourceRectangle.ClassId, target.ClassId, _defaultEdgeKind);
+                }
             }
-
-            // Clear edge-creation state either way
             _edgeSourceRectangle = null;
-            _edgeCurrentCursor = worldPos;
         }
+    }
+
+    /// <summary>
+    /// Resets all interaction state (drags, selection, edge creation, tool).
+    /// Called when switching away from Design Mode to prevent state leaks.
+    /// </summary>
+    public void ResetAllState()
+    {
+        _draggingRectangle = null;
+        _resizingRectangle = null;
+        _edgeSourceRectangle = null;
+        _edgeSourceClassId = null;
+        _selectedClassIds.Clear();
+        UpdateSelection();
+        ResetTool();
     }
 
     /// <summary>
@@ -255,12 +490,18 @@ public sealed class DesignCanvasController
     public void CancelEdgeCreation()
     {
         _edgeSourceRectangle = null;
+        _edgeSourceClassId = null;
     }
 
     /// <summary>
-    /// True while an edge is being created (rubber-band line visible).
+    /// True while an edge is being created (rubber-band line visible or keyboard source set).
     /// </summary>
-    public bool IsCreatingEdge => _edgeSourceRectangle != null;
+    public bool IsCreatingEdge => _edgeSourceRectangle != null || _edgeSourceClassId != null;
+
+    /// <summary>
+    /// If a keyboard-initiated edge creation is in progress, returns the source class ID.
+    /// </summary>
+    public string? EdgeSourceClassId => _edgeSourceClassId;
 
     // ── Undo/Redo (M6) ──
 
@@ -510,6 +751,8 @@ public sealed class DesignCanvasController
     {
         _draggingRectangle = rect;
         _dragStartWorld = worldPos;
+        _dragStartRectX = rect.X;
+        _dragStartRectY = rect.Y;
         rect.IsDragging = true;
     }
 
@@ -527,6 +770,18 @@ public sealed class DesignCanvasController
         _edgeSourceRectangle = rect;
         _edgeSourceIsRightPort = isRightPort;
         _edgeCurrentCursor = worldPos;
+    }
+
+    /// <summary>
+    /// Arms an edge tool with a pre-selected source class. Used when the user
+    /// selects a class then presses an edge shortcut key (UIContract §6 Method C).
+    /// The next click on a target class completes the edge.
+    /// </summary>
+    public void BeginEdgeCreationWithSource(DesignGraph graph, string sourceClassId, DesignTool edgeTool, bool sticky = false)
+    {
+        if (!IsEdgeTool(edgeTool)) return;
+        _edgeSourceClassId = sourceClassId;
+        ArmTool(edgeTool, sticky);
     }
 
     // ── Edge operations (M4) ──
@@ -584,6 +839,43 @@ public sealed class DesignCanvasController
         => graph.Edges.FirstOrDefault(e => e.FromClassId == fromClassId && e.ToClassId == toClassId);
 
     /// <summary>
+    /// Creates an edge between the two currently selected classes using
+    /// <see cref="DefaultEdgeKind"/>. Requires exactly two classes selected.
+    /// Returns true if the edge was created. Used by the Connect button
+    /// (UIContract §6 — select two classes, press Connect).
+    /// </summary>
+    public bool ConnectSelected(DesignGraph graph)
+    {
+        if (_selectedClassIds.Count != 2) return false;
+        var fromId = _selectedClassIds.ElementAt(0);
+        var toId = _selectedClassIds.ElementAt(1);
+        return AddEdge(graph, fromId, toId, _defaultEdgeKind);
+    }
+
+    /// <summary>
+    /// Changes an edge's source or target endpoint. Used when the user drags
+    /// an edge endpoint from one class to another. The <paramref name="isSource"/>
+    /// flag determines which endpoint is changed.
+    /// </summary>
+    public bool ChangeEdgeEndpoint(DesignGraph graph, string edgeId, string newClassId, bool isSource)
+    {
+        var edge = graph.Edges.FirstOrDefault(e => e.Id == edgeId);
+        if (edge == null) return false;
+
+        // Validate the new endpoint exists
+        if (!graph.Classes.Any(c => c.Id == newClassId)) return false;
+
+        // Prevent self-loops
+        var otherEnd = isSource ? edge.ToClassId : edge.FromClassId;
+        if (newClassId == otherEnd) return false;
+
+        var cmd = new DesignCommands.ChangeEdgeEndpoint(edgeId, isSource, isSource ? edge.FromClassId : edge.ToClassId, newClassId);
+        UndoManager.Execute(cmd, graph);
+        GraphMutated?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
     /// Selects a class. If <paramref name="extendSelection"/> is true (shift/ctrl held),
     /// the class is added to the existing selection (or removed if already selected).
     /// Otherwise the selection is cleared and replaced with just this class.
@@ -608,13 +900,26 @@ public sealed class DesignCanvasController
         SelectionChanged?.Invoke(this, _selection);
     }
 
-    private void AddClassAt(DesignGraph graph, SKPoint worldPos)
+    private void CreateAt(DesignGraph graph, SKPoint worldPos, DesignTool tool)
     {
+        var kind = ToolToClassKind(tool);
+        string defaultName = tool switch
+        {
+            DesignTool.Class => "NewClass",
+            DesignTool.Interface => "INewInterface",
+            DesignTool.Enum => "NewEnum",
+            DesignTool.Struct => "NewStruct",
+            DesignTool.AbstractClass => "NewAbstractClass",
+            DesignTool.StaticClass => "NewStaticClass",
+            _ => "NewClass"
+        };
+
         var newClass = new DesignClass
         {
-            Name = "NewClass",
-            X = worldPos.X - 100f, // center on click
-            Y = worldPos.Y - 20f,
+            Name = defaultName,
+            Kind = kind,
+            X = worldPos.X - 100f,
+            Y = worldPos.Y - 30f,
             Width = 200f,
             Height = 60f
         };

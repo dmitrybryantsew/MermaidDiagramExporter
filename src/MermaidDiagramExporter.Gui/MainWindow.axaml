@@ -8,9 +8,9 @@
         x:Class="MermaidDiagramExporter.Gui.MainWindow"
         Title="Mermaid Diagram Exporter" Width="1400" Height="900"
         WindowState="Maximized">
-  <Grid ColumnDefinitions="320,1,*,1,300">
+  <Grid ColumnDefinitions="320,1,*,1,300" RowDefinitions="*,Auto">
     <!-- Sidebar -->
-    <ScrollViewer Grid.Column="0" Background="#F0F0F0">
+    <ScrollViewer Grid.Column="0" Grid.Row="0" Background="#F0F0F0">
       <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
         <!-- Mode toggle (M0 scaffold) -->
         <Grid Grid.Row="0" Margin="8,8,8,4" ColumnDefinitions="*,*">
@@ -85,18 +85,18 @@
           <!-- Semantic Search Panel -->
           <search:SearchPanel x:Name="SymbolSearchPanel" />
 
+          <!-- Design bridge -->
+          <StackPanel Margin="8,0,8,4">
+            <TextBlock Text="Design" FontWeight="Bold" Margin="0,0,0,4"/>
+            <Button Content="Edit in Design Mode" Click="OnEditInDesignMode" MinWidth="140" Background="#FF9800" Foreground="White"/>
+            <TextBlock Text="Convert scanned architecture to editable design" FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+          </StackPanel>
+
           <!-- Class list -->
           <Grid Margin="8,0,8,0" RowDefinitions="Auto,*" MinHeight="150">
             <TextBlock Grid.Row="0" Text="Classes" FontWeight="Bold" Margin="0,0,0,4"/>
             <ListBox Grid.Row="1" x:Name="ClassListBox" SelectionChanged="OnClassSelected"/>
           </Grid>
-
-          <!-- Selected node info -->
-          <StackPanel Margin="8">
-            <TextBlock Text="Selected" FontWeight="Bold" Margin="0,0,0,4"/>
-            <TextBlock x:Name="SelectedNodeText" Text="" TextWrapping="Wrap"/>
-            <Button Content="Open in Explorer" Click="OnOpenInExplorer" Margin="0,4,0,0" MinWidth="100" Foreground="White"/>
-          </StackPanel>
 
           <!-- Stats -->
           <TextBlock x:Name="StatsText" Text="" Margin="8" Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
@@ -129,9 +129,17 @@
             <TextBlock Text="Add" FontWeight="Bold" Margin="0,0,0,4"/>
             <WrapPanel Orientation="Horizontal">
               <Button Content="Class" Click="OnDesignAddClass" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
-              <Button Content="Edge" Click="OnDesignAddEdge" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+              <Button x:Name="DesignConnectButton" Content="Connect" Click="OnDesignConnect" MinWidth="70" Foreground="White" Margin="0,0,4,4"/>
+              <ComboBox x:Name="DesignEdgeCombo" SelectedIndex="0" SelectionChanged="OnDesignEdgeTypeSelected" MinWidth="80" Margin="0,0,4,4">
+                <ComboBoxItem Content="Edge: Assoc"/>
+                <ComboBoxItem Content="Edge: Inherit"/>
+                <ComboBoxItem Content="Edge: Implmn"/>
+                <ComboBoxItem Content="Edge: Depend"/>
+                <ComboBoxItem Content="Edge: Aggreg"/>
+                <ComboBoxItem Content="Edge: Compos"/>
+              </ComboBox>
             </WrapPanel>
-            <TextBlock Text="Tip: drag from a class's edge port to another to create an edge" FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+            <TextBlock Text="Tip: Select 2 classes, then click Connect. Or pick edge type, click source, click target." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
           </StackPanel>
 
           <!-- Export -->
@@ -147,22 +155,23 @@
           <!-- Help -->
           <StackPanel Margin="8">
             <TextBlock Text="Tips" FontWeight="Bold" Margin="0,0,0,4"/>
-            <TextBlock Text="• Click empty canvas to add a class" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+            <TextBlock Text="• Press C to arm Class tool, click canvas" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+            <TextBlock Text="• V = Select, drag to move, marquee" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
             <TextBlock Text="• Drag class header to move" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
             <TextBlock Text="• Drag corner to resize" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
             <TextBlock Text="• Double-click class name to rename" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
             <TextBlock Text="• Delete key removes selection" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
-            <TextBlock Text="• Escape cancels edge creation" FontSize="11" Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
+            <TextBlock Text="• Escape cancels / clears selection" FontSize="11" Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,8"/>
           </StackPanel>
         </StackPanel>
       </Grid>
     </ScrollViewer>
 
     <!-- Left Splitter -->
-    <GridSplitter Grid.Column="1" Background="#D0D0D0" Width="1"/>
+    <GridSplitter Grid.Column="1" Grid.Row="0" Background="#D0D0D0" Width="1"/>
 
     <!-- Graph canvas -->
-    <Grid Grid.Column="2">
+    <Grid Grid.Column="2" Grid.Row="0">
       <local:GraphCanvas x:Name="GraphCanvasView" MinWidth="100" MinHeight="100"/>
       <!-- Inline edit TextBox overlay (Design Mode only, positioned on top of canvas) -->
       <TextBox x:Name="InlineEditTextBox"
@@ -200,11 +209,44 @@
     </Grid>
 
     <!-- Right Splitter -->
-    <GridSplitter Grid.Column="3" Background="#D0D0D0" Width="1"/>
+    <GridSplitter Grid.Column="3" Grid.Row="0" Background="#D0D0D0" Width="1"/>
 
-    <!-- Inspector Panel (Design Mode — selection-driven per docs/design/10) -->
-    <ScrollViewer Grid.Column="4" Background="#F5F5F5">
+    <!-- Inspector Panel — switches between Analyze Mode and Design Mode states -->
+    <ScrollViewer Grid.Column="4" Grid.Row="0" Background="#F5F5F5">
       <Grid x:Name="InspectorPanel" RowDefinitions="Auto">
+
+        <!-- Analyze Mode inspector — shows selected node info, members, relations -->
+        <StackPanel x:Name="AnalyzeInspectorState" IsVisible="True" Margin="8">
+          <TextBlock Text="Inspector" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+          <TextBlock x:Name="AnalyzeInspectorTitle" Text="No node selected" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" TextWrapping="Wrap"/>
+          <TextBlock x:Name="AnalyzeInspectorKind" Text="" Margin="0,2" FontSize="11" Opacity="0.7"/>
+          <TextBlock x:Name="AnalyzeInspectorFile" Text="" Margin="0,2" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+          <Button Content="Open in Explorer" Click="OnOpenInExplorer" Margin="0,4,0,8" MinWidth="100" Foreground="White"/>
+          <TextBlock Text="Members" FontWeight="SemiBold" Margin="0,4,0,4"/>
+          <ItemsControl x:Name="AnalyzeInspectorMembers">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" FontSize="11" FontFamily="Consolas,monospace" Margin="0,1" TextWrapping="Wrap"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="Outgoing" FontWeight="SemiBold" Margin="0,8,0,4"/>
+          <ItemsControl x:Name="AnalyzeInspectorOutgoing">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" FontSize="11" Margin="0,1" TextWrapping="Wrap"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="Incoming" FontWeight="SemiBold" Margin="0,8,0,4"/>
+          <ItemsControl x:Name="AnalyzeInspectorIncoming">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" FontSize="11" Margin="0,1" TextWrapping="Wrap"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
 
         <!-- State: Nothing selected — show summary + unnamed classes warning -->
         <StackPanel x:Name="InspectorNothingState" IsVisible="False" Margin="8">
@@ -319,5 +361,10 @@
         </StackPanel>
       </Grid>
     </ScrollViewer>
+
+    <!-- Status Bar -->
+    <Border Grid.ColumnSpan="5" Grid.Row="1" Background="#2A2E34" Padding="8,3" BorderBrush="#3A4250" BorderThickness="0,1,0,0">
+      <TextBlock x:Name="StatusBarText" Text="Ready" FontSize="11" Foreground="#889098"/>
+    </Border>
   </Grid>
 </Window>

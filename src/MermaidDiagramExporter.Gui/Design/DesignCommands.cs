@@ -272,6 +272,37 @@ public static class DesignCommands
     }
 
     /// <summary>
+    /// Changes an edge's source or target endpoint. Undo restores the
+    /// original endpoint. Used when the user drags an edge from one class
+    /// to another.
+    /// </summary>
+    public sealed class ChangeEdgeEndpoint : DesignCommand
+    {
+        private readonly string _edgeId;
+        private readonly bool _isSource;
+        private readonly string _oldClassId, _newClassId;
+        public ChangeEdgeEndpoint(string edgeId, bool isSource, string oldClassId, string newClassId)
+        {
+            _edgeId = edgeId; _isSource = isSource; _oldClassId = oldClassId; _newClassId = newClassId;
+        }
+        public override string Description => "Change edge endpoint";
+        public override void Apply(DesignGraph graph)
+        {
+            var edge = graph.Edges.FirstOrDefault(e => e.Id == _edgeId);
+            if (edge == null) return;
+            if (_isSource) edge.FromClassId = _newClassId;
+            else edge.ToClassId = _newClassId;
+        }
+        public override void Undo(DesignGraph graph)
+        {
+            var edge = graph.Edges.FirstOrDefault(e => e.Id == _edgeId);
+            if (edge == null) return;
+            if (_isSource) edge.FromClassId = _oldClassId;
+            else edge.ToClassId = _oldClassId;
+        }
+    }
+
+    /// <summary>
     /// Adds a member to a class. Undo removes it.
     /// </summary>
     public sealed class AddMember : DesignCommand

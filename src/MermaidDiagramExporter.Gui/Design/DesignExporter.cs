@@ -332,4 +332,143 @@ public static class DesignExporter
 
         return groups;
     }
+
+    // ── Reverse conversion: TypeGraph → DesignGraph ──
+
+    /// <summary>
+    /// Converts a scanned <see cref="TypeGraph"/> into an editable
+    /// <see cref="DesignGraph"/>, preserving IDs, names, namespaces, kinds,
+    /// members, and edges. Layout positions are auto-arranged in a grid.
+    /// Used by the "Edit in Design" button in Analyze Mode.
+    /// </summary>
+    public static DesignGraph FromTypeGraph(TypeGraph typeGraph, List<GraphNode>? layoutNodes = null)
+    {
+        var nodeMap = layoutNodes?.ToDictionary(n => n.Id) ?? new Dictionary<string, GraphNode>();
+
+        var design = new DesignGraph
+        {
+            Title = typeGraph.Title,
+            Classes = typeGraph.Nodes.Select(n =>
+            {
+                var cls = new DesignClass
+                {
+                    Id = n.Id,
+                    Name = n.DisplayName,
+                    Namespace = n.Namespace,
+                    Kind = FromTypeNodeKind(n.Kind),
+                    Stereotype = n.Stereotypes.FirstOrDefault(),
+                    Members = n.Members.Select(FromTypeMember).ToList()
+                };
+
+                // Use layout positions if available, otherwise auto-arrange
+                if (nodeMap.TryGetValue(n.Id, out var layoutNode))
+                {
+                    cls.X = layoutNode.X;
+                    cls.Y = layoutNode.Y;
+                    cls.Width = layoutNode.Width;
+                    cls.Height = layoutNode.Height;
+                }
+
+                return cls;
+            }).ToList(),
+
+            Edges = typeGraph.Edges.Select(e => new DesignEdge
+            {
+                FromClassId = e.FromNodeId,
+                ToClassId = e.ToNodeId,
+                Kind = FromTypeEdgeKind(e.Kind),
+                Label = e.Label
+            }).ToList(),
+
+            Namespaces = typeGraph.Groups
+                .Where(g => g.Kind == TypeGroupKind.Namespace)
+                .Select(g => new DesignNamespace
+                {
+                    Id = g.Id,
+                    Name = g.Label
+                }).ToList()
+        };
+
+        // Auto-arrange classes that don't have layout positions
+        AutoArrangeUnpositioned(design);
+
+        return design;
+    }
+
+    private static ClassKind FromTypeNodeKind(TypeNodeKind kind) => kind switch
+    {
+        TypeNodeKind.Interface => ClassKind.Interface,
+        TypeNodeKind.Enum => ClassKind.Enum,
+        TypeNodeKind.Struct => ClassKind.Struct,
+        TypeNodeKind.StaticClass => ClassKind.StaticClass,
+        TypeNodeKind.AbstractClass => ClassKind.AbstractClass,
+        _ => ClassKind.Class
+    };
+
+    private static EdgeKind FromTypeEdgeKind(TypeEdgeKind kind) => kind switch
+    {
+        TypeEdgeKind.Inheritance => EdgeKind.Inheritance,
+        TypeEdgeKind.Implements => EdgeKind.Implements,
+        _ => EdgeKind.Association
+    };
+
+    private static DesignMember FromTypeMember(TypeMemberData m)
+    {
+        return new DesignMember
+        {
+            Name = m.Name,
+            TypeName = m.TypeName,
+            Kind = m.Kind switch
+            {
+                TypeMemberKind.Property => MemberKind.Property,
+                TypeMemberKind.Method => MemberKind.Method,
+                _ => MemberKind.Field
+            },
+            Visibility = m.Visibility switch
+            {
+                TypeVisibility.Private => Visibility.Private,
+                TypeVisibility.Protected => Visibility.Protected,
+                TypeVisibility.Internal => Visibility.Internal,
+                _ => Visibility.Public
+            },
+            Parameters = m.Parameters.Select(p => new DesignParameter
+            {
+                Name = p.Name,
+                TypeName = p.TypeName
+            }).ToList()
+        };
+    }
+
+    /// <summary>
+    /// Places classes that have X=Y=0 (no layout data) into a grid.
+    /// Preserves positions from classes that already have them.
+    /// </summary>
+    private static void AutoArrangeUnpositioned(DesignGraph design)
+    {
+        const float cellW = 260f;
+        const float cellH = 160f;
+        const int cols = 4;
+
+        var unpositioned = design.Classes.Where(c => c.X == 0 && c.Y == 0).ToList();
+        if (unpositioned.Count == 0) return;
+
+        // Find the bottom-right of existing positioned classes
+        float startX = 0, startY = 0;
+        var positioned = design.Classes.Where(c => c.X != 0 || c.Y != 0).ToList();
+        if (positioned.Count > 0)
+        {
+            startX = positioned.Max(c => c.X + c.Width) + 40f;
+            startY = positioned.Min(c => c.Y); // align to top
+        }
+
+        int i = 0;
+        foreach (var cls in unpositioned)
+        {
+            int col = i % cols;
+            int row = i / cols;
+            cls.X = startX + col * cellW;
+            cls.Y = startY + row * cellH;
+            i++;
+        }
+    }
 }

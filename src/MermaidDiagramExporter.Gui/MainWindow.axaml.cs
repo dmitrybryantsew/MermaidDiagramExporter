@@ -82,6 +82,7 @@ public partial class MainWindow : Window
         // Wire Design Mode controller to canvas (W1)
         GraphCanvasView.SetDesignController(_designCanvasController);
         _designCanvasController.GraphMutated += OnDesignGraphMutated;
+        _designCanvasController.ToolChanged += OnDesignToolChanged;
         GraphCanvasView.DesignClassDoubleClicked += OnDesignClassDoubleClicked;
         GraphCanvasView.DesignContextMenuRequested += OnDesignContextMenuRequested;
 
@@ -97,13 +98,15 @@ public partial class MainWindow : Window
 
     private void OnAnalyzeModeClick(object? sender, RoutedEventArgs e)
     {
-        // Clear Design Mode wiring so Analyze Mode pointer routing takes over
+        // Reset all Design Mode interaction state (drags, selection, edge creation)
+        // to prevent state leaks when dragging in Analyze Mode.
+        _designCanvasController.ResetAllState();
         GraphCanvasView.SetDesignGraph(null);
         _designModeController.EnterAnalyzeMode();
         UpdateModeUi();
-        // Restore the Analyze Mode graph (re-set it on the canvas)
         if (_currentGraph != null)
             SetDisplayedGraph(_currentGraph, reloadManualOverridesFromDisk: false);
+        UpdateStatusBar();
     }
 
     private void OnDesignModeClick(object? sender, RoutedEventArgs e)
@@ -116,6 +119,34 @@ public partial class MainWindow : Window
         _designModeController.EnterDesignMode(_designGraph);
         UpdateModeUi();
         RenderDesignModeGraph();
+        UpdateStatusBar();
+    }
+
+    /// <summary>
+    /// "Edit in Design Mode" button: converts the current Analyze Mode graph
+    /// (scanned or focused) into an editable DesignGraph and switches to
+    /// Design Mode. Preserves layout positions from the canvas.
+    /// </summary>
+    private void OnEditInDesignMode(object? sender, RoutedEventArgs e)
+    {
+        TypeGraph? source = _focusNavigationController.CurrentGraph ?? _currentGraph;
+        if (source == null)
+        {
+            StatsText.Text = "Scan a folder first to create a design from it.";
+            return;
+        }
+
+        // Pass current canvas layout nodes so positions are preserved
+        var layoutNodes = GraphCanvasView.GetCurrentNodes();
+        var design = DesignExporter.FromTypeGraph(source, layoutNodes);
+
+        _designGraph = design;
+        _designModeController.EnterDesignMode(design);
+        _designIsDirty = true;
+        UpdateModeUi();
+        RenderDesignModeGraph();
+        UpdateStatusBar();
+        StatsText.Text = $"Design created from: {source.Title} ({design.Classes.Count} classes)";
     }
 
     /// <summary>
@@ -127,6 +158,7 @@ public partial class MainWindow : Window
     private void RenderDesignModeGraph()
     {
         if (_designGraph == null) return;
+        if (_designModeController.CurrentMode != AppMode.Design) return;
 
         var typeGraph = DesignExporter.ToTypeGraph(_designGraph);
         GraphCanvasView.SetDesignGraph(_designGraph);
@@ -140,6 +172,7 @@ public partial class MainWindow : Window
 
         GraphCanvasView.SetGraph(nodes, edges);
         MinimapView.SetGraph(nodes, edges);
+        GraphCanvasView.SetDesignSelection(new HashSet<string>(_designCanvasController.Selection.SelectedClassIds));
         StatsText.Text = $"Design: {_designGraph.Classes.Count} classes, {_designGraph.Edges.Count} edges";
     }
 
@@ -227,9 +260,61 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnDesignGraphMutated(object? sender, EventArgs e)
     {
+        if (_designModeController.CurrentMode != AppMode.Design) return;
         _designIsDirty = true;
         RenderDesignModeGraph();
         TryAutoSave();
+        UpdateStatusBar();
+    }
+
+    /// <summary>
+    /// Updates the status bar when the armed tool changes.
+    /// </summary>
+    private void OnDesignToolChanged(object? sender, EventArgs e)
+    {
+        UpdateStatusBar();
+    }
+
+    /// <summary>
+    /// Updates the bottom status bar with current tool, selection, and summary info.
+    /// Implements UIContract §14.
+    /// </summary>
+    private void UpdateStatusBar()
+    {
+        if (_designModeController.CurrentMode != AppMode.Design)
+        {
+            StatusBarText.Text = "Analyze Mode";
+            return;
+        }
+
+        var toolName = _designCanvasController.CurrentTool.ToString();
+        var sticky = _designCanvasController.IsToolSticky ? " (sticky)" : "";
+        var selInfo = _designCanvasController.Selection.SelectedClassIds.Count switch
+        {
+            0 => "",
+            1 => " | Selected: " + (_designGraph?.Classes.FirstOrDefault(c => c.Id == _designCanvasController.Selection.SelectedClassIds[0])?.Name ?? "?"),
+            var n => $" | {n} classes selected"
+        };
+        var counts = _designGraph != null
+            ? $" | {_designGraph.Classes.Count} classes, {_designGraph.Edges.Count} edges"
+            : "";
+
+        if (_designCanvasController.IsCreatingEdge)
+        {
+            // Port-drag edge creation (source is being dragged)
+            if (_designCanvasController.EdgeSourceClassId == null)
+            {
+                StatusBarText.Text = "Creating edge... drag to target class. (Esc to cancel)";
+                return;
+            }
+            // Keyboard-initiated edge creation (source pre-selected)
+            var edgeKind = DesignCanvasController.ToolToEdgeKind(_designCanvasController.CurrentTool);
+            var srcName = _designGraph?.Classes.FirstOrDefault(c => c.Id == _designCanvasController.EdgeSourceClassId)?.Name ?? "?";
+            StatusBarText.Text = $"Edge: {edgeKind} — {srcName} is source. Click target class. (Esc to cancel)";
+            return;
+        }
+
+        StatusBarText.Text = $"Tool: {toolName}{sticky}{selInfo}{counts}";
     }
 
     /// <summary>
@@ -500,7 +585,9 @@ public partial class MainWindow : Window
         _designModeController.EnterDesignMode(fresh);
         _designGraph = _designModeController.CurrentDesign;
         RenderDesignModeGraph();
+        _designCanvasController.ResetTool();
         StatsText.Text = "New design created";
+        UpdateStatusBar();
     }
 
     /// <summary>
@@ -527,7 +614,9 @@ public partial class MainWindow : Window
         _designIsDirty = false;
         _recentDesignFiles.Add(path);
         RenderDesignModeGraph();
+        _designCanvasController.ResetTool();
         StatsText.Text = $"Opened: {Path.GetFileName(path)}";
+        UpdateStatusBar();
     }
 
     /// <summary>
@@ -602,34 +691,75 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Adds a new class at the center of the canvas.
+    /// Arms the Class tool. The user then clicks on the canvas to place the class.
+    /// (UIContract §4: tool-first creation).
     /// </summary>
     private void OnDesignAddClass(object? sender, RoutedEventArgs e)
     {
-        if (_designGraph == null) return;
-        // Center of canvas (approximate — canvas is ~800x600 by default)
-        var centerX = 400f;
-        var centerY = 300f;
-        _designGraph.Classes.Add(new DesignClass
-        {
-            Name = "NewClass",
-            X = centerX - 100f,
-            Y = centerY - 30f,
-            Width = 200f,
-            Height = 60f
-        });
-        _designCanvasController.UndoManager.Clear();
-        RenderDesignModeGraph();
-        StatsText.Text = "Class added at canvas center";
+        _designCanvasController.ArmTool(DesignTool.Class, sticky: false);
+        UpdateStatusBar();
     }
 
     /// <summary>
-    /// Placeholder: edge creation happens via drag-from-port on the canvas.
-    /// This button just shows a hint.
+    /// Handles edge type selection from the dropdown. Arms the corresponding edge tool.
+    /// If exactly one class is selected, sets it as the source (Method C, UIContract §6).
+    /// Also updates <see cref="DesignCanvasController.DefaultEdgeKind"/> so port-drag
+    /// and the Connect button use the selected type.
     /// </summary>
-    private void OnDesignAddEdge(object? sender, RoutedEventArgs e)
+    private void OnDesignEdgeTypeSelected(object? sender, SelectionChangedEventArgs e)
     {
-        StatsText.Text = "Drag from a class's edge port to another to create an edge";
+        if (_designGraph == null) return;
+        if (DesignEdgeCombo.SelectedIndex < 0) return;
+
+        DesignTool edgeTool = DesignEdgeCombo.SelectedIndex switch
+        {
+            0 => DesignTool.EdgeAssociation,
+            1 => DesignTool.EdgeInheritance,
+            2 => DesignTool.EdgeImplements,
+            3 => DesignTool.EdgeDependency,
+            4 => DesignTool.EdgeAggregation,
+            5 => DesignTool.EdgeComposition,
+            _ => DesignTool.EdgeAssociation
+        };
+
+        // Update the default edge kind so port-drag and Connect button use it
+        _designCanvasController.DefaultEdgeKind = DesignCanvasController.ToolToEdgeKind(edgeTool);
+
+        var selectedIds = _designCanvasController.Selection.SelectedClassIds;
+        if (selectedIds.Count == 1)
+        {
+            _designCanvasController.BeginEdgeCreationWithSource(_designGraph, selectedIds[0], edgeTool, sticky: false);
+        }
+        else
+        {
+            _designCanvasController.ArmTool(edgeTool, sticky: false);
+        }
+        UpdateStatusBar();
+    }
+
+    /// <summary>
+    /// Connect button handler: creates an edge between the two currently
+    /// selected classes using the current DefaultEdgeKind. Requires exactly
+    /// two classes selected (UIContract §6 — select two, press Connect).
+    /// </summary>
+    private void OnDesignConnect(object? sender, RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        var selectedIds = _designCanvasController.Selection.SelectedClassIds;
+        if (selectedIds.Count != 2)
+        {
+            StatsText.Text = "Select exactly 2 classes to connect.";
+            return;
+        }
+        if (_designCanvasController.ConnectSelected(_designGraph))
+        {
+            StatsText.Text = $"Connected: {_designGraph.Classes.FirstOrDefault(c => c.Id == selectedIds[0])?.Name} → {_designGraph.Classes.FirstOrDefault(c => c.Id == selectedIds[1])?.Name}";
+        }
+        else
+        {
+            StatsText.Text = "Could not create edge (self-loop or duplicate?).";
+        }
+        UpdateStatusBar();
     }
 
     /// <summary>
@@ -710,6 +840,12 @@ public partial class MainWindow : Window
         bool isDesign = _designModeController.CurrentMode == AppMode.Design;
         AnalyzeModePanel.IsVisible = !isDesign;
         DesignModePanel.IsVisible = isDesign;
+
+        // Switch inspector panel between Analyze and Design states
+        AnalyzeInspectorState.IsVisible = !isDesign;
+        InspectorNothingState.IsVisible = isDesign && _designCanvasController.Selection.SelectedClassIds.Count == 0;
+        InspectorSingleClassState.IsVisible = isDesign && _designCanvasController.Selection.SelectedClassIds.Count == 1;
+        InspectorMultiSelectState.IsVisible = isDesign && _designCanvasController.Selection.SelectedClassIds.Count > 1;
 
         // Highlight the active mode toggle button
         AnalyzeModeButton.Background = isDesign
@@ -932,14 +1068,18 @@ public partial class MainWindow : Window
     {
         if (node == null)
         {
-            SelectedNodeText.Text = "";
+            AnalyzeInspectorTitle.Text = "No node selected";
+            AnalyzeInspectorKind.Text = "";
+            AnalyzeInspectorFile.Text = "";
+            AnalyzeInspectorMembers.ItemsSource = Array.Empty<string>();
+            AnalyzeInspectorOutgoing.ItemsSource = Array.Empty<string>();
+            AnalyzeInspectorIncoming.ItemsSource = Array.Empty<string>();
             _currentSelectedNodeId = string.Empty;
             UpdateSeedButtons();
             return;
         }
 
         _currentSelectedNodeId = node.Id;
-        SelectedNodeText.Text = $"{node.Namespace}.{node.DisplayName}\nKind: {node.Kind}\nFile: {Path.GetFileName(node.AssetPath)}";
 
         // Update inspector from the actual graph node
         TypeGraph? graph = _focusNavigationController.CurrentGraph;
@@ -1094,21 +1234,20 @@ public partial class MainWindow : Window
 
     private void UpdateInspector(TypeNodeData node)
     {
-        SelectedNodeText.Text = $"{node.Namespace}.{node.DisplayName}\nKind: {node.Kind}\nFile: {Path.GetFileName(node.AssetPath)}";
-
-        // InspectorNodeText was removed when the inspector was redesigned for Design Mode.
-        // The Analyze Mode inspector just shows the summary above.
+        AnalyzeInspectorTitle.Text = $"{node.Namespace}.{node.DisplayName}";
+        AnalyzeInspectorKind.Text = $"Kind: {node.Kind}";
+        AnalyzeInspectorFile.Text = $"File: {Path.GetFileName(node.AssetPath)}";
 
         var memberItems = node.Members
             .Select(m => $"{m.Visibility} {m.Kind} {m.TypeName} {m.Name}{(m.Kind == TypeMemberKind.Method ? "()" : "")}")
             .ToList();
-        InspectorMembersList.ItemsSource = memberItems;
+        AnalyzeInspectorMembers.ItemsSource = memberItems;
 
         TypeGraph? graph = _focusNavigationController.CurrentGraph;
         if (graph == null)
         {
-            InspectorOutgoingList.ItemsSource = Array.Empty<string>();
-            InspectorIncomingList.ItemsSource = Array.Empty<string>();
+            AnalyzeInspectorOutgoing.ItemsSource = Array.Empty<string>();
+            AnalyzeInspectorIncoming.ItemsSource = Array.Empty<string>();
             return;
         }
 
@@ -1121,7 +1260,7 @@ public partial class MainWindow : Window
                 return $"{e.Kind} -> {targetName}" + (string.IsNullOrEmpty(e.Label) ? "" : $" [{e.Label}]");
             })
             .ToList();
-        InspectorOutgoingList.ItemsSource = outgoing;
+        AnalyzeInspectorOutgoing.ItemsSource = outgoing;
 
         var incoming = graph.Edges
             .Where(e => e.ToNodeId == node.Id)
@@ -1132,7 +1271,7 @@ public partial class MainWindow : Window
                 return $"{sourceName} -> {e.Kind}" + (string.IsNullOrEmpty(e.Label) ? "" : $" [{e.Label}]");
             })
             .ToList();
-        InspectorIncomingList.ItemsSource = incoming;
+        AnalyzeInspectorIncoming.ItemsSource = incoming;
     }
 
     // --- Manual Layout ---
@@ -1149,7 +1288,7 @@ public partial class MainWindow : Window
 
     private void OnManualLayoutChanged()
     {
-        if (_currentSettings.PersistManualLayout)
+        if (_currentSettings.PersistManualLayout && !string.IsNullOrWhiteSpace(_currentSettings.SourceFolderPath))
         {
             _cacheService.SaveManualOverrides(GraphCanvasView.ManualOverrides, _currentSettings);
         }
@@ -1158,7 +1297,8 @@ public partial class MainWindow : Window
     private void OnResetLayout(object? sender, RoutedEventArgs e)
     {
         _manualOverrides.Clear();
-        _cacheService.SaveManualOverrides(_manualOverrides, _currentSettings);
+        if (!string.IsNullOrWhiteSpace(_currentSettings.SourceFolderPath))
+            _cacheService.SaveManualOverrides(_manualOverrides, _currentSettings);
 
         if (_currentGraph != null)
         {
@@ -1213,38 +1353,62 @@ public partial class MainWindow : Window
         StatsText.Text = $"Saved: {path}";
     }
 
+    /// <summary>
+    /// Returns the current Mermaid diagram text, mode-aware.
+    /// In Design Mode: exports from the DesignGraph.
+    /// In Analyze Mode: exports from the focus/navigation graph or current scanned graph.
+    /// </summary>
+    private string? GetCurrentMermaid()
+    {
+        if (_designModeController.CurrentMode == AppMode.Design && _designGraph != null)
+            return DesignExporter.ToMermaid(_designGraph);
+
+        TypeGraph? graph = _focusNavigationController.CurrentGraph ?? _currentGraph;
+        if (graph == null) return null;
+        return MermaidGraphExporter.BuildDiagram(graph);
+    }
+
+    /// <summary>
+    /// Returns the current graph title for file naming, mode-aware.
+    /// </summary>
+    private string GetCurrentGraphTitle()
+    {
+        if (_designModeController.CurrentMode == AppMode.Design && _designGraph != null)
+            return _designGraph.Title;
+        TypeGraph? graph = _focusNavigationController.CurrentGraph ?? _currentGraph;
+        return graph?.Title ?? "diagram";
+    }
+
     private void OnSaveMmd(object? sender, RoutedEventArgs e)
     {
-        TypeGraph? graph = _focusNavigationController.CurrentGraph ?? _currentGraph;
-        if (graph == null) return;
+        string? mermaid = GetCurrentMermaid();
+        if (mermaid == null) return;
 
         var dir = Path.Combine(AppContext.BaseDirectory, "export");
         Directory.CreateDirectory(dir);
-        string mermaid = MermaidGraphExporter.BuildDiagram(graph);
-        var path = Path.Combine(dir, $"{MakeSafeFileName(graph.Title)}.mmd");
+        var path = Path.Combine(dir, $"{MakeSafeFileName(GetCurrentGraphTitle())}.mmd");
         File.WriteAllText(path, mermaid);
         StatsText.Text = $"Saved: {path}";
     }
 
     private void OnSaveMd(object? sender, RoutedEventArgs e)
     {
-        TypeGraph? graph = _focusNavigationController.CurrentGraph ?? _currentGraph;
-        if (graph == null) return;
+        string? mermaid = GetCurrentMermaid();
+        if (mermaid == null) return;
 
         var dir = Path.Combine(AppContext.BaseDirectory, "export");
         Directory.CreateDirectory(dir);
-        string mermaid = MermaidGraphExporter.BuildDiagram(graph);
-        var path = Path.Combine(dir, $"{MakeSafeFileName(graph.Title)}.md");
-        File.WriteAllText(path, "# " + graph.Title + "\n\n```mermaid\n" + mermaid + "\n```\n");
+        var title = GetCurrentGraphTitle();
+        var path = Path.Combine(dir, $"{MakeSafeFileName(title)}.md");
+        File.WriteAllText(path, "# " + title + "\n\n```mermaid\n" + mermaid + "\n```\n");
         StatsText.Text = $"Saved: {path}";
     }
 
     private async void OnCopyMermaid(object? sender, RoutedEventArgs e)
     {
-        TypeGraph? graph = _focusNavigationController.CurrentGraph ?? _currentGraph;
-        if (graph == null) return;
+        string? mermaid = GetCurrentMermaid();
+        if (mermaid == null) return;
 
-        string mermaid = MermaidGraphExporter.BuildDiagram(graph);
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard != null)
         {
@@ -1255,10 +1419,9 @@ public partial class MainWindow : Window
 
     private void OnOpenLiveEditor(object? sender, RoutedEventArgs e)
     {
-        TypeGraph? graph = _focusNavigationController.CurrentGraph ?? _currentGraph;
-        if (graph == null) return;
+        string? mermaid = GetCurrentMermaid();
+        if (mermaid == null) return;
 
-        string mermaid = MermaidGraphExporter.BuildDiagram(graph);
         // Mermaid Live Editor supports base64-encoded JSON with code field
         string json = "{\"code\":\"" + mermaid.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n") + "\",\"mermaid\":{}}";
         string base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
@@ -1400,14 +1563,33 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Escape — cancel edge creation
+        // Escape — cancel action, clear selection, or reset tool
         if (e.Key == Key.Escape)
         {
             if (_designCanvasController.IsCreatingEdge)
             {
                 _designCanvasController.CancelEdgeCreation();
                 GraphCanvasView.ForceRedraw();
-                StatsText.Text = "Edge creation cancelled";
+                UpdateStatusBar();
+                e.Handled = true;
+                return;
+            }
+            // If a non-Select tool is armed, reset to Select
+            if (_designCanvasController.CurrentTool != DesignTool.Select)
+            {
+                _designCanvasController.ResetTool();
+                UpdateStatusBar();
+                e.Handled = true;
+                return;
+            }
+            // Otherwise deselect
+            if (_designGraph != null)
+            {
+                // Clear selection by clicking empty canvas
+                _designCanvasController.HandlePointerPressed(
+                    new SKPoint(-1000, -1000), _designGraph,
+                    new System.Collections.Generic.List<SKPoint>());
+                RenderDesignModeGraph();
             }
             e.Handled = true;
             return;
@@ -1417,6 +1599,14 @@ public partial class MainWindow : Window
         if (ctrl && e.Key == Key.S)
         {
             OnDesignSave(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+Shift+S — Save As
+        if (ctrl && shift && e.Key == Key.S)
+        {
+            OnDesignSaveAs(this, new RoutedEventArgs());
             e.Handled = true;
             return;
         }
@@ -1436,6 +1626,77 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+
+        // F — Fit to screen (when nothing selected; reserved when "F" is used as a shortcut)
+        if (e.Key == Key.F && !ctrl && !shift)
+        {
+            GraphCanvasView.FitToScreen();
+            e.Handled = true;
+            return;
+        }
+
+        // ── Tool shortcuts (UIContract §7) ──
+        if (!ctrl)
+        {
+            var bindings = _currentSettings?.DesignShortcutBindings;
+            DesignTool? tool = DesignShortcutDefaults.KeyToTool(e.Key, bindings);
+
+            if (tool.HasValue)
+            {
+                ArmToolWithKeyboard(tool.Value, shift);
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // Arrow keys — nudge selected classes
+        if (_designGraph != null && _designCanvasController.Selection.SelectedClassIds.Count > 0)
+        {
+            float nudgeAmount = shift ? 10f : 1f;
+            float dx = 0, dy = 0;
+            switch (e.Key)
+            {
+                case Key.Left: dx = -nudgeAmount; break;
+                case Key.Right: dx = nudgeAmount; break;
+                case Key.Up: dy = -nudgeAmount; break;
+                case Key.Down: dy = nudgeAmount; break;
+            }
+            if (dx != 0 || dy != 0)
+            {
+                foreach (var id in _designCanvasController.Selection.SelectedClassIds)
+                {
+                    var cls = _designGraph.Classes.FirstOrDefault(c => c.Id == id);
+                    if (cls != null)
+                    {
+                        cls.X += dx;
+                        cls.Y += dy;
+                    }
+                }
+                RenderDesignModeGraph();
+                e.Handled = true;
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Arms a tool from a keyboard shortcut. If Shift is held, arms in sticky mode.
+    /// For edge tools, if a class is selected, sets it as the source (Method C, UIContract §6).
+    /// </summary>
+    private void ArmToolWithKeyboard(DesignTool tool, bool shift)
+    {
+        if (DesignCanvasController.IsEdgeTool(tool) && _designGraph != null)
+        {
+            var selectedIds = _designCanvasController.Selection.SelectedClassIds;
+            if (selectedIds.Count == 1)
+            {
+                _designCanvasController.BeginEdgeCreationWithSource(_designGraph, selectedIds[0], tool, shift);
+                UpdateStatusBar();
+                return;
+            }
+        }
+        _designCanvasController.ArmTool(tool, shift);
+        UpdateStatusBar();
     }
 
     // ── Inspector panel (docs/design/10) ──
@@ -1448,6 +1709,10 @@ public partial class MainWindow : Window
     private void OnDesignSelectionChanged(object? sender, DesignSelection selection)
     {
         if (_designGraph == null) return;
+
+        // Sync selection to GraphCanvas for rendering (UIContract §5, Bug 2 fix)
+        var selectedIds = new HashSet<string>(selection.SelectedClassIds);
+        GraphCanvasView.SetDesignSelection(selectedIds);
 
         // (Re)create the view model so it picks up the current state
         _inspectorVm = new DesignInspectorViewModel(_designCanvasController, _designGraph);
@@ -1513,9 +1778,9 @@ public partial class MainWindow : Window
             InspectorMultiSelectCountText.Text = $"{selection.SelectedClassIds.Count} classes selected";
             InspectorMultiSelectList.ItemsSource = _inspectorVm.SelectedClasses;
         }
-    }
 
-    /// <summary>Formats a member for display in the inspector list.</summary>
+        UpdateStatusBar();
+    }
     private static string FormatMember(DesignMember m)
     {
         string vis = m.Visibility switch

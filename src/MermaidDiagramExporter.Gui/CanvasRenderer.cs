@@ -20,7 +20,11 @@ public sealed class ViewportState
     public bool ShowAssociationEdges { get; init; }
     public GraphNode? SelectedNode { get; init; }
     public GraphNode? HoveredNode { get; init; }
+    public HashSet<string>? SelectedDesignNodeIds { get; init; }
+    public HashSet<string>? HoveredDesignNodeIds { get; init; }
     public string SearchText { get; init; } = string.Empty;
+    /// <summary>Set to true to enable Design Mode visual affordances (handles, ports).</summary>
+    public bool IsDesignMode { get; init; }
 }
 
 /// <summary>
@@ -92,7 +96,40 @@ public sealed class CanvasRenderer
         Style = SKPaintStyle.Fill, IsAntialias = true
     };
 
-    // Colors
+    // Design Mode affordance paints
+    private static readonly SKPaint SelectionBorderPaint = new()
+    {
+        Color = new SKColor(0xFF, 0x8C, 0x00), Style = SKPaintStyle.Stroke, StrokeWidth = 3f, IsAntialias = true
+    };
+    private static readonly SKPaint HoverBorderPaint = new()
+    {
+        Color = new SKColor(0x60, 0xA0, 0xE0), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true
+    };
+    private static readonly SKPaint ResizeHandlePaint = new()
+    {
+        Color = new SKColor(0xFF, 0x8C, 0x00), Style = SKPaintStyle.Fill, IsAntialias = true
+    };
+    private static readonly SKPaint PortCircleFillPaint = new()
+    {
+        Color = new SKColor(0xFF, 0x8C, 0x00), Style = SKPaintStyle.Fill, IsAntialias = true
+    };
+    private static readonly SKPaint PortCircleStrokePaint = new()
+    {
+        Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true
+    };
+    private static readonly SKPaint RubberBandPaint = new()
+    {
+        Color = new SKColor(0xFF, 0xA0, 0x40), Style = SKPaintStyle.Stroke, StrokeWidth = 2f, IsAntialias = true,
+        PathEffect = SKPathEffect.CreateDash(new[] { 6f, 4f }, 0)
+    };
+    private static readonly SKPaint EdgeTargetHighlightPaint = new()
+    {
+        Color = new SKColor(0x40, 0xB0, 0x70), Style = SKPaintStyle.Stroke, StrokeWidth = 3f, IsAntialias = true
+    };
+
+    private const float ResizeHandleSize = 10f;
+    private const float PortCircleRadius = 5f;
+    private const float PortHitRadius = 6f;
     private static readonly SKColor ColorEdgeInheritance = new(0x50, 0x90, 0xD0);
     private static readonly SKColor ColorEdgeImplements = new(0x40, 0xB0, 0x70);
     private static readonly SKColor ColorEdgeAssociation = new(0x60, 0x60, 0x60);
@@ -215,14 +252,18 @@ public sealed class CanvasRenderer
 
     /// <summary>
     /// Draws all nodes with search highlighting, selection, and hover states.
+    /// Supports both Analyze Mode (single SelectedNode) and Design Mode
+    /// (SelectedDesignNodeIds set for multi-select).
     /// </summary>
     public void DrawNodes(SKCanvas canvas, List<GraphNode> nodes, ViewportState vp, string? excludeNodeId = null)
     {
         bool searchActive = !string.IsNullOrWhiteSpace(vp.SearchText);
+        bool designMode = vp.IsDesignMode;
+        var designSelectedIds = vp.SelectedDesignNodeIds;
+        bool hasDesignSelection = designSelectedIds != null && designSelectedIds.Count > 0;
 
         foreach (var node in nodes)
         {
-            // Skip the dragged node — it's drawn separately in DrawSingleNode
             if (excludeNodeId != null && node.Id == excludeNodeId)
                 continue;
             float x = node.X, y = node.Y, w = node.Width, h = node.Height;
@@ -236,13 +277,21 @@ public sealed class CanvasRenderer
                     || node.Id.Contains(vp.SearchText, StringComparison.OrdinalIgnoreCase);
             }
 
+            bool isSelected = designMode && hasDesignSelection
+                ? designSelectedIds!.Contains(node.Id)
+                : node == vp.SelectedNode;
+
+            bool isHovered = designMode && vp.HoveredDesignNodeIds != null
+                ? vp.HoveredDesignNodeIds.Contains(node.Id)
+                : node == vp.HoveredNode;
+
             canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeFillPaint);
 
             var strokeColor = searchActive && searchMatch ? ColorNodeStrokeSearchMatch
-                           : node == vp.SelectedNode ? ColorNodeStrokeSelected
-                           : node == vp.HoveredNode ? ColorNodeStrokeHover
+                           : isSelected ? ColorNodeStrokeSelected
+                           : isHovered ? ColorNodeStrokeHover
                            : ColorNodeStroke;
-            float strokeWidth = (node == vp.SelectedNode || (searchActive && searchMatch)) ? 3 : 1.5f;
+            float strokeWidth = (isSelected || (searchActive && searchMatch)) ? 3 : 1.5f;
             NodeStrokePaint.Color = strokeColor;
             NodeStrokePaint.StrokeWidth = strokeWidth;
             canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeStrokePaint);
@@ -300,6 +349,17 @@ public sealed class CanvasRenderer
                 memberY += NodeMemberHeight;
                 count++;
             }
+
+            // ── Design Mode affordances: resize handles and connection ports ──
+            if (designMode && isSelected)
+            {
+                DrawResizeHandle(canvas, x, y, w, h);
+                DrawConnectionPorts(canvas, x, y, w, h);
+            }
+            else if (designMode && isHovered)
+            {
+                DrawConnectionPorts(canvas, x, y, w, h);
+            }
         }
     }
 
@@ -353,13 +413,22 @@ public sealed class CanvasRenderer
             DrawArrowhead(canvas, toX, toY, edgeColor);
         }
 
-        // Draw the node itself
+        // Draw the node itself (with Design Mode selection support)
         canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeFillPaint);
 
-        var strokeColor = node == vp.SelectedNode ? ColorNodeStrokeSelected
-                       : node == vp.HoveredNode ? ColorNodeStrokeHover
+        bool designMode = vp.IsDesignMode;
+        var designSelectedIds = vp.SelectedDesignNodeIds;
+        bool isSelected = designMode && designSelectedIds != null
+            ? designSelectedIds.Contains(node.Id)
+            : node == vp.SelectedNode;
+        bool isHovered = designMode && vp.HoveredDesignNodeIds != null
+            ? vp.HoveredDesignNodeIds.Contains(node.Id)
+            : node == vp.HoveredNode;
+
+        var strokeColor = isSelected ? ColorNodeStrokeSelected
+                       : isHovered ? ColorNodeStrokeHover
                        : ColorNodeStroke;
-        float strokeW = node == vp.SelectedNode ? 3f : 1.5f;
+        float strokeW = isSelected ? 3f : 1.5f;
         NodeStrokePaint.Color = strokeColor;
         NodeStrokePaint.StrokeWidth = strokeW;
         canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeStrokePaint);
@@ -369,6 +438,17 @@ public sealed class CanvasRenderer
         canvas.DrawRect(x, y + NodeHeaderHeight - 4, w, 4, NodeHeaderPaint);
 
         canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, NodeNamePaint);
+
+        // Design Mode affordances for the dragged/selected node
+        if (designMode && isSelected)
+        {
+            DrawResizeHandle(canvas, x, y, w, h);
+            DrawConnectionPorts(canvas, x, y, w, h);
+        }
+        else if (designMode && isHovered)
+        {
+            DrawConnectionPorts(canvas, x, y, w, h);
+        }
     }
 
     private static void DrawArrowhead(SKCanvas canvas, float x, float y, SKColor color)
@@ -383,6 +463,59 @@ public sealed class CanvasRenderer
         path.LineTo(x - arrowLen, y + arrowWidth);
         path.Close();
         canvas.DrawPath(path, ArrowheadPaint);
+    }
+
+    /// <summary>
+    /// Draws a resize handle (small square) at the bottom-right corner of a node.
+    /// Used in Design Mode to show that the node can be resized.
+    /// </summary>
+    private static void DrawResizeHandle(SKCanvas canvas, float nodeX, float nodeY, float nodeW, float nodeH)
+    {
+        float hx = nodeX + nodeW - ResizeHandleSize;
+        float hy = nodeY + nodeH - ResizeHandleSize;
+        canvas.DrawRect(hx, hy, ResizeHandleSize, ResizeHandleSize, ResizeHandlePaint);
+        // White border for visibility
+        canvas.DrawRect(hx, hy, ResizeHandleSize, ResizeHandleSize, new SKPaint
+        {
+            Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true
+        });
+    }
+
+    /// <summary>
+    /// Draws connection ports (circles) on the left and right edges of a node.
+    /// Used in Design Mode when a node is selected or hovered.
+    /// </summary>
+    private static void DrawConnectionPorts(SKCanvas canvas, float nodeX, float nodeY, float nodeW, float nodeH)
+    {
+        float midY = nodeY + nodeH / 2f;
+        // Left port
+        canvas.DrawCircle(nodeX, midY, PortCircleRadius, PortCircleFillPaint);
+        canvas.DrawCircle(nodeX, midY, PortCircleRadius, PortCircleStrokePaint);
+        // Right port
+        canvas.DrawCircle(nodeX + nodeW, midY, PortCircleRadius, PortCircleFillPaint);
+        canvas.DrawCircle(nodeX + nodeW, midY, PortCircleRadius, PortCircleStrokePaint);
+    }
+
+    /// <summary>
+    /// Draws a rubber-band line from a source node's port to the current cursor
+    /// position during edge creation in Design Mode.
+    /// </summary>
+    public static void DrawEdgeCreationPreview(SKCanvas canvas, float fromX, float fromY, SKPoint toWorld, bool fromRightPort)
+    {
+        float srcX = fromRightPort ? fromX : fromX;
+        float srcY = fromY;
+        float dstX = toWorld.X;
+        float dstY = toWorld.Y;
+        canvas.DrawLine(srcX, srcY, dstX, dstY, RubberBandPaint);
+    }
+
+    /// <summary>
+    /// Draws a green border around a node to highlight it as a valid edge
+    /// creation target during drag-from-port.
+    /// </summary>
+    public static void DrawEdgeTargetHighlight(SKCanvas canvas, float nodeX, float nodeY, float nodeW, float nodeH)
+    {
+        canvas.DrawRoundRect(nodeX, nodeY, nodeW, nodeH, 6, 6, EdgeTargetHighlightPaint);
     }
 
     internal static string? GetBadgeText(GraphNode node)

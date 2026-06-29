@@ -91,6 +91,13 @@ public sealed class ProjectSettings
     /// When false, the original cluster-as-supernode layered engine is used.
     /// </summary>
     public bool UseCompoundLayoutEngine { get; set; } = false;
+
+    /// <summary>
+    /// User-defined keyboard shortcut bindings for Design Mode tools.
+    /// Keys are tool names (e.g. "Class", "EdgeInheritance"), values are key names
+    /// (e.g. "C", "H"). Only bindings that differ from defaults need to be stored.
+    /// </summary>
+    public Dictionary<string, string> DesignShortcutBindings { get; set; } = new();
 }
 
 public enum CacheInvalidationMode

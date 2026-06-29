@@ -42,6 +42,9 @@ public class GraphCanvas : Control
     // ── Design Mode integration (M2) ──
     private DesignCanvasController? _designController;
     private DesignGraph? _designGraph;
+    private HashSet<string> _designSelectedNodeIds = new();
+    private HashSet<string> _designHoveredNodeIds = new();
+    private EdgeCreationPreview? _edgeCreationPreview;
 
     /// <summary>
     /// Wires the Design Mode controller. Called from MainWindow when the mode
@@ -60,7 +63,23 @@ public class GraphCanvas : Control
     public void SetDesignGraph(DesignGraph? graph)
     {
         _designGraph = graph;
+        _staticContentDirty = true;
         Invalidate();
+    }
+
+    /// <summary>
+    /// Sets the selected node IDs for Design Mode selection rendering.
+    /// Called by MainWindow when the DesignMode selection changes.
+    /// </summary>
+    public void SetDesignSelection(HashSet<string> selectedIds)
+    {
+        _designSelectedNodeIds = selectedIds ?? new HashSet<string>();
+        Invalidate();
+    }
+
+    public void SetDesignEdgePreview(EdgeCreationPreview? preview)
+    {
+        _edgeCreationPreview = preview;
     }
 
     // Dragging state
@@ -259,6 +278,12 @@ public class GraphCanvas : Control
         Invalidate();
     }
 
+    /// <summary>
+    /// Returns a snapshot of the current graph nodes (positions, sizes, IDs).
+    /// Used by "Edit in Design Mode" to preserve canvas layout positions.
+    /// </summary>
+    public List<GraphNode> GetCurrentNodes() => new(_nodes);
+
     public void WaitForRender()
     {
         // If the control has been sized, ensure the bitmap is rendered
@@ -443,6 +468,9 @@ public class GraphCanvas : Control
         SelectedNode = _selectedNode,
         HoveredNode = _hoveredNode,
         SearchText = _searchText,
+        SelectedDesignNodeIds = _designGraph != null ? _designSelectedNodeIds : null,
+        HoveredDesignNodeIds = _designGraph != null ? _designHoveredNodeIds : null,
+        IsDesignMode = _designGraph != null,
     };
 
     private void ComputeContentBounds()
@@ -518,21 +546,41 @@ public class GraphCanvas : Control
         }
         if (_staticContentPicture != null)
         {
-            // Translate so the picture's local coords align with world coords
             canvas.Translate(_staticContentMinX, _staticContentMinY);
             canvas.DrawPicture(_staticContentPicture);
             canvas.Translate(-_staticContentMinX, -_staticContentMinY);
         }
 
-        // Draw nodes every frame (they have per-frame state: hover, selection, search match)
         if (_draggedNodeIdDuringRender != null)
         {
-            // During drag: draw only the dragged node on top of the cached static picture
             DrawSingleNode(canvas, _draggedNodeIdDuringRender);
         }
         else
         {
             DrawNodes(canvas);
+        }
+
+        // ── Design Mode edge creation previews ──
+        if (_designGraph != null && _designController != null)
+        {
+            var preview = _designController.GetEdgeCreationPreview();
+            if (preview != null)
+            {
+                var srcRect = preview.SourceRectangle;
+                float portX = preview.SourceIsRightPort ? srcRect.X + srcRect.Width : srcRect.X;
+                float portY = srcRect.Y + srcRect.Height / 2f;
+                CanvasRenderer.DrawEdgeCreationPreview(canvas, portX, portY, preview.CurrentCursor, preview.SourceIsRightPort);
+
+                var mouseWorld = new SKPoint(preview.CurrentCursor.X, preview.CurrentCursor.Y);
+                var designRects = _designController.BuildRectangles(_designGraph);
+                var hit = DesignHitTestService.HitTest(mouseWorld, designRects);
+                if (hit.Rectangle != null && hit.Rectangle != preview.SourceRectangle)
+                {
+                    CanvasRenderer.DrawEdgeTargetHighlight(canvas,
+                        hit.Rectangle.X, hit.Rectangle.Y,
+                        hit.Rectangle.Width, hit.Rectangle.Height);
+                }
+            }
         }
         canvas.Restore();
         canvas.Flush();
@@ -648,11 +696,9 @@ public class GraphCanvas : Control
         var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
 
         // ── Design Mode routing (M2) ──
-        // Every branch in this block ends with `return` (or falls through to
-        // the final `return` after Select). Without early returns, control
-        // would fall through into the Analyze Mode pan/drag code below and
-        // produce duplicate/broken behavior.
-        if (_designController != null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        // Guard: require both _designController AND _designGraph.
+        // Without _designGraph, we fall through to Analyze Mode behavior.
+        if (_designController != null && _designGraph != null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             // Shift/ctrl held → extend selection (multi-select). Per docs/design/09 GAP-2.
             bool extendSelection = (e.KeyModifiers & (KeyModifiers.Shift | KeyModifiers.Control)) != 0;
@@ -660,6 +706,20 @@ public class GraphCanvas : Control
             {
                 e.Pointer.Capture(this);
                 e.Handled = true;
+                // ── Partial redraw optimization for smooth Design Mode drag ──
+                if (_designController.IsDragging || _designController.IsResizing)
+                {
+                    var classId = _designController.GetDraggedOrResizingClassId();
+                    if (classId != null)
+                    {
+                        var node = _nodes.FirstOrDefault(n => n.Id == classId);
+                        if (node != null)
+                        {
+                            _draggedNodeIdDuringRender = node.Id;
+                            _staticContentDirty = true;
+                        }
+                    }
+                }
                 Invalidate();
                 return;
             }
@@ -755,9 +815,35 @@ public class GraphCanvas : Control
         var designWorldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
 
         // Design Mode drag/resize routing (M2)
-        if (_designController != null && (_designController.IsDragging || _designController.IsResizing))
+        // Guard: require both _designController AND _designGraph
+        if (_designController != null && _designGraph != null && (_designController.IsDragging || _designController.IsResizing))
         {
             _designController.HandlePointerMoved(designWorldPos);
+            // Sync GraphNode positions from DesignClass during drag for smooth live-redraw rendering.
+            // The DesignCanvasController updates DesignClass.X/Y in HandlePointerMoved,
+            // but the canvas renders from _nodes (GraphNode list). We must copy the
+            // updated position to the matching GraphNode so the bitmap re-render shows
+            // the class at its new position. This mirrors Analyze Mode's direct node.X/Y update.
+            var draggedRect = _designController.GetDraggedOrResizingClassId();
+            if (draggedRect != null)
+            {
+                var cls = _designGraph.Classes.FirstOrDefault(c => c.Id == draggedRect);
+                var node = _nodes.FirstOrDefault(n => n.Id == draggedRect);
+                if (cls != null && node != null)
+                {
+                    node.X = cls.X;
+                    node.Y = cls.Y;
+                    node.Width = cls.Width;
+                    node.Height = cls.Height;
+                }
+
+                // Set up partial-redraw optimization if not already active
+                if (_draggedNodeIdDuringRender == null)
+                {
+                    _draggedNodeIdDuringRender = draggedRect;
+                    _staticContentDirty = true;
+                }
+            }
             e.Handled = true;
             Invalidate();
             return;
@@ -844,12 +930,15 @@ public class GraphCanvas : Control
     {
         base.OnPointerReleased(e);
 
-        // Design Mode drag/resize commit (M2)
-        if (_designController != null && (_designController.IsDragging || _designController.IsResizing || _designController.IsCreatingEdge))
+        // Design Mode drag/resize/edge commit (M2)
+        // Guard: require both _designController AND _designGraph
+        if (_designController != null && _designGraph != null && (_designController.IsDragging || _designController.IsResizing || _designController.IsCreatingEdge))
         {
             var pos = e.GetPosition(this);
             var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
             _designController.HandlePointerReleased(_designGraph, worldPos);
+            _draggedNodeIdDuringRender = null;
+            _staticContentDirty = true;
             e.Handled = true;
             Invalidate();
             return;

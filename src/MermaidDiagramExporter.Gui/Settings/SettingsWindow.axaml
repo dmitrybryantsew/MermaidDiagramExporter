@@ -84,6 +84,48 @@
           <CheckBox x:Name="EnableDraggingCheck" Content="Enable node drag-to-reposition" />
           <CheckBox x:Name="ShowMinimapCheck" Content="Show minimap" />
 
+          <!-- Keyboard Shortcuts -->
+          <TextBlock Text="Design Mode Shortcuts" FontWeight="Bold" FontSize="16" Margin="0,16,0,0" />
+          <TextBlock Text="Press a key in the text field to rebind. Leave blank for default." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,8" />
+          <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="140,60,140,60" MaxHeight="200">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Select" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="0" Grid.Column="1" x:Name="ShortcutSelect" Width="50" FontSize="12" />
+            <TextBlock Grid.Row="0" Grid.Column="2" Text="Inheritance" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="0" Grid.Column="3" x:Name="ShortcutEdgeInheritance" Width="50" FontSize="12" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Class" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="1" Grid.Column="1" x:Name="ShortcutClass" Width="50" FontSize="12" />
+            <TextBlock Grid.Row="1" Grid.Column="2" Text="Implements" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="1" Grid.Column="3" x:Name="ShortcutEdgeImplements" Width="50" FontSize="12" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Interface" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="2" Grid.Column="1" x:Name="ShortcutInterface" Width="50" FontSize="12" />
+            <TextBlock Grid.Row="2" Grid.Column="2" Text="Association" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="2" Grid.Column="3" x:Name="ShortcutEdgeAssociation" Width="50" FontSize="12" />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Enum" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="3" Grid.Column="1" x:Name="ShortcutEnum" Width="50" FontSize="12" />
+            <TextBlock Grid.Row="3" Grid.Column="2" Text="Dependency" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="3" Grid.Column="3" x:Name="ShortcutEdgeDependency" Width="50" FontSize="12" />
+
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Struct" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="4" Grid.Column="1" x:Name="ShortcutStruct" Width="50" FontSize="12" />
+            <TextBlock Grid.Row="4" Grid.Column="2" Text="Aggregation" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="4" Grid.Column="3" x:Name="ShortcutEdgeAggregation" Width="50" FontSize="12" />
+
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Abstract" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="5" Grid.Column="1" x:Name="ShortcutAbstractClass" Width="50" FontSize="12" />
+            <TextBlock Grid.Row="5" Grid.Column="2" Text="Composition" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="5" Grid.Column="3" x:Name="ShortcutEdgeComposition" Width="50" FontSize="12" />
+
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Static" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="6" Grid.Column="1" x:Name="ShortcutStaticClass" Width="50" FontSize="12" />
+
+            <TextBlock Grid.Row="7" Grid.Column="0" Text="Namespace" VerticalAlignment="Center" FontSize="12" />
+            <TextBox  Grid.Row="7" Grid.Column="1" x:Name="ShortcutNamespace" Width="50" FontSize="12" />
+          </Grid>
+          <Button x:Name="ResetShortcutsButton" Content="Reset to Defaults" Margin="0,8,0,0" HorizontalAlignment="Right" />
+
           <!-- Experimental Layout Engine -->
           <TextBlock Text="Experimental" FontWeight="Bold" FontSize="16" Margin="0,16,0,0" Foreground="#FFA040" />
           <CheckBox x:Name="UseCompoundEngineCheck" Content="Use compound layout engine (experimental)" />

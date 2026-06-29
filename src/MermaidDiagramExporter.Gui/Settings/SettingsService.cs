@@ -35,10 +35,14 @@ public sealed class SettingsService
     /// <summary>
     /// Returns the default cache directory for a given source folder.
     /// Format: %LocalAppData%/MermaidDiagramExporter/Caches/{ProjectName}_{FolderHash}/
+    /// Returns the base app data directory if sourceFolderPath is empty
+    /// (prevents ArgumentException from Path.GetFullPath on empty strings).
     /// </summary>
     public static string GetDefaultCacheDirectory(string sourceFolderPath)
     {
         string appDir = GetAppDataDirectory();
+        if (string.IsNullOrWhiteSpace(sourceFolderPath))
+            return Path.Combine(appDir, "Caches", "Untitled");
         string projectName = Path.GetFileName(sourceFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         string folderHash = ComputeFolderHash(sourceFolderPath);
         string cacheDir = Path.Combine(appDir, "Caches", $"{projectName}_{folderHash}");
@@ -131,9 +135,12 @@ public sealed class SettingsService
 
     /// <summary>
     /// Computes a short stable hash of a folder path for use in filenames.
+    /// Returns a fixed hash for empty paths to avoid ArgumentException.
     /// </summary>
     private static string ComputeFolderHash(string folderPath)
     {
+        if (string.IsNullOrWhiteSpace(folderPath))
+            return "00000000";
         byte[] bytes = Encoding.UTF8.GetBytes(Path.GetFullPath(folderPath).ToLowerInvariant());
         byte[] hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash)[..8];

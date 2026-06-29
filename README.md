@@ -72,6 +72,70 @@ Features:
 - Minimap for large diagrams
 - Namespace-based filtering
 - Export to PNG
+- **Design Mode** — author class diagrams from scratch with tools and keyboard shortcuts
+
+### Design Mode Keyboard Shortcuts
+
+Design Mode uses a tool-first creation model. Press a key to arm a tool, then interact with the canvas.
+
+#### Tools
+
+| Key | Tool |
+|-----|------|
+| `V` | Select / Move (default) |
+| `C` | Class |
+| `I` | Interface |
+| `E` | Enum |
+| `S` | Struct |
+| `A` | Abstract Class |
+| `T` | Static Class |
+| `N` | Namespace |
+| `H` | Inheritance edge |
+| `M` | Implements edge |
+| `L` | Association edge |
+| `D` | Dependency edge |
+| `G` | Aggregation edge |
+| `O` | Composition edge |
+
+#### Editing
+
+| Key | Action |
+|-----|--------|
+| `Delete` / `Backspace` | Delete selected |
+| `F2` / `Enter` | Rename selected class |
+| `Ctrl`+`Z` | Undo |
+| `Ctrl`+`Y` / `Ctrl`+`Shift`+`Z` | Redo |
+| `Ctrl`+`S` | Save |
+| `Ctrl`+`Shift`+`S` | Save As |
+| `Ctrl`+`N` | New design |
+| `Ctrl`+`O` | Open design |
+| `Escape` | Cancel tool / cancel edge / clear selection |
+
+#### Navigation & View
+
+| Key | Action |
+|-----|--------|
+| `F` | Fit to screen |
+| `Space` (hold) | Pan tool |
+| `Arrow` keys | Nudge selected 1px |
+| `Shift`+`Arrow` | Nudge selected 10px |
+| Scroll wheel | Zoom |
+| Middle-drag | Pan |
+
+#### Edge Creation (3 methods)
+
+1. **Keyboard** (fastest): Select a class, press edge key (`L` for Association), click target class
+2. **Port drag**: Hover a class to see connection ports, drag from a port to another class
+3. **Toolbar dropdown**: Select edge type from the toolbar dropdown, click source → target
+
+#### Tool Tips
+
+- Single-press a tool key → one-shot use (reverts to Select after use)
+- Hold `Shift` while pressing → sticky mode (tool stays armed until `Esc`)
+- Double-click a toolbar button → sticky mode
+- The status bar always shows the current tool and selection
+
+Shortcuts can be customized in **Settings** (per-project configuration).
 
 ## Architecture
 

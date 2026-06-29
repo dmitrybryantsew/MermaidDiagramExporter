@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using MermaidDiagramExporter.Gui.Stereotypes;
+using MermaidDiagramExporter.Gui.Design;
 
 namespace MermaidDiagramExporter.Gui.Settings;
 
@@ -15,6 +16,25 @@ public partial class SettingsWindow : Window
     private readonly SettingsService _settingsService;
     private ProjectSettings _settings = new();
     private System.Collections.ObjectModel.ObservableCollection<StereotypeRule> _stereotypeRules = new();
+    private Dictionary<string, string> _shortcutBindings = new();
+
+    private static readonly Dictionary<string, string> ShortcutFieldMap = new()
+    {
+        ["Select"] = nameof(ShortcutSelect),
+        ["Class"] = nameof(ShortcutClass),
+        ["Interface"] = nameof(ShortcutInterface),
+        ["Enum"] = nameof(ShortcutEnum),
+        ["Struct"] = nameof(ShortcutStruct),
+        ["AbstractClass"] = nameof(ShortcutAbstractClass),
+        ["StaticClass"] = nameof(ShortcutStaticClass),
+        ["Namespace"] = nameof(ShortcutNamespace),
+        ["EdgeInheritance"] = nameof(ShortcutEdgeInheritance),
+        ["EdgeImplements"] = nameof(ShortcutEdgeImplements),
+        ["EdgeAssociation"] = nameof(ShortcutEdgeAssociation),
+        ["EdgeDependency"] = nameof(ShortcutEdgeDependency),
+        ["EdgeAggregation"] = nameof(ShortcutEdgeAggregation),
+        ["EdgeComposition"] = nameof(ShortcutEdgeComposition),
+    };
 
     public SettingsWindow(SettingsService settingsService)
     {
@@ -28,6 +48,7 @@ public partial class SettingsWindow : Window
         SaveButton.Click += OnSave;
         CancelButton.Click += OnCancel;
         ResetDefaultsButton.Click += OnResetDefaults;
+        ResetShortcutsButton.Click += OnResetShortcuts;
         BrowseCacheButton.Click += async (s, e) => await BrowseFolder(CacheFolderText);
         BrowseBundleButton.Click += async (s, e) => await BrowseFolder(BundleFolderText);
         AddStereotypeRuleButton.Click += (s, e) =>
@@ -62,6 +83,9 @@ public partial class SettingsWindow : Window
         EnableDraggingCheck.IsChecked = _settings.EnableNodeDragging;
         ShowMinimapCheck.IsChecked = _settings.ShowMinimap;
         UseCompoundEngineCheck.IsChecked = _settings.UseCompoundLayoutEngine;
+
+        _shortcutBindings = new Dictionary<string, string>(_settings.DesignShortcutBindings);
+        LoadShortcutFields();
 
         _stereotypeRules.Clear();
         foreach (var rule in _settings.StereotypeRules)
@@ -120,6 +144,8 @@ public partial class SettingsWindow : Window
         _settings.UseCompoundLayoutEngine = UseCompoundEngineCheck.IsChecked == true;
         _settings.StereotypeRules = _stereotypeRules.ToList();
 
+        _settings.DesignShortcutBindings = CollectShortcutBindings();
+
         _settingsService.SaveSettings(_settings);
         SavedSettings = _settings;
         Close();
@@ -155,6 +181,42 @@ public partial class SettingsWindow : Window
         {
             _stereotypeRules.Remove(rule);
         }
+    }
+
+    private void OnResetShortcuts(object? sender, RoutedEventArgs e)
+    {
+        _shortcutBindings.Clear();
+        LoadShortcutFields();
+    }
+
+    private void LoadShortcutFields()
+    {
+        foreach (var (toolName, fieldName) in ShortcutFieldMap)
+        {
+            var field = this.FindControl<TextBox>(fieldName);
+            if (field == null) continue;
+            var key = DesignShortcutDefaults.GetEffectiveKey(toolName, _shortcutBindings);
+            field.Text = key;
+            field.Watermark = DesignShortcutDefaults.DefaultBindings.TryGetValue(toolName, out var d) ? d : "";
+        }
+    }
+
+    private Dictionary<string, string> CollectShortcutBindings()
+    {
+        var bindings = new Dictionary<string, string>();
+        foreach (var (toolName, fieldName) in ShortcutFieldMap)
+        {
+            var field = this.FindControl<TextBox>(fieldName);
+            if (field == null) continue;
+            var text = field.Text?.Trim().ToUpperInvariant();
+            if (!string.IsNullOrWhiteSpace(text) && text.Length <= 2)
+            {
+                var defaultKey = DesignShortcutDefaults.DefaultBindings.TryGetValue(toolName, out var d) ? d : "";
+                if (text != defaultKey.ToUpperInvariant())
+                    bindings[toolName] = text;
+            }
+        }
+        return bindings;
     }
 
     private async Task BrowseFolder(TextBox targetTextBox)
