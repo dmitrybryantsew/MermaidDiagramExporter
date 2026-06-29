@@ -71,6 +71,15 @@ public partial class MainWindow : Window
         _scanCoordinator.StatusChanged += OnScanStatusChanged;
 
         InitializeComponent();
+
+        // Set window icon from embedded AvaloniaResource
+        try
+        {
+            var iconUri = new Uri("avares://MermaidDiagramExporter.Gui/Assets/icon.png");
+            Icon = new Avalonia.Controls.WindowIcon(Avalonia.Platform.AssetLoader.Open(iconUri));
+        }
+        catch { /* non-critical: icon is cosmetic */ }
+
         GraphCanvasView.SelectionChanged += OnCanvasSelectionChanged;
         GraphCanvasView.ManualLayoutChanged += OnManualLayoutChanged;
         GraphCanvasView.ViewportChanged += OnViewportChanged;
@@ -674,7 +683,10 @@ public partial class MainWindow : Window
     {
         if (_designGraph == null) return;
         if (_designCanvasController.Undo(_designGraph))
+        {
+            RenderDesignModeGraph(preserveViewport: true);
             StatsText.Text = "Undone";
+        }
         else
             StatsText.Text = "Nothing to undo";
     }
@@ -686,7 +698,10 @@ public partial class MainWindow : Window
     {
         if (_designGraph == null) return;
         if (_designCanvasController.Redo(_designGraph))
+        {
+            RenderDesignModeGraph(preserveViewport: true);
             StatsText.Text = "Redone";
+        }
         else
             StatsText.Text = "Nothing to redo";
     }
