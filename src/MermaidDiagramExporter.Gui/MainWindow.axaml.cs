@@ -722,6 +722,47 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Resets Design Mode layout by running the layout engine on the design
+    /// graph and writing the computed positions back to each DesignClass.
+    /// This lets the user apply MSAGL or compound layout to their design
+    /// diagram, just like the "Reset Layout" button in Analyze mode.
+    /// </summary>
+    private void OnDesignResetLayout(object? sender, RoutedEventArgs e)
+    {
+        if (_designGraph == null || _designGraph.Classes.Count == 0) return;
+
+        var typeGraph = DesignExporter.ToTypeGraph(_designGraph);
+
+        // Run the layout engine (MSAGL / compound / simple depending on settings)
+        var options = _layoutEngine.LayoutOptions ?? new LayoutOptions
+        {
+            UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
+            UseMsaglEngine = _currentSettings.UseMsaglEngine,
+        };
+        _layoutEngine.LayoutOptions = options;
+
+        var layoutResult = _layoutEngine.Layout(typeGraph);
+
+        // Write computed positions back to the DesignClasses
+        var (nodes, _) = layoutResult;
+        foreach (var node in nodes)
+        {
+            var cls = _designGraph.Classes.FirstOrDefault(c => c.Id == node.Id);
+            if (cls != null)
+            {
+                cls.X = node.X;
+                cls.Y = node.Y;
+                cls.Width = node.Width;
+                cls.Height = node.Height;
+            }
+        }
+
+        _designIsDirty = true;
+        RenderDesignModeGraph();
+        StatsText.Text = "Layout reset";
+    }
+
+    /// <summary>
     /// Arms the Class tool. The user then clicks on the canvas to place the class.
     /// (UIContract §4: tool-first creation).
     /// </summary>
@@ -1806,11 +1847,6 @@ public partial class MainWindow : Window
     private async void OnOpenSettings(object? sender, RoutedEventArgs e)
     {
         string folder = FolderTextBox.Text?.Trim() ?? "";
-        if (string.IsNullOrEmpty(folder))
-        {
-            StatsText.Text = "Select a folder first to configure project settings";
-            return;
-        }
 
         var window = new SettingsWindow(_settingsService);
         window.LoadForProject(folder);

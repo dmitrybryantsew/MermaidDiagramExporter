@@ -137,6 +137,7 @@
             <WrapPanel Orientation="Horizontal">
               <Button Content="Undo" Click="OnDesignUndo" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
               <Button Content="Redo" Click="OnDesignRedo" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="Reset Layout" Click="OnDesignResetLayout" MinWidth="90" Foreground="White" Margin="0,0,4,4"/>
             </WrapPanel>
           </StackPanel>
 

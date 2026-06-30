@@ -44,3 +44,4 @@ csharp_project_context.txt
 **/project.nuget.cache
 .nuget/
 packages/
+.mermaid-export/
