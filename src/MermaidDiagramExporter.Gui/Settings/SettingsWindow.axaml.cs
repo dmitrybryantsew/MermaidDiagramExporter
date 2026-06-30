@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using MermaidDiagramExporter.Gui.Stereotypes;
 using MermaidDiagramExporter.Gui.Design;
+using MermaidDiagramExporter.Llm;
 
 namespace MermaidDiagramExporter.Gui.Settings;
 
@@ -112,6 +113,9 @@ public partial class SettingsWindow : Window
                 ColorHex = rule.ColorHex
             });
         StereotypeRulesList.ItemsSource = _stereotypeRules;
+
+        // LLM settings
+        LoadLlmFields();
     }
 
     /// <summary>
@@ -165,6 +169,9 @@ public partial class SettingsWindow : Window
         _settings.StereotypeRules = _stereotypeRules.ToList();
 
         _settings.DesignShortcutBindings = CollectShortcutBindings();
+
+        // LLM settings
+        CollectLlmFields();
 
         _settingsService.SaveSettings(_settings);
         SavedSettings = _settings;
@@ -300,5 +307,91 @@ public partial class SettingsWindow : Window
         SetStyleRow(InheritanceColorText, InheritanceArrowCombo, defaults.Inheritance);
         SetStyleRow(ImplementsColorText, ImplementsArrowCombo, defaults.Implements);
         SetStyleRow(AssociationColorText, AssociationArrowCombo, defaults.Association);
+    }
+
+    // ── LLM settings helpers ──
+
+    private void LoadLlmFields()
+    {
+        var llm = _settings.Llm;
+        LlmProviderCombo.SelectedIndex = (int)llm.Provider;
+        LlmBaseUrlText.Text = llm.BaseUrl;
+        LlmApiKeyText.Text = llm.ApiKey;
+        LlmModelText.Text = llm.Model;
+        LlmTemperatureSlider.Value = llm.Temperature;
+        LlmTemperatureLabel.Text = llm.Temperature.ToString("F1");
+        LlmMaxTokensText.Text = llm.MaxTokens.ToString();
+        LlmTimeoutText.Text = llm.TimeoutSeconds.ToString();
+
+        // Wire slider change to label
+        LlmTemperatureSlider.PropertyChanged += (s, e) =>
+        {
+            if (e.Property == Slider.ValueProperty)
+                LlmTemperatureLabel.Text = LlmTemperatureSlider.Value.ToString("F1");
+        };
+    }
+
+    private void CollectLlmFields()
+    {
+        var llm = _settings.Llm;
+        llm.Provider = (LlmProvider)Math.Clamp(LlmProviderCombo.SelectedIndex, 0, 3);
+        llm.BaseUrl = LlmBaseUrlText.Text?.Trim() ?? "";
+        llm.ApiKey = LlmApiKeyText.Text?.Trim() ?? "";
+        llm.Model = LlmModelText.Text?.Trim() ?? "";
+        llm.Temperature = LlmTemperatureSlider.Value;
+        llm.MaxTokens = int.TryParse(LlmMaxTokensText.Text, out var mt) ? Math.Clamp(mt, 1, 128000) : 2048;
+        llm.TimeoutSeconds = int.TryParse(LlmTimeoutText.Text, out var to) ? Math.Clamp(to, 5, 600) : 120;
+    }
+
+    private void OnLlmProviderChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        // Auto-fill base URL when provider changes
+        var idx = LlmProviderCombo.SelectedIndex;
+        if (idx < 0) return;
+        var provider = (LlmProvider)idx;
+        var defaultUrl = LlmSettings.GetDefaultBaseUrl(provider);
+        LlmBaseUrlText.Text = defaultUrl;
+    }
+
+    private async void OnLlmRefreshModels(object? sender, RoutedEventArgs e)
+    {
+        CollectLlmFields();
+        var llm = _settings.Llm;
+        if (!llm.IsConfigured)
+        {
+            LlmModelsStatus.Text = "Configure provider and model first";
+            return;
+        }
+
+        LlmModelsStatus.Text = "Fetching models...";
+        LlmRefreshModelsButton.IsEnabled = false;
+
+        try
+        {
+            var modelService = new LlmModelService(llm);
+            var models = await modelService.ListModelsAsync();
+
+            LlmModelsList.ItemsSource = models;
+            LlmModelsStatus.Text = models.Count > 0
+                ? $"{models.Count} models available"
+                : "No models found (enter model manually)";
+        }
+        catch (Exception ex)
+        {
+            LlmModelsStatus.Text = $"Error: {ex.Message}";
+            LlmModelsList.ItemsSource = null;
+        }
+        finally
+        {
+            LlmRefreshModelsButton.IsEnabled = true;
+        }
+    }
+
+    private void OnLlmModelSelected(object? sender, SelectionChangedEventArgs e)
+    {
+        if (LlmModelsList.SelectedItem is string model)
+        {
+            LlmModelText.Text = model;
+        }
     }
 }

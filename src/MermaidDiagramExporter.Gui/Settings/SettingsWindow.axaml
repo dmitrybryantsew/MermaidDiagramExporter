@@ -172,6 +172,49 @@
               <ComboBoxItem Content="None" />
             </ComboBox>
           </Grid>
+
+          <!-- LLM Settings -->
+          <TextBlock Text="LLM" FontWeight="Bold" FontSize="16" Margin="0,16,0,0" />
+          <TextBlock Text="Configure an LLM provider for generating class diagrams from natural language prompts in Design Mode." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,8" />
+
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Provider:" VerticalAlignment="Center" Width="120" />
+            <ComboBox Grid.Row="0" Grid.Column="1" x:Name="LlmProviderCombo" Width="260" HorizontalAlignment="Left" SelectionChanged="OnLlmProviderChanged">
+              <ComboBoxItem Content="OpenAI-NIM Proxy" />
+              <ComboBoxItem Content="OpenRouter" />
+              <ComboBoxItem Content="Chutes" />
+              <ComboBoxItem Content="Custom" />
+            </ComboBox>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Base URL:" VerticalAlignment="Center" Width="120" />
+            <TextBox  Grid.Row="1" Grid.Column="1" x:Name="LlmBaseUrlText" Watermark="http://... (auto-filled from provider)" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="API Key:" VerticalAlignment="Center" Width="120" />
+            <TextBox  Grid.Row="2" Grid.Column="1" x:Name="LlmApiKeyText" Watermark="sk-... or your key" PasswordChar="*" />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Model:" VerticalAlignment="Center" Width="120" />
+            <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto">
+              <TextBox  Grid.Column="0" x:Name="LlmModelText" Watermark="e.g. nim:z-ai/glm-5.1" />
+              <Button Grid.Column="1" x:Name="LlmRefreshModelsButton" Content="&#x1F504;" MinWidth="36" Margin="4,0,0,0" ToolTip.Tip="Refresh model list from provider" Click="OnLlmRefreshModels" />
+            </Grid>
+
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Temperature:" VerticalAlignment="Center" Width="120" />
+            <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="Auto,Auto">
+              <Slider x:Name="LlmTemperatureSlider" Minimum="0" Maximum="2" Value="0.7" Width="180" HorizontalAlignment="Left" />
+              <TextBlock x:Name="LlmTemperatureLabel" Text="0.7" VerticalAlignment="Center" Margin="8,0,0,0" Width="32" />
+            </Grid>
+
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Max tokens:" VerticalAlignment="Center" Width="120" />
+            <TextBox  Grid.Row="5" Grid.Column="1" x:Name="LlmMaxTokensText" Text="2048" Width="100" HorizontalAlignment="Left" />
+
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Timeout (s):" VerticalAlignment="Center" Width="120" />
+            <TextBox  Grid.Row="6" Grid.Column="1" x:Name="LlmTimeoutText" Text="120" Width="100" HorizontalAlignment="Left" />
+          </Grid>
+
+          <!-- Model picker dropdown (populated on Refresh) -->
+          <TextBlock Text="Available Models" FontWeight="SemiBold" Margin="0,8,0,4" />
+          <ListBox x:Name="LlmModelsList" Height="120" BorderThickness="1" BorderBrush="#3A4250" SelectionChanged="OnLlmModelSelected" />
+          <TextBlock x:Name="LlmModelsStatus" Text="" FontSize="11" Opacity="0.6" Margin="0,2,0,0" />
         </StackPanel>
       </ScrollViewer>
 

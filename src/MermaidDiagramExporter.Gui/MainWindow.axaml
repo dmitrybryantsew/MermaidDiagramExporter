@@ -168,6 +168,13 @@
             </WrapPanel>
           </StackPanel>
 
+          <!-- LLM Generate -->
+          <StackPanel Margin="8">
+            <TextBlock Text="AI Generate" FontWeight="Bold" Margin="0,0,0,4"/>
+            <Button Content="Generate from LLM..." Click="OnDesignLlmGenerate" MinWidth="140" Background="#9C27B0" Foreground="White"/>
+            <TextBlock Text="Describe your app in natural language and let an LLM design the class diagram" FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+          </StackPanel>
+
           <!-- Help -->
           <StackPanel Margin="8">
             <TextBlock Text="Tips" FontWeight="Bold" Margin="0,0,0,4"/>

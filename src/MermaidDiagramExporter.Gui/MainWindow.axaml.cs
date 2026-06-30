@@ -19,6 +19,7 @@ using MermaidDiagramExporter.Gui.Search;
 using MermaidDiagramExporter.Gui.Settings;
 using MermaidDiagramExporter.Gui.Persistence;
 using MermaidDiagramExporter.Gui.Matrix;
+using MermaidDiagramExporter.Llm;
 using SkiaSharp;
 
 namespace MermaidDiagramExporter.Gui;
@@ -858,6 +859,173 @@ public partial class MainWindow : Window
         var path = file.Path.LocalPath;
         DesignSerialization.Save(_designGraph, path);
         StatsText.Text = $"Exported: {Path.GetFileName(path)}";
+    }
+
+    /// <summary>
+    /// Opens the LLM Generate dialog. On successful generation + Apply,
+    /// merges the LLM-produced classes and edges into the active DesignGraph.
+    /// </summary>
+    private async void OnDesignLlmGenerate(object? sender, RoutedEventArgs e)
+    {
+        var llmSettings = _currentSettings.Llm ?? new Llm.LlmSettings();
+        if (!llmSettings.IsConfigured)
+        {
+            StatsText.Text = "LLM not configured — open Settings to set provider/model/key";
+            return;
+        }
+
+        var dialog = new LlmGenerateDialog(llmSettings);
+        await dialog.ShowDialog(this);
+
+        // If the user clicked "Apply to Design", merge the generated content
+        if (dialog.AppliedResult == null || !dialog.AppliedResult.GeneratedOk) return;
+
+        var gen = dialog.AppliedResult;
+
+        // Ensure we have a design graph
+        if (_designGraph == null)
+        {
+            _designGraph = new DesignGraph { Title = "LLM-Generated Design" };
+            _designModeController.EnterDesignMode(_designGraph);
+        }
+
+        // Map generated class names to existing IDs (for edge resolution)
+        var classNameToId = _designGraph!.Classes.ToDictionary(c => c.Name, c => c.Id, StringComparer.OrdinalIgnoreCase);
+        var newClassIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // genName -> newId
+
+        // Add new classes (skip duplicates by name)
+        int addedClasses = 0;
+        foreach (var clsDto in gen.Classes)
+        {
+            if (classNameToId.ContainsKey(clsDto.Name)) continue;
+
+            var kind = clsDto.Kind switch
+            {
+                "Interface" => ClassKind.Interface,
+                "Enum" => ClassKind.Enum,
+                "Struct" => ClassKind.Struct,
+                "StaticClass" => ClassKind.StaticClass,
+                "AbstractClass" => ClassKind.AbstractClass,
+                _ => ClassKind.Class
+            };
+
+            var designClass = new DesignClass
+            {
+                Name = clsDto.Name,
+                Namespace = clsDto.Namespace,
+                Kind = kind,
+                Stereotype = string.IsNullOrWhiteSpace(clsDto.Stereotype) ? null : clsDto.Stereotype,
+                Members = clsDto.Members.Select(m => new DesignMember
+                {
+                    Name = m.Name,
+                    TypeName = m.TypeName,
+                    Kind = m.Kind switch
+                    {
+                        "Property" => MemberKind.Property,
+                        "Method" => MemberKind.Method,
+                        "Constructor" => MemberKind.Constructor,
+                        "Event" => MemberKind.Event,
+                        _ => MemberKind.Field
+                    },
+                    Visibility = m.Visibility switch
+                    {
+                        "Private" => Visibility.Private,
+                        "Protected" => Visibility.Protected,
+                        "Internal" => Visibility.Internal,
+                        _ => Visibility.Public
+                    },
+                    Parameters = m.Parameters.Select(p => new DesignParameter
+                    {
+                        Name = p.Name,
+                        TypeName = p.TypeName
+                    }).ToList()
+                }).ToList()
+            };
+
+            _designGraph.Classes.Add(designClass);
+            classNameToId[designClass.Name] = designClass.Id;
+            newClassIds[clsDto.Name] = designClass.Id;
+            addedClasses++;
+        }
+
+        // Add new edges (resolve class names to IDs)
+        int addedEdges = 0;
+        foreach (var edgeDto in gen.Edges)
+        {
+            if (!classNameToId.TryGetValue(edgeDto.FromClassName, out var fromId)) continue;
+            if (!classNameToId.TryGetValue(edgeDto.ToClassName, out var toId)) continue;
+
+            // Skip duplicate edges
+            bool exists = _designGraph.Edges.Any(e =>
+                e.FromClassId == fromId && e.ToClassId == toId);
+            if (exists) continue;
+
+            var edgeKind = edgeDto.Kind switch
+            {
+                "Inheritance" => EdgeKind.Inheritance,
+                "Implements" => EdgeKind.Implements,
+                "Dependency" => EdgeKind.Dependency,
+                "Aggregation" => EdgeKind.Aggregation,
+                "Composition" => EdgeKind.Composition,
+                _ => EdgeKind.Association
+            };
+
+            _designGraph.Edges.Add(new DesignEdge
+            {
+                FromClassId = fromId,
+                ToClassId = toId,
+                Kind = edgeKind,
+                Label = edgeDto.Label
+            });
+            addedEdges++;
+        }
+
+        // Add new namespaces
+        foreach (var ns in gen.Namespaces)
+        {
+            if (_designGraph.Namespaces.Any(n => n.Name == ns)) continue;
+            _designGraph.Namespaces.Add(new DesignNamespace { Name = ns });
+        }
+
+        // Auto-arrange new classes that have X=Y=0
+        AutoArrangeNewClasses(_designGraph);
+
+        _designIsDirty = true;
+        _designModeController.EnterDesignMode(_designGraph);
+        RenderDesignModeGraph(preserveViewport: true);
+
+        StatsText.Text = $"LLM: added {addedClasses} classes, {addedEdges} edges";
+    }
+
+    /// <summary>
+    /// Places classes with X=Y=0 into a grid below/beside existing positioned classes.
+    /// </summary>
+    private static void AutoArrangeNewClasses(DesignGraph graph)
+    {
+        const float cellW = 260f;
+        const float cellH = 160f;
+        const int cols = 4;
+
+        var unpositioned = graph.Classes.Where(c => c.X == 0 && c.Y == 0).ToList();
+        if (unpositioned.Count == 0) return;
+
+        float startX = 0, startY = 0;
+        var positioned = graph.Classes.Where(c => c.X != 0 || c.Y != 0).ToList();
+        if (positioned.Count > 0)
+        {
+            startX = positioned.Max(c => c.X + c.Width) + 40f;
+            startY = positioned.Min(c => c.Y);
+        }
+
+        int i = 0;
+        foreach (var cls in unpositioned)
+        {
+            int col = i % cols;
+            int row = i / cols;
+            cls.X = startX + col * cellW;
+            cls.Y = startY + row * cellH;
+            i++;
+        }
     }
 
     /// <summary>

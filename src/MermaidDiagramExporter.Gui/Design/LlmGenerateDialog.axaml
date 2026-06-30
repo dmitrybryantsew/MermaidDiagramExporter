@@ -1,0 +1,73 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:design="clr-namespace:MermaidDiagramExporter.Gui.Design"
+        x:Class="MermaidDiagramExporter.Gui.Design.LlmGenerateDialog"
+        Title="Generate Class Diagram from LLM"
+        Width="750"
+        Height="680"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+  <Border Padding="16">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
+      <!-- Prompt input -->
+      <TextBlock Grid.Row="0" Text="Describe the C# application you want to design:" FontWeight="Bold" Margin="0,0,0,4" />
+      <TextBox Grid.Row="1" x:Name="PromptTextBox"
+               AcceptsReturn="True"
+               TextWrapping="Wrap"
+               Height="80"
+               PlaceholderText="e.g. Design a C# app for managing chemical calculations with a CalculationService, ChemicalRepository, and CalculationViewModel"
+               FontSize="13" />
+
+      <!-- Context files -->
+      <StackPanel Grid.Row="2" Margin="0,8,0,0">
+        <Grid ColumnDefinitions="Auto,Auto,Auto">
+          <TextBlock Grid.Column="0" Text="Context files" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Grid.Column="1" x:Name="AddFileButton" Content="+ Add .md/.txt" Click="OnAddContextFile" MinWidth="100" Margin="8,0,0,0" FontSize="11" Padding="6,2" />
+          <Button Grid.Column="2" x:Name="ClearFilesButton" Content="Clear all" Click="OnClearContextFiles" MinWidth="60" Margin="4,0,0,0" FontSize="11" Padding="6,2" />
+        </Grid>
+        <TextBlock Text=".md and .txt files are appended as context before the prompt so the LLM can reference them" FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,4" />
+        <ItemsControl x:Name="AttachedFilesList" MaxHeight="100">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="design:AttachedFileItem">
+              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,1">
+                <TextBlock Grid.Column="0" Text="&#x1F4C4;" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <TextBlock Grid.Column="1" Text="{Binding FileName}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="2" Content="x" FontSize="10" MinWidth="24" Padding="2,0" Tag="{Binding}" Click="OnRemoveContextFile" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+      <!-- Generate button row -->
+      <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" Margin="0,8,0,4">
+        <Button x:Name="GenerateButton" Content="Generate" Click="OnGenerate" Background="#4CAF50" Foreground="White" MinWidth="100" />
+        <Button x:Name="CancelButton" Content="Cancel" Click="OnCancel" MinWidth="80" />
+        <TextBlock x:Name="StatusText" Text="" VerticalAlignment="Center" Margin="8,0,0,0" Opacity="0.7" FontSize="11" />
+      </StackPanel>
+
+      <!-- Streaming output / Mermaid preview -->
+      <Grid Grid.Row="5" RowDefinitions="Auto,*">
+        <TextBlock Grid.Row="0" Text="LLM Response (Mermaid):" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <TextBox Grid.Row="1" x:Name="MermaidPreviewBox"
+                 AcceptsReturn="True"
+                 TextWrapping="Wrap"
+                 IsReadOnly="True"
+                 FontFamily="Consolas,monospace"
+                 FontSize="12"
+                 Background="#1E1E1E"
+                 Foreground="#D4D4D4" />
+      </Grid>
+
+      <!-- Warning / error messages -->
+      <TextBlock Grid.Row="6" x:Name="WarningText" Text="" Foreground="#CC6600" TextWrapping="Wrap" Margin="0,4,0,4" IsVisible="False" />
+
+      <!-- Apply / Close buttons -->
+      <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="ApplyButton" Content="Apply to Design" Click="OnApply" Background="#2196F3" Foreground="White" MinWidth="120" IsEnabled="False" />
+        <Button x:Name="CloseButton" Content="Close" Click="OnCancel" MinWidth="80" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

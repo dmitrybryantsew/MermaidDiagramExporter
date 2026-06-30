@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using MermaidDiagramExporter.Llm;
 
 namespace MermaidDiagramExporter.Gui.Settings;
 
@@ -133,6 +134,13 @@ public sealed class ProjectSettings
     /// (e.g. "C", "H"). Only bindings that differ from defaults need to be stored.
     /// </summary>
     public Dictionary<string, string> DesignShortcutBindings { get; set; } = new();
+
+    /// <summary>
+    /// LLM settings for generating class diagrams from natural language prompts.
+    /// Configured in the Settings window under the "LLM" section. Persisted
+    /// per-project so different projects can use different providers/models.
+    /// </summary>
+    public LlmSettings Llm { get; set; } = new();
 }
 
 public enum CacheInvalidationMode
