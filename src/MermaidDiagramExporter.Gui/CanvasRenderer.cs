@@ -24,6 +24,12 @@ public sealed class ViewportState
     public GraphNode? HoveredNode { get; init; }
     public HashSet<string>? SelectedDesignNodeIds { get; init; }
     public HashSet<string>? HoveredDesignNodeIds { get; init; }
+    /// <summary>
+    /// Analyze Mode multi-select set. When non-null and non-empty, the
+    /// renderer highlights every node in this set (in addition to the single
+    /// <see cref="SelectedNode"/> primary). Null in Design Mode.
+    /// </summary>
+    public HashSet<string>? SelectedAnalyzeNodeIds { get; init; }
     public string SearchText { get; init; } = string.Empty;
     /// <summary>Set to true to enable Design Mode visual affordances (handles, ports).</summary>
     public bool IsDesignMode { get; init; }
@@ -127,6 +133,10 @@ public sealed class CanvasRenderer
     {
         Color = new SKColor(0xFF, 0xA0, 0x40), Style = SKPaintStyle.Stroke, StrokeWidth = 2f, IsAntialias = true,
         PathEffect = SKPathEffect.CreateDash(new[] { 6f, 4f }, 0)
+    };
+    private static readonly SKPaint MarqueeFillPaint = new()
+    {
+        Color = new SKColor(0xFF, 0xA0, 0x40, 0x28), Style = SKPaintStyle.Fill, IsAntialias = true
     };
     private static readonly SKPaint EdgeTargetHighlightPaint = new()
     {
@@ -367,6 +377,8 @@ public sealed class CanvasRenderer
         bool designMode = vp.IsDesignMode;
         var designSelectedIds = vp.SelectedDesignNodeIds;
         bool hasDesignSelection = designSelectedIds != null && designSelectedIds.Count > 0;
+        var analyzeSelectedIds = vp.SelectedAnalyzeNodeIds;
+        bool hasAnalyzeSelection = analyzeSelectedIds != null && analyzeSelectedIds.Count > 0;
 
         foreach (var node in nodes)
         {
@@ -385,7 +397,9 @@ public sealed class CanvasRenderer
 
             bool isSelected = designMode && hasDesignSelection
                 ? designSelectedIds!.Contains(node.Id)
-                : node == vp.SelectedNode;
+                : hasAnalyzeSelection
+                    ? analyzeSelectedIds!.Contains(node.Id)
+                    : node == vp.SelectedNode;
 
             bool isHovered = designMode && vp.HoveredDesignNodeIds != null
                 ? vp.HoveredDesignNodeIds.Contains(node.Id)
@@ -505,9 +519,12 @@ public sealed class CanvasRenderer
 
         bool designMode = vp.IsDesignMode;
         var designSelectedIds = vp.SelectedDesignNodeIds;
+        var analyzeSelectedIds = vp.SelectedAnalyzeNodeIds;
         bool isSelected = designMode && designSelectedIds != null
             ? designSelectedIds.Contains(node.Id)
-            : node == vp.SelectedNode;
+            : analyzeSelectedIds != null && analyzeSelectedIds.Count > 0
+                ? analyzeSelectedIds.Contains(node.Id)
+                : node == vp.SelectedNode;
         bool isHovered = designMode && vp.HoveredDesignNodeIds != null
             ? vp.HoveredDesignNodeIds.Contains(node.Id)
             : node == vp.HoveredNode;
@@ -686,6 +703,22 @@ public sealed class CanvasRenderer
     public static void DrawEdgeTargetHighlight(SKCanvas canvas, float nodeX, float nodeY, float nodeW, float nodeH)
     {
         canvas.DrawRoundRect(nodeX, nodeY, nodeW, nodeH, 6, 6, EdgeTargetHighlightPaint);
+    }
+
+    /// <summary>
+    /// Draws the rubber-band marquee selection rectangle (world-space) plus a
+    /// translucent fill, so the user can see which classes will be selected on
+    /// release. Used by both Analyze and Design Mode marquee selection.
+    /// </summary>
+    public static void DrawMarquee(SKCanvas canvas, float x0, float y0, float x1, float y1)
+    {
+        float left = Math.Min(x0, x1);
+        float top = Math.Min(y0, y1);
+        float right = Math.Max(x0, x1);
+        float bottom = Math.Max(y0, y1);
+        var rect = new SKRect(left, top, right, bottom);
+        canvas.DrawRect(rect, MarqueeFillPaint);
+        canvas.DrawRect(rect, RubberBandPaint);
     }
 
     internal static string? GetBadgeText(GraphNode node)

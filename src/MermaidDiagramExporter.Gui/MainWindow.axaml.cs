@@ -53,6 +53,8 @@ public partial class MainWindow : Window
     private Dictionary<string, GraphNode> _nodeMap = new();
     private TypeGraph? _currentGraph;
     private bool _updatingClassList;
+    /// <summary>False until the constructor finishes; guards XAML-fired SelectionChanged handlers from running before named controls are assigned.</summary>
+    private bool _initialized;
 
     private GraphFocusTraversalMode _currentTraversalMode = GraphFocusTraversalMode.UndirectedAssociations;
     private int _focusDepth = 1;
@@ -86,6 +88,7 @@ public partial class MainWindow : Window
         GraphCanvasView.SelectionChanged += OnCanvasSelectionChanged;
         GraphCanvasView.ManualLayoutChanged += OnManualLayoutChanged;
         GraphCanvasView.ViewportChanged += OnViewportChanged;
+        GraphCanvasView.AnalyzeMultiSelectionChanged += OnAnalyzeMultiSelectionChanged;
         SymbolSearchPanel.NodeSelected += OnSearchNodeSelected;
         SymbolSearchPanel.FocusOnResultsRequested += OnFocusSearchResults;
         SymbolSearchPanel.SearchCleared += OnSearchCleared;
@@ -104,6 +107,7 @@ public partial class MainWindow : Window
         // Initialize mode toggle UI (default is Analyze Mode)
         UpdateModeUi();
         MatrixView.CellClicked += OnMatrixCellClicked;
+        _initialized = true;
     }
 
     // --- Mode toggle (M0 scaffold) ---
@@ -114,6 +118,7 @@ public partial class MainWindow : Window
         // to prevent state leaks when dragging in Analyze Mode.
         _designCanvasController.ResetAllState();
         GraphCanvasView.SetDesignGraph(null);
+        GraphCanvasView.SetAnalyzeMultiSelection(Array.Empty<string>());
         _designModeController.EnterAnalyzeMode();
         UpdateModeUi();
         if (_currentGraph != null)
@@ -123,12 +128,18 @@ public partial class MainWindow : Window
 
     private void OnDesignModeClick(object? sender, RoutedEventArgs e)
     {
+        // Clear any Analyze multi-selection so the indicator doesn't leak across modes.
+        GraphCanvasView.SetAnalyzeMultiSelection(Array.Empty<string>());
         // Create a fresh design if none exists yet (first entry to Design Mode)
         if (_designModeController.CurrentDesign == null)
             _designModeController.EnterDesignMode(new DesignGraph { Title = "Untitled Design" });
 
         _designGraph = _designModeController.CurrentDesign;
         _designModeController.EnterDesignMode(_designGraph);
+        // Mirror the move-scope dropdown to the controller (it may have been
+        // changed while in Analyze Mode and the controller was reset).
+        if (DesignMoveScopeCombo.SelectedIndex >= 0)
+            _designCanvasController.CurrentMoveScope = (MoveScope)DesignMoveScopeCombo.SelectedIndex;
         UpdateModeUi();
         RenderDesignModeGraph();
         UpdateStatusBar();
@@ -308,7 +319,16 @@ public partial class MainWindow : Window
     {
         if (_designModeController.CurrentMode != AppMode.Design)
         {
-            StatusBarText.Text = "Analyze Mode";
+            var analyzeSel = GraphCanvasView.GetAnalyzeSelectedNodeIds();
+            var scope = GraphCanvasView.CurrentMoveScope == MoveScope.SelectedPlusRelated1D
+                ? " +Related 1D" : "";
+            string aSelInfo = analyzeSel.Count switch
+            {
+                0 => "",
+                1 => " | Selected: " + (GraphCanvasView.SelectedNode?.DisplayName ?? "?"),
+                var n => $" | {n} classes selected"
+            };
+            StatusBarText.Text = $"Analyze Mode{aSelInfo} | Move:{scope}";
             return;
         }
 
@@ -323,6 +343,8 @@ public partial class MainWindow : Window
         var counts = _designGraph != null
             ? $" | {_designGraph.Classes.Count} classes, {_designGraph.Edges.Count} edges"
             : "";
+        var dScope = _designCanvasController.CurrentMoveScope == MoveScope.SelectedPlusRelated1D
+            ? " | Move: +Related 1D" : " | Move: Selected";
 
         if (_designCanvasController.IsCreatingEdge)
         {
@@ -339,7 +361,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        StatusBarText.Text = $"Tool: {toolName}{sticky}{selInfo}{counts}";
+        StatusBarText.Text = $"Tool: {toolName}{sticky}{selInfo}{counts}{dScope}";
     }
 
     /// <summary>
@@ -1338,6 +1360,52 @@ public partial class MainWindow : Window
         UpdateSeedButtons();
     }
 
+    /// <summary>
+    /// Updates the Analyze Mode multi-select indicator when the canvas's
+    /// multi-selection set changes (marquee select). When more than one node
+    /// is selected, shows the count and primary name; otherwise hides the
+    /// indicator and lets the single-node inspector take over.
+    /// </summary>
+    private void OnAnalyzeMultiSelectionChanged(IReadOnlyList<string> selectedIds)
+    {
+        if (!_initialized) return;
+        if (selectedIds.Count > 1)
+        {
+            AnalyzeMultiSelectCount.Text = $"{selectedIds.Count} classes selected (drag to move all)";
+            AnalyzeMultiSelectCount.IsVisible = true;
+        }
+        else
+        {
+            AnalyzeMultiSelectCount.IsVisible = false;
+        }
+        UpdateStatusBar();
+    }
+
+    /// <summary>
+    /// Analyze Mode move-scope dropdown. Mirrors the selection to the canvas
+    /// so dragging a selected node moves either just the selection or also
+    /// its 1-depth edge neighbors (undirected).
+    /// </summary>
+    private void OnAnalyzeMoveScopeChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (!_initialized || AnalyzeMoveScopeCombo.SelectedIndex < 0) return;
+        var scope = (MoveScope)AnalyzeMoveScopeCombo.SelectedIndex;
+        GraphCanvasView.CurrentMoveScope = scope;
+        UpdateStatusBar();
+    }
+
+    /// <summary>
+    /// Design Mode move-scope dropdown. Mirrors the selection to the Design
+    /// canvas controller so dragging a selected class moves the right set.
+    /// </summary>
+    private void OnDesignMoveScopeChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (!_initialized || DesignMoveScopeCombo.SelectedIndex < 0) return;
+        var scope = (MoveScope)DesignMoveScopeCombo.SelectedIndex;
+        _designCanvasController.CurrentMoveScope = scope;
+        UpdateStatusBar();
+    }
+
     // --- Focus Controls ---
 
     private void OnFocusD1(object? sender, RoutedEventArgs e) => FocusCurrentSelection(1);
@@ -1641,7 +1709,7 @@ public partial class MainWindow : Window
         };
 
         _layoutEngine.RedrawEdges(_currentGraph, _allNodes, _allEdges, options);
-        GraphCanvasView.SetGraph(_allNodes, _allEdges, preserveViewport: true);
+        GraphCanvasView.SetGraph(_allNodes, _allEdges, preserveViewport: true, preserveSelectionAndHistory: true);
     }
 
     private void OnResetLayout(object? sender, RoutedEventArgs e)
@@ -1891,6 +1959,37 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Ctrl+Z / Ctrl+Y — Undo/Redo (works in both modes; Analyze Mode
+        // undoes manual position moves, Design Mode uses its undo manager).
+        if (ctrl && e.Key == Key.Z && !shift)
+        {
+            if (_designModeController.CurrentMode == AppMode.Design)
+            {
+                OnDesignUndo(this, new RoutedEventArgs());
+            }
+            else
+            {
+                GraphCanvasView.UndoAnalyze();
+                UpdateStatusBar();
+            }
+            e.Handled = true;
+            return;
+        }
+        if ((ctrl && e.Key == Key.Y) || (ctrl && shift && e.Key == Key.Z))
+        {
+            if (_designModeController.CurrentMode == AppMode.Design)
+            {
+                OnDesignRedo(this, new RoutedEventArgs());
+            }
+            else
+            {
+                GraphCanvasView.RedoAnalyze();
+                UpdateStatusBar();
+            }
+            e.Handled = true;
+            return;
+        }
+
         // Only handle Design Mode shortcuts when in Design Mode
         if (_designModeController.CurrentMode != AppMode.Design)
             return;
@@ -1899,21 +1998,7 @@ public partial class MainWindow : Window
         if (e.Source is TextBox)
             return;
 
-        // Ctrl+Z — Undo
-        if (ctrl && e.Key == Key.Z && !shift)
-        {
-            OnDesignUndo(this, new RoutedEventArgs());
-            e.Handled = true;
-            return;
-        }
-
-        // Ctrl+Y or Ctrl+Shift+Z — Redo
-        if ((ctrl && e.Key == Key.Y) || (ctrl && shift && e.Key == Key.Z))
-        {
-            OnDesignRedo(this, new RoutedEventArgs());
-            e.Handled = true;
-            return;
-        }
+        // Ctrl+Z / Ctrl+Y are handled by the unified block above (both modes).
 
         // Delete or Backspace — delete selected
         if (e.Key == Key.Delete || e.Key == Key.Back)

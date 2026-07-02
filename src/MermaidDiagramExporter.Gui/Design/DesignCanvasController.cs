@@ -65,6 +65,11 @@ public sealed class DesignCanvasController
     private float _resizeStartRectY;
     private EdgeKind _defaultEdgeKind = EdgeKind.Association;
 
+    // ── Multi-drag state (marquee + move-scope, UIContract §5) ──
+    // When non-empty, a header drag is moving every class in this set together.
+    private HashSet<string> _multiDragClassIds = new();
+    private Dictionary<string, (float X, float Y)> _multiDragStartPositions = new();
+
     // ── Tool state (UIContract §4) ──
     private DesignTool _currentTool = DesignTool.Select;
     private bool _isToolSticky;
@@ -132,6 +137,19 @@ public sealed class DesignCanvasController
     /// True if the controller is currently in an active resize operation.
     /// </summary>
     public bool IsResizing => _resizingRectangle != null;
+
+    /// <summary>
+    /// True if the current drag is moving multiple classes at once (marquee
+    /// selection drag or +Related 1D move-scope).
+    /// </summary>
+    public bool IsMultiDragging => _draggingRectangle != null && _multiDragClassIds.Count > 1;
+
+    /// <summary>
+    /// Active move scope for Design Mode. Set by MainWindow to mirror the
+    /// sidebar dropdown. When the user drags a selected class, the set of
+    /// classes that move together is resolved via <see cref="MoveScopeResolver"/>.
+    /// </summary>
+    public MoveScope CurrentMoveScope { get; set; } = MoveScope.SelectedOnly;
 
     /// <summary>
     /// True if the user is dragging an edge from a port to a target class.
@@ -411,14 +429,41 @@ public sealed class DesignCanvasController
             // Mode behavior (which records _dragStartNodeX/Y and adds the delta).
             float dx = worldPos.X - _dragStartWorld.X;
             float dy = worldPos.Y - _dragStartWorld.Y;
-            _draggingRectangle.X = _dragStartRectX + dx;
-            _draggingRectangle.Y = _dragStartRectY + dy;
-            // Mirror to graph
-            var cls = _draggingRectangle.Graph.Classes.FirstOrDefault(c => c.Id == _draggingRectangle.ClassId);
-            if (cls != null)
+
+            if (_multiDragClassIds.Count > 1)
             {
-                cls.X = _draggingRectangle.X;
-                cls.Y = _draggingRectangle.Y;
+                // Multi-drag: apply the same world delta to every class in the
+                // resolved move set, updating both ClassRectangle and DesignClass.
+                var graph = _draggingRectangle.Graph;
+                foreach (var id in _multiDragClassIds)
+                {
+                    if (!_multiDragStartPositions.TryGetValue(id, out var start)) continue;
+                    float newX = start.X + dx;
+                    float newY = start.Y + dy;
+                    var cls = graph.Classes.FirstOrDefault(c => c.Id == id);
+                    if (cls != null)
+                    {
+                        cls.X = newX;
+                        cls.Y = newY;
+                    }
+                    if (id == _draggingRectangle.ClassId)
+                    {
+                        _draggingRectangle.X = newX;
+                        _draggingRectangle.Y = newY;
+                    }
+                }
+            }
+            else
+            {
+                _draggingRectangle.X = _dragStartRectX + dx;
+                _draggingRectangle.Y = _dragStartRectY + dy;
+                // Mirror to graph
+                var cls = _draggingRectangle.Graph.Classes.FirstOrDefault(c => c.Id == _draggingRectangle.ClassId);
+                if (cls != null)
+                {
+                    cls.X = _draggingRectangle.X;
+                    cls.Y = _draggingRectangle.Y;
+                }
             }
         }
         else if (_resizingRectangle != null)
@@ -451,14 +496,36 @@ public sealed class DesignCanvasController
     {
         if (_draggingRectangle != null && graph != null && _dragStartClassId != null)
         {
-            // Create undo command for the completed drag
-            var cls = graph.Classes.FirstOrDefault(c => c.Id == _dragStartClassId);
-            if (cls != null)
+            // Multi-drag: push one MoveClass command per moved class so each
+            // is individually undoable. (A single grouped undo command would
+            // be nicer UX but is out of scope for this change.)
+            if (_multiDragClassIds.Count > 1)
             {
-                UndoManager.Execute(
-                    new DesignCommands.MoveClass(_dragStartClassId,
-                        _dragStartRectX, _dragStartRectY, cls.X, cls.Y),
-                    graph);
+                foreach (var id in _multiDragClassIds)
+                {
+                    if (!_multiDragStartPositions.TryGetValue(id, out var start)) continue;
+                    var cls = graph.Classes.FirstOrDefault(c => c.Id == id);
+                    if (cls != null)
+                    {
+                        UndoManager.Execute(
+                            new DesignCommands.MoveClass(id, start.X, start.Y, cls.X, cls.Y),
+                            graph);
+                    }
+                }
+                _multiDragClassIds.Clear();
+                _multiDragStartPositions.Clear();
+            }
+            else
+            {
+                // Create undo command for the completed drag
+                var cls = graph.Classes.FirstOrDefault(c => c.Id == _dragStartClassId);
+                if (cls != null)
+                {
+                    UndoManager.Execute(
+                        new DesignCommands.MoveClass(_dragStartClassId,
+                            _dragStartRectX, _dragStartRectY, cls.X, cls.Y),
+                        graph);
+                }
             }
             _draggingRectangle.IsDragging = false;
             _draggingRectangle = null;
@@ -815,6 +882,51 @@ public sealed class DesignCanvasController
         UpdateSelection();
     }
 
+    /// <summary>
+    /// Replaces or extends the selection from a marquee rubber-band rect. Used
+    /// by <c>GraphCanvas</c> when a marquee drag completes in Design Mode. When
+    /// <paramref name="additive"/> is true (Shift/Ctrl held), the new IDs are
+    /// toggled into the existing selection; otherwise the selection is replaced.
+    /// Per UIContract §5 (marquee selection).
+    /// </summary>
+    public void SetSelectionFromIds(IEnumerable<string> ids, bool additive)
+    {
+        if (!additive)
+        {
+            _selectedClassIds.Clear();
+            foreach (var id in ids)
+            {
+                if (!string.IsNullOrEmpty(id))
+                    _selectedClassIds.Add(id);
+            }
+        }
+        else
+        {
+            foreach (var id in ids)
+            {
+                if (string.IsNullOrEmpty(id)) continue;
+                if (_selectedClassIds.Contains(id)) _selectedClassIds.Remove(id);
+                else _selectedClassIds.Add(id);
+            }
+        }
+        UpdateSelection();
+    }
+
+    /// <summary>
+    /// Returns every class ID currently being moved by an active drag. For a
+    /// single-class drag this is just the dragged class; for a multi-drag it
+    /// is the full resolved set (selection + related 1D neighbors if scope
+    /// set). Used by <c>GraphCanvas</c> to sync GraphNode positions during
+    /// live-redraw.
+    /// </summary>
+    public IEnumerable<string> GetDraggedClassIds()
+    {
+        if (_draggingRectangle == null) return Enumerable.Empty<string>();
+        if (_multiDragClassIds.Count > 1)
+            return _multiDragClassIds.ToList();
+        return new[] { _draggingRectangle.ClassId };
+    }
+
     private void StartDrag(ClassRectangle rect, SKPoint worldPos)
     {
         _draggingRectangle = rect;
@@ -823,6 +935,31 @@ public sealed class DesignCanvasController
         _dragStartRectY = rect.Y;
         _dragStartClassId = rect.ClassId;
         rect.IsDragging = true;
+
+        // ── Multi-drag setup (marquee + move-scope, UIContract §5) ──
+        // When the grabbed class is part of the current selection, the move
+        // scope decides what else moves: just the selection (SelectedOnly) or
+        // the selection plus its 1-depth edge neighbors (+Related 1D). A
+        // resolved set with more than one class enters the multi-drag path.
+        _multiDragClassIds.Clear();
+        _multiDragStartPositions.Clear();
+        if (rect.IsSelected)
+        {
+            var designEdges = rect.Graph.Edges
+                .Select(e => (e.FromClassId, e.ToClassId));
+            var moveSet = MoveScopeResolver.ResolveMoveSet(
+                rect.ClassId, _selectedClassIds, CurrentMoveScope, designEdges);
+            if (moveSet.Count > 1)
+            {
+                _multiDragClassIds = moveSet;
+                foreach (var id in _multiDragClassIds)
+                {
+                    var cls = rect.Graph.Classes.FirstOrDefault(c => c.Id == id);
+                    if (cls != null)
+                        _multiDragStartPositions[id] = (cls.X, cls.Y);
+                }
+            }
+        }
     }
 
     private void StartResize(ClassRectangle rect, SKPoint worldPos)

@@ -72,9 +72,19 @@
             <WrapPanel Orientation="Horizontal">
               <CheckBox x:Name="ShowInheritanceCheck" Content="Inheritance" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0" Foreground="White"/>
               <CheckBox x:Name="ShowImplementsCheck" Content="Implements" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0" Foreground="White"/>
-              <CheckBox x:Name="ShowAssociationsCheck" Content="Associations" IsChecked="True" Click="OnEdgeFilterChanged" Foreground="White"/>
+              <CheckBox x:Name="ShowAssociationsCheck" Content="Associations" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0" Foreground="White"/>
             </WrapPanel>
             <CheckBox x:Name="AutoRedrawCheck" Content="Auto-redraw edges on move (Ctrl+R = manual)" IsChecked="True" Click="OnAutoRedrawChanged" Margin="0,4,0,0" Foreground="White" FontSize="11"/>
+          </StackPanel>
+
+          <!-- Move scope (marquee + related-1D drag) -->
+          <StackPanel Margin="8,0,8,4">
+            <TextBlock Text="Move Scope" FontWeight="Bold" Margin="0,0,0,4"/>
+            <ComboBox x:Name="AnalyzeMoveScopeCombo" SelectedIndex="0" SelectionChanged="OnAnalyzeMoveScopeChanged" MinWidth="200" Foreground="White">
+              <ComboBoxItem Content="Move: Selected only"/>
+              <ComboBoxItem Content="Move: +Related 1D"/>
+            </ComboBox>
+            <TextBlock Text="Drag LMB on empty canvas to marquee-select. Shift = additive. Right-drag or middle-drag pans." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
           </StackPanel>
 
           <!-- Namespace Focus -->
@@ -139,6 +149,12 @@
               <Button Content="Redo" Click="OnDesignRedo" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
               <Button Content="Reset Layout" Click="OnDesignResetLayout" MinWidth="90" Foreground="White" Margin="0,0,4,4"/>
             </WrapPanel>
+            <TextBlock Text="Move Scope" FontWeight="SemiBold" Margin="0,6,0,2"/>
+            <ComboBox x:Name="DesignMoveScopeCombo" SelectedIndex="0" SelectionChanged="OnDesignMoveScopeChanged" MinWidth="200" Foreground="White">
+              <ComboBoxItem Content="Move: Selected only"/>
+              <ComboBoxItem Content="Move: +Related 1D"/>
+            </ComboBox>
+            <TextBlock Text="Drag LMB on empty canvas to marquee-select. Shift = additive." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
           </StackPanel>
 
           <!-- Add tools -->
@@ -242,6 +258,7 @@
         <!-- Analyze Mode inspector — shows selected node info, members, relations -->
         <StackPanel x:Name="AnalyzeInspectorState" IsVisible="True" Margin="8">
           <TextBlock Text="Inspector" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+          <TextBlock x:Name="AnalyzeMultiSelectCount" Text="" FontWeight="SemiBold" Foreground="#FF8C00" Margin="0,0,0,8" TextWrapping="Wrap" IsVisible="False"/>
           <TextBlock x:Name="AnalyzeInspectorTitle" Text="No node selected" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" TextWrapping="Wrap"/>
           <TextBlock x:Name="AnalyzeInspectorKind" Text="" Margin="0,2" FontSize="11" Opacity="0.7"/>
           <TextBlock x:Name="AnalyzeInspectorFile" Text="" Margin="0,2" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
