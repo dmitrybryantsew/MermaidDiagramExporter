@@ -89,6 +89,7 @@ public partial class MainWindow : Window
         GraphCanvasView.ManualLayoutChanged += OnManualLayoutChanged;
         GraphCanvasView.ViewportChanged += OnViewportChanged;
         GraphCanvasView.AnalyzeMultiSelectionChanged += OnAnalyzeMultiSelectionChanged;
+        GraphCanvasView.AnalyzeContextMenuRequested += OnAnalyzeContextMenuRequested;
         SymbolSearchPanel.NodeSelected += OnSearchNodeSelected;
         SymbolSearchPanel.FocusOnResultsRequested += OnFocusSearchResults;
         SymbolSearchPanel.SearchCleared += OnSearchCleared;
@@ -106,7 +107,9 @@ public partial class MainWindow : Window
 
         // Initialize mode toggle UI (default is Analyze Mode)
         UpdateModeUi();
+        UpdateCodeOutputIndicator();
         MatrixView.CellClicked += OnMatrixCellClicked;
+        RefreshRecentDesignsMenu();
         _initialized = true;
     }
 
@@ -459,7 +462,11 @@ public partial class MainWindow : Window
     {
         if (_designGraph == null) return;
 
-        var menu = new Avalonia.Controls.MenuFlyout();
+        var menu = new Avalonia.Controls.ContextMenu
+        {
+            Placement = Avalonia.Controls.PlacementMode.Pointer,
+            PlacementTarget = GraphCanvasView
+        };
 
         switch (target.Kind)
         {
@@ -568,16 +575,7 @@ public partial class MainWindow : Window
 
         if (menu.Items.Count > 0)
         {
-            // Use a Popup with PlacementMode.Pointer so the menu anchors to the
-            // cursor, not to the MainWindow. Per docs/design/09 BUG-3.
-            var popup = new Avalonia.Controls.Primitives.Popup
-            {
-                Placement = Avalonia.Controls.PlacementMode.Pointer,
-                Child = BuildMenuContentPanel(menu),
-                HorizontalOffset = 0,
-                VerticalOffset = 0
-            };
-            popup.IsOpen = true;
+            menu.Open(GraphCanvasView);
         }
     }
 
@@ -586,15 +584,264 @@ public partial class MainWindow : Window
     /// inside a Popup. MenuFlyout itself requires a control anchor and
     /// doesn't support pointer-anchored placement.
     /// </summary>
-    private static Avalonia.Controls.Panel BuildMenuContentPanel(Avalonia.Controls.MenuFlyout menu)
+
+    // ── Analyze Mode RMB context menu (get code / focus) ──
+
+    /// <summary>
+    /// Builds and shows the Analyze Mode context menu when the user right-clicks
+    /// a class node. Offers "get code" actions (class / namespace / namespace +
+    /// connected at D1-D3) and focus actions, acting on the clicked class plus
+    /// any active multi-selection that contains it. Output target (clipboard vs
+    /// file) follows <see cref="ProjectSettings.CodeExtractionOutput"/>.
+    /// </summary>
+    private void OnAnalyzeContextMenuRequested(GraphNode clicked, SkiaSharp.SKPoint screenPos)
     {
-        var panel = new Avalonia.Controls.StackPanel { Background = Avalonia.Media.Brush.Parse("#2A2E34") };
-        foreach (var item in menu.Items)
+        if (_currentGraph == null) return;
+        var targetIds = ResolveCodeTargetIds(clicked);
+        if (targetIds.Count == 0) return;
+
+        var cm = new Avalonia.Controls.ContextMenu
         {
-            if (item is Avalonia.Controls.MenuItem mi)
-                panel.Children.Add(mi);
+            Placement = Avalonia.Controls.PlacementMode.Pointer,
+            PlacementTarget = GraphCanvasView
+        };
+
+        string scope = targetIds.Count == 1 ? clicked.DisplayName : $"{targetIds.Count} classes";
+        string modeLabel = _currentSettings.CodeExtractionOutput == CodeExtractionOutputMode.Clipboard
+            ? "Clipboard" : "File";
+
+        var classItem = new Avalonia.Controls.MenuItem { Header = $"Get Class Code ({scope})" };
+        classItem.Click += (_, _) => ExtractClassCode(targetIds);
+        cm.Items.Add(classItem);
+
+        var nsItem = new Avalonia.Controls.MenuItem { Header = "Get Namespace Code" };
+        nsItem.Click += (_, _) => ExtractNamespaceCode(targetIds);
+        cm.Items.Add(nsItem);
+
+        var nsConnItem = new Avalonia.Controls.MenuItem { Header = "Get Namespace + Connected →" };
+        nsConnItem.Items.Add(BuildDepthItem(targetIds, depth: 1, connected: true));
+        nsConnItem.Items.Add(BuildDepthItem(targetIds, depth: 2, connected: true));
+        nsConnItem.Items.Add(BuildDepthItem(targetIds, depth: 3, connected: true));
+        cm.Items.Add(nsConnItem);
+
+        cm.Items.Add(new Avalonia.Controls.Separator());
+
+        var focusClassItem = new Avalonia.Controls.MenuItem { Header = "Focus Class →" };
+        focusClassItem.Items.Add(BuildFocusItem(targetIds, 1));
+        focusClassItem.Items.Add(BuildFocusItem(targetIds, 2));
+        focusClassItem.Items.Add(BuildFocusItem(targetIds, 3));
+        cm.Items.Add(focusClassItem);
+
+        var focusNsItem = new Avalonia.Controls.MenuItem { Header = "Focus Namespace →" };
+        foreach (var fi in BuildFocusNamespaceItems(targetIds))
+            focusNsItem.Items.Add(fi);
+        cm.Items.Add(focusNsItem);
+
+        cm.Items.Add(new Avalonia.Controls.Separator());
+
+        var toggleItem = new Avalonia.Controls.MenuItem
+        {
+            Header = $"Code Output: {modeLabel}  (Ctrl+Shift+C to toggle)"
+        };
+        toggleItem.Click += (_, _) => ToggleCodeOutputMode();
+        cm.Items.Add(toggleItem);
+
+        cm.Open(GraphCanvasView);
+    }
+
+    private Avalonia.Controls.MenuItem BuildDepthItem(List<string> targetIds, int depth, bool connected)
+    {
+        var item = new Avalonia.Controls.MenuItem { Header = $"D{depth}" };
+        item.Click += (_, _) => ExtractNamespaceConnectedCode(targetIds, depth);
+        return item;
+    }
+
+    private Avalonia.Controls.MenuItem BuildFocusItem(List<string> targetIds, int depth)
+    {
+        var item = new Avalonia.Controls.MenuItem { Header = $"D{depth}" };
+        item.Click += (_, _) => FocusFromContextMenu(targetIds, depth);
+        return item;
+    }
+
+    private List<Avalonia.Controls.MenuItem> BuildFocusNamespaceItems(List<string> targetIds)
+    {
+        var result = new List<Avalonia.Controls.MenuItem>();
+        foreach (var depth in new[] { 1, 2, 3 })
+        {
+            var item = new Avalonia.Controls.MenuItem { Header = $"D{depth}" };
+            int d = depth;
+            item.Click += (_, _) => FocusOnNamespaceSeeds(targetIds, d);
+            result.Add(item);
         }
-        return panel;
+        return result;
+    }
+
+    /// <summary>
+    /// Resolves the set of node IDs a "Get Code"/"Focus" action should act on:
+    /// if the clicked node is part of an active multi-selection, act on the
+    /// whole selection; otherwise act on just the clicked node.
+    /// </summary>
+    private List<string> ResolveCodeTargetIds(GraphNode clicked)
+    {
+        var sel = GraphCanvasView.GetAnalyzeSelectedNodeIds();
+        if (sel != null && sel.Count > 1 && sel.Contains(clicked.Id))
+            return sel.ToList();
+        return new List<string> { clicked.Id };
+    }
+
+    private TypeGraph? SourceGraphForExtraction() => _focusNavigationController.RootGraph ?? _currentGraph;
+
+    private void ExtractClassCode(List<string> nodeIds)
+    {
+        var graph = SourceGraphForExtraction();
+        if (graph == null) return;
+        var paths = nodeIds
+            .Select(id => graph.Nodes.FirstOrDefault(n => n.Id == id))
+            .Where(n => n != null && !string.IsNullOrEmpty(n!.AssetPath))
+            .Select(n => n!.AssetPath)
+            .ToList();
+        if (paths.Count == 0) { StatsText.Text = "No source files for selection."; return; }
+        string title = $"Class code ({paths.Count} file{(paths.Count > 1 ? "s" : "")})";
+        var content = _bundleService.BuildBundleFromFiles(paths, title, _currentSettings.SourceFolderPath);
+        DeliverCodeBundle(content, "class-code", $"{title} — {paths.Count} files");
+    }
+
+    private void ExtractNamespaceCode(List<string> nodeIds)
+    {
+        var graph = SourceGraphForExtraction();
+        if (graph == null) return;
+        var namespaces = nodeIds
+            .Select(id => graph.Nodes.FirstOrDefault(n => n.Id == id))
+            .Where(n => n != null && !string.IsNullOrWhiteSpace(n!.Namespace))
+            .Select(n => n!.Namespace)
+            .Distinct()
+            .ToList();
+        if (namespaces.Count == 0) { StatsText.Text = "No namespace for selection."; return; }
+
+        var nsSet = new HashSet<string>(namespaces);
+        var paths = graph.Nodes
+            .Where(n => nsSet.Contains(n.Namespace))
+            .Select(n => n.AssetPath)
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Distinct()
+            .ToList();
+        if (paths.Count == 0) { StatsText.Text = "No source files for namespace."; return; }
+        string title = $"Namespace code: {string.Join(", ", namespaces)} ({paths.Count} files)";
+        var content = _bundleService.BuildBundleFromFiles(paths, title, _currentSettings.SourceFolderPath);
+        DeliverCodeBundle(content, "namespace-code", title);
+    }
+
+    private void ExtractNamespaceConnectedCode(List<string> nodeIds, int depth)
+    {
+        var root = SourceGraphForExtraction();
+        if (root == null) return;
+        var namespaces = nodeIds
+            .Select(id => root.Nodes.FirstOrDefault(n => n.Id == id))
+            .Where(n => n != null && !string.IsNullOrWhiteSpace(n!.Namespace))
+            .Select(n => n!.Namespace)
+            .Distinct()
+            .ToList();
+        if (namespaces.Count == 0) { StatsText.Text = "No namespace for selection."; return; }
+
+        var nsSet = new HashSet<string>(namespaces);
+        var seedIds = root.Nodes
+            .Where(n => nsSet.Contains(n.Namespace))
+            .Select(n => n.Id)
+            .ToList();
+        if (seedIds.Count == 0) { StatsText.Text = "No nodes in namespace."; return; }
+
+        var focused = _focusNavigationController.BuildFocusedSubgraph(
+            seedIds, depth, GraphFocusTraversalMode.AllVisibleRelations, root);
+        if (focused == null || focused.Nodes.Count == 0)
+        {
+            StatsText.Text = "No connected classes found.";
+            return;
+        }
+
+        var paths = focused.Nodes
+            .Select(n => n.AssetPath)
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Distinct()
+            .ToList();
+        string title = $"Namespace + connected D{depth}: {string.Join(", ", namespaces)} ({paths.Count} files)";
+        var content = _bundleService.BuildBundleFromFiles(paths, title, _currentSettings.SourceFolderPath);
+        DeliverCodeBundle(content, "namespace-connected-code", title);
+    }
+
+    private async void DeliverCodeBundle(string content, string filePrefix, string summary)
+    {
+        if (_currentSettings.CodeExtractionOutput == CodeExtractionOutputMode.Clipboard)
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(content);
+                StatsText.Text = $"Copied to clipboard: {summary}";
+            }
+            else
+            {
+                StatsText.Text = "Clipboard unavailable.";
+            }
+        }
+        else
+        {
+            string path = _bundleService.SaveBundle(content, _currentSettings, filePrefix);
+            StatsText.Text = $"Saved: {path}";
+        }
+    }
+
+    private void ToggleCodeOutputMode()
+    {
+        _currentSettings.CodeExtractionOutput = _currentSettings.CodeExtractionOutput == CodeExtractionOutputMode.Clipboard
+            ? CodeExtractionOutputMode.File
+            : CodeExtractionOutputMode.Clipboard;
+        if (!string.IsNullOrWhiteSpace(_currentSettings.SourceFolderPath))
+            _settingsService.SaveSettings(_currentSettings);
+        UpdateCodeOutputIndicator();
+        string label = _currentSettings.CodeExtractionOutput == CodeExtractionOutputMode.Clipboard ? "Clipboard" : "File";
+        StatsText.Text = $"Code Output → {label}";
+    }
+
+    private void UpdateCodeOutputIndicator()
+    {
+        if (CodeOutputIndicator == null) return;
+        string label = _currentSettings.CodeExtractionOutput == CodeExtractionOutputMode.Clipboard ? "Clipboard" : "File";
+        CodeOutputIndicator.Text = $"Code → {label}  (Ctrl+Shift+C)";
+    }
+
+    private void FocusFromContextMenu(List<string> seedIds, int depth)
+    {
+        _seedSelectionState.Clear();
+        foreach (var id in seedIds)
+            _seedSelectionState.Add(id);
+        _focusDepth = depth;
+        if (!_focusNavigationController.CanFocusSelection(seedIds)) return;
+        var focused = _focusNavigationController.FocusSelection(seedIds, depth, _currentTraversalMode);
+        if (focused != null)
+        {
+            _seedSelectionState.PruneToGraph(focused);
+            SetDisplayedGraph(focused, seedIds.Count > 0 ? seedIds[0] : _currentSelectedNodeId);
+        }
+    }
+
+    private void FocusOnNamespaceSeeds(List<string> nodeIds, int depth)
+    {
+        var root = SourceGraphForExtraction();
+        if (root == null) return;
+        var namespaces = nodeIds
+            .Select(id => root.Nodes.FirstOrDefault(n => n.Id == id))
+            .Where(n => n != null && !string.IsNullOrWhiteSpace(n!.Namespace))
+            .Select(n => n!.Namespace)
+            .Distinct()
+            .ToList();
+        if (namespaces.Count == 0) { StatsText.Text = "No namespace for selection."; return; }
+
+        var nsSet = new HashSet<string>(namespaces);
+        var seedIds = root.Nodes
+            .Where(n => nsSet.Contains(n.Namespace))
+            .Select(n => n.Id)
+            .ToList();
+        FocusFromContextMenu(seedIds, depth);
     }
 
     /// <summary>
@@ -631,6 +878,8 @@ public partial class MainWindow : Window
         var fresh = new DesignGraph { Title = "Untitled Design" };
         _designModeController.EnterDesignMode(fresh);
         _designGraph = _designModeController.CurrentDesign;
+        _designFilePath = null;
+        SwitchToDesignModeUi();
         RenderDesignModeGraph();
         _designCanvasController.ResetTool();
         StatsText.Text = "New design created";
@@ -653,13 +902,41 @@ public partial class MainWindow : Window
         });
 
         if (files.Count == 0) return;
-        var path = files[0].Path.LocalPath;
-        var loaded = DesignSerialization.Load(path);
+        OpenDesignFromPath(files[0].Path.LocalPath);
+    }
+
+    /// <summary>
+    /// Loads a design from a file path and switches the UI to Design Mode.
+    /// Shared by File → Open Design and File → Recent Designs.
+    /// </summary>
+    private void OpenDesignFromPath(string path)
+    {
+        if (!File.Exists(path))
+        {
+            _recentDesignFiles.Remove(path);
+            RefreshRecentDesignsMenu();
+            StatsText.Text = $"File not found: {path}";
+            return;
+        }
+
+        DesignGraph loaded;
+        try
+        {
+            loaded = DesignSerialization.Load(path);
+        }
+        catch (Exception ex)
+        {
+            StatsText.Text = $"Could not open design: {ex.Message}";
+            return;
+        }
+
         _designModeController.EnterDesignMode(loaded);
         _designGraph = _designModeController.CurrentDesign;
         _designFilePath = path;
         _designIsDirty = false;
         _recentDesignFiles.Add(path);
+        RefreshRecentDesignsMenu();
+        SwitchToDesignModeUi();
         RenderDesignModeGraph();
         _designCanvasController.ResetTool();
         StatsText.Text = $"Opened: {Path.GetFileName(path)}";
@@ -667,10 +944,24 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Brings the chrome (panels, menu state, move scope) in line with the
+    /// controller's Design Mode. Called when a design is created/opened from
+    /// the menu bar while the UI is in Analyze Mode.
+    /// </summary>
+    private void SwitchToDesignModeUi()
+    {
+        GraphCanvasView.SetAnalyzeMultiSelection(Array.Empty<string>());
+        if (DesignMoveScopeCombo.SelectedIndex >= 0)
+            _designCanvasController.CurrentMoveScope = (MoveScope)DesignMoveScopeCombo.SelectedIndex;
+        UpdateModeUi();
+    }
+
+    /// <summary>
     /// Saves to the current file path. If no path is set, falls back to Save As.
     /// </summary>
     private async void OnDesignSave(object? sender, RoutedEventArgs e)
     {
+        if (_designModeController.CurrentMode != AppMode.Design) return;
         if (_designGraph == null) return;
         var path = _designFilePath;
         if (string.IsNullOrEmpty(path))
@@ -693,6 +984,7 @@ public partial class MainWindow : Window
 
     private async System.Threading.Tasks.Task SaveDesignAsAsync()
     {
+        if (_designModeController.CurrentMode != AppMode.Design) return;
         if (_designGraph == null) return;
         var topLevel = GetTopLevel(this);
         if (topLevel == null) return;
@@ -710,6 +1002,7 @@ public partial class MainWindow : Window
         _designFilePath = path;
         _designIsDirty = false;
         _recentDesignFiles.Add(path);
+        RefreshRecentDesignsMenu();
         StatsText.Text = $"Saved: {Path.GetFileName(path)}";
     }
 
@@ -1115,6 +1408,8 @@ public partial class MainWindow : Window
         DesignModeButton.Background = isDesign
             ? Avalonia.Media.Brush.Parse("#4CAF50")
             : Avalonia.Media.Brush.Parse("#3A4250");
+
+        UpdateMenuModeState();
     }
 
     private async void OnBrowse(object? sender, RoutedEventArgs e)
@@ -1133,6 +1428,9 @@ public partial class MainWindow : Window
 
     private async void OnScan(object? sender, RoutedEventArgs e)
     {
+        // Scanning is an Analyze Mode feature (F5/menu paths must respect that too).
+        if (_designModeController.CurrentMode == AppMode.Design) return;
+
         var rawPath = FolderTextBox.Text?.Trim();
         if (string.IsNullOrEmpty(rawPath))
         {
@@ -1195,6 +1493,7 @@ public partial class MainWindow : Window
             _focusNavigationController.SetRootGraph(_currentGraph, _currentSettings.SourceFolderPath);
             _seedSelectionState.Clear();
             GraphCanvasView.SetEdgeStyles(_currentSettings.EdgeStyles);
+            UpdateCodeOutputIndicator();
 
             // Phase 4: Update UI on the main thread (touches Avalonia controls)
             SetDisplayedGraph(_currentGraph);
@@ -1268,6 +1567,7 @@ public partial class MainWindow : Window
         GraphCanvasView.SetGraph(nodes, edges);
         MinimapView.SetGraph(nodes, edges);
         MinimapView.IsVisible = _currentSettings.ShowMinimap;
+        SyncViewMenuChecks();
         UpdateClassList(graph);
         UpdateStats(graph);
 
@@ -1541,11 +1841,32 @@ public partial class MainWindow : Window
             ShowInheritanceCheck.IsChecked == true,
             ShowImplementsCheck.IsChecked == true,
             ShowAssociationsCheck.IsChecked == true);
+        SyncViewMenuChecks();
+    }
+
+    /// <summary>
+    /// View → Edge Filters menu items mirror the sidebar checkboxes.
+    /// The sidebar CheckBox controls remain the single source of truth.
+    /// </summary>
+    private void OnMenuEdgeFilterChanged(object? sender, RoutedEventArgs e)
+    {
+        ShowInheritanceCheck.IsChecked = MenuFilterInheritance.IsChecked == true;
+        ShowImplementsCheck.IsChecked = MenuFilterImplements.IsChecked == true;
+        ShowAssociationsCheck.IsChecked = MenuFilterAssociations.IsChecked == true;
+        OnEdgeFilterChanged(sender, e);
     }
 
     private void OnAutoRedrawChanged(object? sender, RoutedEventArgs e)
     {
         _currentSettings.AutoRedrawEdges = AutoRedrawCheck.IsChecked == true;
+        SyncViewMenuChecks();
+    }
+
+    /// <summary>View → Auto-redraw menu item mirrors the sidebar checkbox.</summary>
+    private void OnMenuAutoRedrawChanged(object? sender, RoutedEventArgs e)
+    {
+        AutoRedrawCheck.IsChecked = MenuAutoRedraw.IsChecked == true;
+        OnAutoRedrawChanged(sender, e);
     }
 
     // --- Namespace Focus ---
@@ -1673,6 +1994,7 @@ public partial class MainWindow : Window
     private void OnViewportChanged(float zoom, float panX, float panY, float viewW, float viewH)
     {
         MinimapView.UpdateViewport(zoom, panX, panY, viewW, viewH);
+        ZoomStatusText.Text = $"{zoom * 100:0}%";
     }
 
     private void OnMinimapViewportJump(float newPanX, float newPanY)
@@ -1732,9 +2054,17 @@ public partial class MainWindow : Window
 
     private void OnToggleMatrix(object? sender, RoutedEventArgs e)
     {
+        // Matrix view is an Analyze Mode feature; in Design Mode only allow
+        // turning it OFF (never opening it).
+        if (_designModeController.CurrentMode == AppMode.Design && !_matrixVisible)
+        {
+            MatrixMenuItem.IsChecked = false;
+            return;
+        }
+
         _matrixVisible = !_matrixVisible;
         MatrixView.IsVisible = _matrixVisible;
-        MatrixButton.Content = _matrixVisible ? "Graph" : "Matrix";
+        MatrixMenuItem.IsChecked = _matrixVisible;
 
         if (_matrixVisible && _currentGraph != null)
         {
@@ -1747,7 +2077,7 @@ public partial class MainWindow : Window
         // Switch back to graph view and filter to show types from both namespaces
         _matrixVisible = false;
         MatrixView.IsVisible = false;
-        MatrixButton.Content = "Matrix";
+        MatrixMenuItem.IsChecked = false;
 
         if (_currentGraph != null)
         {
@@ -1879,9 +2209,13 @@ public partial class MainWindow : Window
 
     private void UpdateNavigationButtons()
     {
-        BackButton.IsEnabled = _focusNavigationController.CanGoBack();
-        ForwardButton.IsEnabled = _focusNavigationController.CanGoForward();
-        ResetButton.IsEnabled = _focusNavigationController.IsFocusedView;
+        bool isAnalyze = _designModeController.CurrentMode != AppMode.Design;
+        BackButton.IsEnabled = isAnalyze && _focusNavigationController.CanGoBack();
+        ForwardButton.IsEnabled = isAnalyze && _focusNavigationController.CanGoForward();
+        ResetButton.IsEnabled = isAnalyze && _focusNavigationController.IsFocusedView;
+        MenuNavBack.IsEnabled = BackButton.IsEnabled;
+        MenuNavForward.IsEnabled = ForwardButton.IsEnabled;
+        MenuNavReset.IsEnabled = ResetButton.IsEnabled;
     }
 
     private void OnBack(object? sender, RoutedEventArgs e)
@@ -1928,8 +2262,310 @@ public partial class MainWindow : Window
             if (MinimapView != null)
                 MinimapView.IsVisible = _currentSettings.ShowMinimap;
             GraphCanvasView.SetEdgeStyles(_currentSettings.EdgeStyles);
+            UpdateCodeOutputIndicator();
+            SyncViewMenuChecks();
         }
     }
+
+    // ══ Menu bar handlers (docs/2026-07-17 UI restructure) ══
+
+    /// <summary>
+    /// Enables/disables mode-specific menu and toolbar items. Static menus
+    /// with disabled items are less disorienting than menus that appear and
+    /// vanish. Called from <see cref="UpdateModeUi"/>.
+    /// </summary>
+    private void UpdateMenuModeState()
+    {
+        bool isDesign = _designModeController.CurrentMode == AppMode.Design;
+
+        // Design-only commands
+        MenuSave.IsEnabled = isDesign;
+        MenuSaveAs.IsEnabled = isDesign;
+        MenuExportDesignMermaid.IsEnabled = isDesign;
+        MenuExportCSharp.IsEnabled = isDesign;
+        MenuExportJson.IsEnabled = isDesign;
+        MenuLlmGenerate.IsEnabled = isDesign;
+        MenuValidateDesign.IsEnabled = isDesign;
+        MenuAddClass.IsEnabled = isDesign;
+        MenuConnect.IsEnabled = isDesign;
+        MenuRename.IsEnabled = isDesign;
+        MenuDeleteSelection.IsEnabled = isDesign;
+
+        // Analyze-only commands
+        MenuRescan.IsEnabled = !isDesign;
+        MenuFocusCurrent.IsEnabled = !isDesign;
+        MenuFocusDepth.IsEnabled = !isDesign;
+        MenuSeeds.IsEnabled = !isDesign;
+        MenuImportFromScan.IsEnabled = !isDesign;
+        ToolbarScanButton.IsEnabled = !isDesign;
+        ToolbarD1Button.IsEnabled = !isDesign;
+        ToolbarD2Button.IsEnabled = !isDesign;
+        ToolbarD3Button.IsEnabled = !isDesign;
+
+        UpdateNavigationButtons();
+    }
+
+    /// <summary>
+    /// Keeps checkable View-menu items in sync with the authoritative control
+    /// state (sidebar checkboxes, minimap visibility, matrix flag).
+    /// </summary>
+    private void SyncViewMenuChecks()
+    {
+        if (!_initialized) return;
+        ViewMinimapItem.IsChecked = MinimapView.IsVisible;
+        MatrixMenuItem.IsChecked = _matrixVisible;
+        MenuAutoRedraw.IsChecked = AutoRedrawCheck.IsChecked == true;
+        MenuFilterInheritance.IsChecked = ShowInheritanceCheck.IsChecked == true;
+        MenuFilterImplements.IsChecked = ShowImplementsCheck.IsChecked == true;
+        MenuFilterAssociations.IsChecked = ShowAssociationsCheck.IsChecked == true;
+    }
+
+    // ── File menu ──
+
+    /// <summary>
+    /// Rebuilds the File → Recent Designs submenu from
+    /// <see cref="_recentDesignFiles"/>. Called at startup and whenever the
+    /// MRU list changes (open/save/clear).
+    /// </summary>
+    private void RefreshRecentDesignsMenu()
+    {
+        RecentDesignsMenu.Items.Clear();
+
+        if (_recentDesignFiles.Files.Count == 0)
+        {
+            RecentDesignsMenu.Items.Add(new MenuItem { Header = "(no recent designs)", IsEnabled = false });
+            return;
+        }
+
+        int index = 1;
+        foreach (var path in _recentDesignFiles.Files)
+        {
+            var item = new MenuItem { Header = $"{index++}  {Path.GetFileName(path)}", Tag = path };
+            ToolTip.SetTip(item, path);
+            item.Click += OnRecentDesignClicked;
+            RecentDesignsMenu.Items.Add(item);
+        }
+
+        RecentDesignsMenu.Items.Add(new Separator());
+        var clearItem = new MenuItem { Header = "Clear Recent Designs" };
+        clearItem.Click += (_, _) =>
+        {
+            _recentDesignFiles.Clear();
+            RefreshRecentDesignsMenu();
+        };
+        RecentDesignsMenu.Items.Add(clearItem);
+    }
+
+    private void OnRecentDesignClicked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string path })
+            OpenDesignFromPath(path);
+    }
+
+    private void OnExit(object? sender, RoutedEventArgs e) => Close();
+
+    // ── Edit menu ──
+
+    /// <summary>Mode-aware undo: Design uses its undo manager, Analyze undoes manual moves.</summary>
+    private void OnMenuUndo(object? sender, RoutedEventArgs e)
+    {
+        if (_designModeController.CurrentMode == AppMode.Design)
+        {
+            OnDesignUndo(sender, e);
+        }
+        else
+        {
+            GraphCanvasView.UndoAnalyze();
+            UpdateStatusBar();
+        }
+    }
+
+    /// <summary>Mode-aware redo.</summary>
+    private void OnMenuRedo(object? sender, RoutedEventArgs e)
+    {
+        if (_designModeController.CurrentMode == AppMode.Design)
+        {
+            OnDesignRedo(sender, e);
+        }
+        else
+        {
+            GraphCanvasView.RedoAnalyze();
+            UpdateStatusBar();
+        }
+    }
+
+    /// <summary>Rename the single selected design class via the inline editor (same path as double-click).</summary>
+    private void OnMenuRename(object? sender, RoutedEventArgs e)
+    {
+        if (_designModeController.CurrentMode != AppMode.Design) return;
+        var ids = _designCanvasController.Selection.SelectedClassIds;
+        if (ids.Count == 1)
+            OnDesignClassDoubleClicked(ids[0]);
+    }
+
+    /// <summary>Delete the current design selection (mirrors the Delete key path).</summary>
+    private void OnMenuDeleteSelection(object? sender, RoutedEventArgs e)
+    {
+        if (_designModeController.CurrentMode != AppMode.Design) return;
+        if (_designGraph != null && _designCanvasController.HandleDeleteKey(_designGraph))
+            RenderDesignModeGraph();
+    }
+
+    /// <summary>
+    /// Edit → Connect submenu: mirrors the sidebar edge-type combo. Setting
+    /// the combo index arms the matching edge tool (re-arms when re-picking
+    /// the same type).
+    /// </summary>
+    private void OnMenuConnectEdge(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag } || !int.TryParse(tag, out int index)) return;
+        if (DesignEdgeCombo.SelectedIndex != index)
+            DesignEdgeCombo.SelectedIndex = index;
+        else
+            OnDesignEdgeTypeSelected(DesignEdgeCombo, null!);
+    }
+
+    private void OnToggleCodeOutput(object? sender, RoutedEventArgs e) => ToggleCodeOutputMode();
+
+    // ── View menu ──
+
+    private void OnToggleMinimapMenu(object? sender, RoutedEventArgs e)
+    {
+        bool show = ViewMinimapItem.IsChecked == true;
+        MinimapView.IsVisible = show;
+        _currentSettings.ShowMinimap = show;
+    }
+
+    private void OnToggleSidebar(object? sender, RoutedEventArgs e)
+    {
+        bool show = ViewSidebarItem.IsChecked == true;
+        MainContentGrid.ColumnDefinitions[0].Width = new GridLength(show ? 320 : 0);
+        MainContentGrid.ColumnDefinitions[1].Width = new GridLength(show ? 1 : 0);
+    }
+
+    private void OnToggleInspector(object? sender, RoutedEventArgs e)
+    {
+        bool show = ViewInspectorItem.IsChecked == true;
+        MainContentGrid.ColumnDefinitions[4].Width = new GridLength(show ? 300 : 0);
+        MainContentGrid.ColumnDefinitions[3].Width = new GridLength(show ? 1 : 0);
+    }
+
+    /// <summary>Mode-aware edge redraw (mirrors Ctrl+R).</summary>
+    private void OnMenuRedrawEdges(object? sender, RoutedEventArgs e)
+    {
+        if (_designModeController.CurrentMode == AppMode.Design && _designGraph != null)
+            RenderDesignModeGraph(preserveViewport: true);
+        else
+            RedrawEdgesNow();
+    }
+
+    /// <summary>Mode-aware layout reset: one menu entry dispatches per mode.</summary>
+    private void OnMenuResetLayout(object? sender, RoutedEventArgs e)
+    {
+        if (_designModeController.CurrentMode == AppMode.Design)
+            OnDesignResetLayout(sender, e);
+        else
+            OnResetLayout(sender, e);
+    }
+
+    /// <summary>Ctrl+K — move focus to the toolbar search box.</summary>
+    private void OnFindSymbol(object? sender, RoutedEventArgs e)
+    {
+        SearchTextBox.Focus();
+        SearchTextBox.SelectAll();
+    }
+
+    // ── Design menu ──
+
+    /// <summary>Runs <see cref="DesignValidator"/> on the current design and shows the results.</summary>
+    private void OnValidateDesign(object? sender, RoutedEventArgs e)
+    {
+        if (_designGraph == null) return;
+        var errors = DesignValidator.Validate(_designGraph);
+        string message = errors.Count == 0
+            ? "No issues found. The diagram is structurally valid."
+            : string.Join(Environment.NewLine, errors.Select(err => "• " + err));
+        ShowTextDialog("Design Validation", message);
+    }
+
+    // ── Help menu ──
+
+    private void OnShowShortcuts(object? sender, RoutedEventArgs e) =>
+        ShowTextDialog("Keyboard Shortcuts", ShortcutsText);
+
+    private void OnShowAbout(object? sender, RoutedEventArgs e) =>
+        ShowTextDialog("About Mermaid Diagram Exporter",
+            "Mermaid Diagram Exporter\n\n" +
+            "Generates Mermaid class diagrams from C# source code using Roslyn.\n" +
+            "Analyze Mode scans existing code; Design Mode authors diagrams from scratch.\n\n" +
+            $".NET {Environment.Version} · Avalonia · SkiaSharp");
+
+    /// <summary>Minimal code-built dialog (no extra AXAML files).</summary>
+    private void ShowTextDialog(string title, string text)
+    {
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 560,
+            Height = 480,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new ScrollViewer
+            {
+                Content = new TextBlock
+                {
+                    Text = text,
+                    Margin = new Avalonia.Thickness(18),
+                    FontFamily = new Avalonia.Media.FontFamily("Consolas,monospace"),
+                    FontSize = 12,
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                }
+            }
+        };
+        _ = dialog.ShowDialog(this);
+    }
+
+    private const string ShortcutsText =
+        "GENERAL\n" +
+        "  Ctrl+Shift+O        Open source folder\n" +
+        "  F5                  Rescan\n" +
+        "  Ctrl+,              Project settings\n" +
+        "  Ctrl+K              Focus symbol search\n" +
+        "  Ctrl+B              Toggle sidebar\n" +
+        "  Ctrl+Shift+I        Toggle inspector panel\n" +
+        "  Ctrl+M              Toggle namespace matrix (Analyze)\n" +
+        "  Ctrl+Shift+M        Copy Mermaid to clipboard\n" +
+        "  F                   Fit to screen\n" +
+        "  + / −               Zoom in / out\n" +
+        "  Ctrl+R              Redraw edges now\n" +
+        "  Ctrl+Shift+C        Toggle code output target (clipboard/file)\n" +
+        "  Alt+← / Alt+→       Back / forward (focus navigation)\n" +
+        "\n" +
+        "FILE (Design Mode)\n" +
+        "  Ctrl+N              New design\n" +
+        "  Ctrl+O              Open design\n" +
+        "  Ctrl+S              Save\n" +
+        "  Ctrl+Shift+S        Save As\n" +
+        "\n" +
+        "EDIT (Design Mode)\n" +
+        "  Ctrl+Z / Ctrl+Y     Undo / Redo\n" +
+        "  F2                  Rename selected class\n" +
+        "  Del / Backspace     Delete selection\n" +
+        "  Esc                 Cancel tool/edge, clear selection\n" +
+        "  Arrows              Nudge selection 1px (Shift = 10px)\n" +
+        "\n" +
+        "DESIGN TOOLS (letter arms tool; Shift = sticky)\n" +
+        "  V Select            C Class           I Interface\n" +
+        "  E Enum              S Struct          A Abstract class\n" +
+        "  T Static class      N Namespace\n" +
+        "  H Inheritance       M Implements      L Association\n" +
+        "  D Dependency        G Aggregation     O Composition\n" +
+        "\n" +
+        "CANVAS\n" +
+        "  Drag LMB on empty canvas   Marquee-select (Shift = additive)\n" +
+        "  Right-drag / middle-drag   Pan\n" +
+        "  Scroll wheel               Zoom\n" +
+        "  Right-click class          Context actions (code/focus)\n" +
+        "  Double-click class name    Rename inline\n";
 
     // ── Keyboard shortcuts (W3) ──
 
@@ -1943,6 +2579,30 @@ public partial class MainWindow : Window
 
         var ctrl = (e.KeyModifiers & KeyModifiers.Control) != 0;
         var shift = (e.KeyModifiers & KeyModifiers.Shift) != 0;
+        var alt = (e.KeyModifiers & KeyModifiers.Alt) != 0;
+
+        // Alt+Left / Alt+Right — Back / Forward navigation (both modes).
+        // Mirrors browser back/forward. Ctrl+Z/Y remain undo/redo.
+        if (alt && !ctrl && e.Key == Key.Left)
+        {
+            if (BackButton.IsEnabled) OnBack(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+        if (alt && !ctrl && e.Key == Key.Right)
+        {
+            if (ForwardButton.IsEnabled) OnForward(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+Shift+C — toggle "Get Code" output (Clipboard ↔ File).
+        if (ctrl && shift && e.Key == Key.C)
+        {
+            ToggleCodeOutputMode();
+            e.Handled = true;
+            return;
+        }
 
         // Ctrl+R — Redraw edges (works in both Analyze and Design modes)
         if (ctrl && e.Key == Key.R)
@@ -1957,6 +2617,30 @@ public partial class MainWindow : Window
             }
             e.Handled = true;
             return;
+        }
+
+        // View keys: zoom in/out and fit — both modes, but never while typing
+        // in a text box (search box, inspector fields, inline rename).
+        if (e.Source is not TextBox && !ctrl && !alt)
+        {
+            if (e.Key == Key.OemPlus || e.Key == Key.Add)
+            {
+                OnZoomIn(this, new RoutedEventArgs());
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.OemMinus || e.Key == Key.Subtract)
+            {
+                OnZoomOut(this, new RoutedEventArgs());
+                e.Handled = true;
+                return;
+            }
+            if (!shift && e.Key == Key.F)
+            {
+                GraphCanvasView.FitToScreen();
+                e.Handled = true;
+                return;
+            }
         }
 
         // Ctrl+Z / Ctrl+Y — Undo/Redo (works in both modes; Analyze Mode
@@ -2005,6 +2689,14 @@ public partial class MainWindow : Window
         {
             if (_designGraph != null && _designCanvasController.HandleDeleteKey(_designGraph))
                 RenderDesignModeGraph();
+            e.Handled = true;
+            return;
+        }
+
+        // F2 — rename the selected class (single selection) via the inline editor
+        if (e.Key == Key.F2)
+        {
+            OnMenuRename(this, new RoutedEventArgs());
             e.Handled = true;
             return;
         }
@@ -2073,13 +2765,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // F — Fit to screen (when nothing selected; reserved when "F" is used as a shortcut)
-        if (e.Key == Key.F && !ctrl && !shift)
-        {
-            GraphCanvasView.FitToScreen();
-            e.Handled = true;
-            return;
-        }
+        // F — Fit to screen is handled globally above (both modes).
 
         // ── Tool shortcuts (UIContract §7) ──
         if (!ctrl)

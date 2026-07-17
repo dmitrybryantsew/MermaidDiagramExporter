@@ -66,13 +66,35 @@ dotnet run --project src/MermaidDiagramExporter.Gui
 
 Features:
 
+- **Menu bar + toolbar** — full command inventory under File/Edit/View/Navigate/Design/Help; slim toolbar with mode toggle, Scan, focus depth, and symbol search
 - Folder picker to select source directory
 - Interactive graph canvas with pan/zoom
 - Focus navigation — select a node to see its neighborhood (configurable depth and traversal mode)
-- Minimap for large diagrams
+- Minimap for large diagrams (toggleable via View menu)
 - Namespace-based filtering
-- Export to PNG
+- Export to PNG/.mmd/.md/Mermaid clipboard (File → Export)
+- Recent designs list (File → Recent Designs)
 - **Design Mode** — author class diagrams from scratch with tools and keyboard shortcuts
+
+### Global Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `F5` | Rescan source folder |
+| `Ctrl`+`Shift`+`O` | Open source folder |
+| `Ctrl`+`K` | Focus symbol search |
+| `Ctrl`+`B` | Toggle sidebar |
+| `Ctrl`+`Shift`+`I` | Toggle inspector panel |
+| `Ctrl`+`M` | Toggle namespace matrix (Analyze) |
+| `Ctrl`+`Shift`+`M` | Copy Mermaid to clipboard |
+| `Ctrl`+`,` | Project settings |
+| `F` | Fit to screen |
+| `+` / `-` | Zoom in / out |
+| `Ctrl`+`R` | Redraw edges now |
+| `Alt`+`←` / `Alt`+`→` | Back / forward (focus navigation) |
+| `F2` | Rename selected class (Design Mode) |
+
+The full shortcut reference is also available in-app under **Help → Keyboard Shortcuts**.
 
 ### Design Mode Keyboard Shortcuts
 
