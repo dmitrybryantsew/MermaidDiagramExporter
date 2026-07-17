@@ -5,6 +5,7 @@ using SkiaSharp;
 using MermaidDiagramExporter.Core;
 using MermaidDiagramExporter.Gui.Settings;
 using MermaidDiagramExporter.Gui.Layout;
+using MermaidDiagramExporter.Gui.Theming;
 
 namespace MermaidDiagramExporter.Gui;
 
@@ -46,102 +47,34 @@ public sealed class ViewportState
 public sealed class CanvasRenderer
 {
     // ── Cached SKPaint objects (reused across frames to reduce GC pressure) ──
-    private static readonly SKPaint NamespaceBgPaint = new()
-    {
-        Color = new SKColor(0x25, 0x2A, 0x32), Style = SKPaintStyle.Fill, IsAntialias = true
-    };
-    private static readonly SKPaint NamespaceBorderPaint = new()
-    {
-        Color = new SKColor(0x3A, 0x42, 0x50), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true
-    };
-    private static readonly SKPaint NamespaceTextPaint = new()
-    {
-        Color = new SKColor(0x70, 0x80, 0x90), IsAntialias = true, TextSize = 13
-    };
-    private static readonly SKPaint EdgeLabelPaint = new()
-    {
-        Color = new SKColor(0x88, 0x90, 0x98), IsAntialias = true, TextSize = 9
-    };
-    private static readonly SKPaint NodeFillPaint = new()
-    {
-        Color = new SKColor(0x2D, 0x33, 0x3F), Style = SKPaintStyle.Fill, IsAntialias = true
-    };
-    private static readonly SKPaint BadgeTextPaint = new()
-    {
-        Color = SKColors.White, IsAntialias = true, TextSize = 9
-    };
-    private static readonly SKPaint StereotypeBadgeTextPaint = new()
-    {
-        Color = SKColors.White, IsAntialias = true, TextSize = 8
-    };
-    private static readonly SKPaint NodeNamePaint = new()
-    {
-        Color = new SKColor(0xE0, 0xE6, 0xEC), IsAntialias = true, TextSize = 12
-    };
-    private static readonly SKPaint NodeMemberPaint = new()
-    {
-        Color = new SKColor(0x88, 0x90, 0x98), IsAntialias = true, TextSize = 10
-    };
+    // Initialized from RenderPalette.Dark; re-colored on theme change via
+    // <see cref="ReloadPaletteColors"/>.
+    private static readonly SKPaint NamespaceBgPaint = new() { Style = SKPaintStyle.Fill, IsAntialias = true };
+    private static readonly SKPaint NamespaceBorderPaint = new() { Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
+    private static readonly SKPaint NamespaceTextPaint = new() { IsAntialias = true, TextSize = 13 };
+    private static readonly SKPaint EdgeLabelPaint = new() { IsAntialias = true, TextSize = 9 };
+    private static readonly SKPaint NodeFillPaint = new() { Style = SKPaintStyle.Fill, IsAntialias = true };
+    private static readonly SKPaint BadgeTextPaint = new() { Color = SKColors.White, IsAntialias = true, TextSize = 9 };
+    private static readonly SKPaint StereotypeBadgeTextPaint = new() { Color = SKColors.White, IsAntialias = true, TextSize = 8 };
+    private static readonly SKPaint NodeNamePaint = new() { IsAntialias = true, TextSize = 12 };
+    private static readonly SKPaint NodeMemberPaint = new() { IsAntialias = true, TextSize = 10 };
     // Mutable paints for state-dependent rendering (reused, properties updated per-frame)
-    private static readonly SKPaint EdgeStrokePaint = new()
-    {
-        Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeCap = SKStrokeCap.Round
-    };
-    private static readonly SKPaint ArrowheadPaint = new()
-    {
-        Style = SKPaintStyle.Fill, IsAntialias = true
-    };
-    private static readonly SKPaint NodeStrokePaint = new()
-    {
-        Style = SKPaintStyle.Stroke, IsAntialias = true
-    };
-    private static readonly SKPaint NodeHeaderPaint = new()
-    {
-        Style = SKPaintStyle.Fill, IsAntialias = true
-    };
-    private static readonly SKPaint BadgeFillPaint = new()
-    {
-        Style = SKPaintStyle.Fill, IsAntialias = true
-    };
-    private static readonly SKPaint StereotypeBadgeFillPaint = new()
-    {
-        Style = SKPaintStyle.Fill, IsAntialias = true
-    };
+    private static readonly SKPaint EdgeStrokePaint = new() { Style = SKPaintStyle.Stroke, IsAntialias = true, StrokeCap = SKStrokeCap.Round };
+    private static readonly SKPaint ArrowheadPaint = new() { Style = SKPaintStyle.Fill, IsAntialias = true };
+    private static readonly SKPaint NodeStrokePaint = new() { Style = SKPaintStyle.Stroke, IsAntialias = true };
+    private static readonly SKPaint NodeHeaderPaint = new() { Style = SKPaintStyle.Fill, IsAntialias = true };
+    private static readonly SKPaint BadgeFillPaint = new() { Style = SKPaintStyle.Fill, IsAntialias = true };
+    private static readonly SKPaint StereotypeBadgeFillPaint = new() { Style = SKPaintStyle.Fill, IsAntialias = true };
 
     // Design Mode affordance paints
-    private static readonly SKPaint SelectionBorderPaint = new()
-    {
-        Color = new SKColor(0xFF, 0x8C, 0x00), Style = SKPaintStyle.Stroke, StrokeWidth = 3f, IsAntialias = true
-    };
-    private static readonly SKPaint HoverBorderPaint = new()
-    {
-        Color = new SKColor(0x60, 0xA0, 0xE0), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true
-    };
-    private static readonly SKPaint ResizeHandlePaint = new()
-    {
-        Color = new SKColor(0xFF, 0x8C, 0x00), Style = SKPaintStyle.Fill, IsAntialias = true
-    };
-    private static readonly SKPaint PortCircleFillPaint = new()
-    {
-        Color = new SKColor(0xFF, 0x8C, 0x00), Style = SKPaintStyle.Fill, IsAntialias = true
-    };
-    private static readonly SKPaint PortCircleStrokePaint = new()
-    {
-        Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true
-    };
-    private static readonly SKPaint RubberBandPaint = new()
-    {
-        Color = new SKColor(0xFF, 0xA0, 0x40), Style = SKPaintStyle.Stroke, StrokeWidth = 2f, IsAntialias = true,
-        PathEffect = SKPathEffect.CreateDash(new[] { 6f, 4f }, 0)
-    };
-    private static readonly SKPaint MarqueeFillPaint = new()
-    {
-        Color = new SKColor(0xFF, 0xA0, 0x40, 0x28), Style = SKPaintStyle.Fill, IsAntialias = true
-    };
-    private static readonly SKPaint EdgeTargetHighlightPaint = new()
-    {
-        Color = new SKColor(0x40, 0xB0, 0x70), Style = SKPaintStyle.Stroke, StrokeWidth = 3f, IsAntialias = true
-    };
+    private static readonly SKPaint SelectionBorderPaint = new() { Style = SKPaintStyle.Stroke, StrokeWidth = 3f, IsAntialias = true };
+    private static readonly SKPaint HoverBorderPaint = new() { Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
+    private static readonly SKPaint ResizeHandlePaint = new() { Style = SKPaintStyle.Fill, IsAntialias = true };
+    private static readonly SKPaint PortCircleFillPaint = new() { Style = SKPaintStyle.Fill, IsAntialias = true };
+    private static readonly SKPaint PortCircleStrokePaint = new() { Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
+    private static readonly SKPaint RubberBandPaint = new() { Style = SKPaintStyle.Stroke, StrokeWidth = 2f, IsAntialias = true, PathEffect = SKPathEffect.CreateDash(new[] { 6f, 4f }, 0) };
+    private static readonly SKPaint MarqueeFillPaint = new() { Style = SKPaintStyle.Fill, IsAntialias = true };
+    private static readonly SKPaint EdgeTargetHighlightPaint = new() { Style = SKPaintStyle.Stroke, StrokeWidth = 3f, IsAntialias = true };
 
     private const float ResizeHandleSize = 10f;
     private const float PortCircleRadius = 5f;
@@ -149,15 +82,47 @@ public sealed class CanvasRenderer
     private static readonly SKColor ColorEdgeInheritance = new(0x50, 0x90, 0xD0);
     private static readonly SKColor ColorEdgeImplements = new(0x40, 0xB0, 0x70);
     private static readonly SKColor ColorEdgeAssociation = new(0x60, 0x60, 0x60);
-    private static readonly SKColor ColorNodeStroke = new(0x4A, 0x6A, 0x8A);
-    private static readonly SKColor ColorNodeStrokeSelected = new(0xFF, 0x8C, 0x00);
-    private static readonly SKColor ColorNodeStrokeHover = new(0x60, 0xA0, 0xE0);
-    private static readonly SKColor ColorNodeStrokeSearchMatch = new(0xFF, 0xE0, 0x40);
+    private static SKColor ColorNodeStroke => RenderPalette.Current.NodeStroke;
+    private static SKColor ColorNodeStrokeSelected => RenderPalette.Current.Selection;
+    private static SKColor ColorNodeStrokeHover => RenderPalette.Current.Hover;
+    private static SKColor ColorNodeStrokeSearchMatch => RenderPalette.Current.SearchMatch;
     private static readonly SKColor ColorBadgeInterface = new(0x40, 0x80, 0xC0);
     private static readonly SKColor ColorBadgeEnum = new(0xC0, 0x80, 0x30);
     private static readonly SKColor ColorBadgeStruct = new(0x80, 0x50, 0xC0);
     private static readonly SKColor ColorBadgeStatic = new(0xC0, 0x50, 0x50);
     private static readonly SKColor ColorBadgeAbstract = new(0x30, 0x80, 0x80);
+
+    static CanvasRenderer()
+    {
+        // Initialize paint colors from the active palette on first use.
+        // Subsequent theme changes call ReloadPaletteColors() to refresh.
+        ReloadPaletteColors();
+    }
+
+    /// <summary>
+    /// Re-applies <see cref="RenderPalette.Current"/> colors to the cached
+    /// SKPaint objects. Called from <see cref="ThemeService.ThemeChanged"/>
+    /// so the next rendered frame uses the new palette.
+    /// </summary>
+    public static void ReloadPaletteColors()
+    {
+        var p = RenderPalette.Current;
+        NamespaceBgPaint.Color = p.ClusterFill;
+        NamespaceBorderPaint.Color = p.ClusterStroke;
+        NamespaceTextPaint.Color = p.ClusterLabel;
+        EdgeLabelPaint.Color = p.EdgeLabel;
+        NodeFillPaint.Color = p.NodeFill;
+        NodeNamePaint.Color = p.NodeTitleText;
+        NodeMemberPaint.Color = p.NodeMemberText;
+
+        SelectionBorderPaint.Color = p.Selection;
+        HoverBorderPaint.Color = p.Hover;
+        ResizeHandlePaint.Color = p.Selection;
+        PortCircleFillPaint.Color = p.Selection;
+        RubberBandPaint.Color = p.RubberBand;
+        MarqueeFillPaint.Color = p.Marquee;
+        EdgeTargetHighlightPaint.Color = p.DropTarget;
+    }
 
     private const float NodePaddingX = 12;
     private const float NodeHeaderHeight = 28;

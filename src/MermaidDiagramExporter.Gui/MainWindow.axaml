@@ -135,6 +135,13 @@
         <MenuItem Header="Reset _Layout" Click="OnMenuResetLayout"/>
       </MenuItem>
 
+      <!-- Theme -->
+      <MenuItem Header="_Theme">
+        <MenuItem x:Name="MenuThemeSystem" Header="_System (follow OS)" Click="OnMenuThemeChanged" Tag="System"/>
+        <MenuItem x:Name="MenuThemeDark" Header="_Dark" Click="OnMenuThemeChanged" Tag="Dark"/>
+        <MenuItem x:Name="MenuThemeLight" Header="_Light" Click="OnMenuThemeChanged" Tag="Light"/>
+      </MenuItem>
+
       <!-- Navigate -->
       <MenuItem Header="_Navigate">
         <MenuItem x:Name="MenuNavBack" IsEnabled="False" Click="OnBack">
@@ -181,30 +188,24 @@
     </Menu>
 
     <!-- ═══ Row 1: Toolbar ═══ -->
-    <Border Grid.Row="1" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1" Padding="6,4">
+    <Border Grid.Row="1" Background="{DynamicResource ChromeBgBrush}" BorderBrush="{DynamicResource ChromeBorderBrush}" BorderThickness="0,0,0,1" Padding="6,4">
       <Grid ColumnDefinitions="Auto,*">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <!-- Mode toggle -->
           <Button x:Name="AnalyzeModeButton" Content="Analyze" Click="OnAnalyzeModeClick"
-                  Background="#4CAF50" Foreground="White"/>
+                  Background="{DynamicResource AccentPrimaryBrush}" Foreground="White"/>
           <Button x:Name="DesignModeButton" Content="Design" Click="OnDesignModeClick"
-                  Background="#3A4250" Foreground="White" Margin="0,0,4,0"/>
-          <Border Width="1" Background="#C0C0C0" Margin="4,2"/>
-          <Button x:Name="ToolbarScanButton" Content="Scan" Click="OnScan" Background="#4CAF50" Foreground="White"
+                  Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" Margin="0,0,4,0"/>
+          <Border Width="1" Background="{DynamicResource ChromeBorderBrush}" Margin="4,2"/>
+          <Button x:Name="ToolbarScanButton" Content="Scan" Click="OnScan" Background="{DynamicResource AccentPrimaryBrush}" Foreground="White"
                   ToolTip.Tip="Scan source folder (F5)"/>
-          <Button x:Name="BackButton" Content="← Back" Click="OnBack" IsEnabled="False" Foreground="White" ToolTip.Tip="Go back (Alt+Left)"/>
-          <Button x:Name="ForwardButton" Content="Forward →" Click="OnForward" IsEnabled="False" Foreground="White" ToolTip.Tip="Go forward (Alt+Right)"/>
-          <Button x:Name="ResetButton" Content="Reset" Click="OnReset" IsEnabled="False" Foreground="White" ToolTip.Tip="Reset to full graph"/>
-          <Border Width="1" Background="#C0C0C0" Margin="4,2"/>
-          <Button x:Name="ToolbarD1Button" Content="D1" Click="OnFocusD1" Foreground="White" ToolTip.Tip="Focus depth 1"/>
-          <Button x:Name="ToolbarD2Button" Content="D2" Click="OnFocusD2" Foreground="White" ToolTip.Tip="Focus depth 2"/>
-          <Button x:Name="ToolbarD3Button" Content="D3" Click="OnFocusD3" Foreground="White" ToolTip.Tip="Focus depth 3"/>
-          <Border Width="1" Background="#C0C0C0" Margin="4,2"/>
-          <Button Content="Fit" Click="OnFit" Foreground="White" ToolTip.Tip="Fit to screen (F)"/>
+          <Button x:Name="BackButton" Content="← Back" Click="OnBack" IsEnabled="False" ToolTip.Tip="Go back (Alt+Left)"/>
+          <Button x:Name="ForwardButton" Content="Forward →" Click="OnForward" IsEnabled="False" ToolTip.Tip="Go forward (Alt+Right)"/>
+          <Button x:Name="ResetButton" Content="Reset" Click="OnReset" IsEnabled="False" ToolTip.Tip="Reset to full graph"/>
         </StackPanel>
         <TextBox Grid.Column="1" x:Name="SearchTextBox" PlaceholderText="Highlight symbols... (Ctrl+K)"
                  Width="260" HorizontalAlignment="Right" VerticalAlignment="Center"
-                 TextChanged="OnSearchTextChanged" Foreground="White"/>
+                 TextChanged="OnSearchTextChanged"/>
       </Grid>
     </Border>
 
@@ -218,16 +219,16 @@
         <ColumnDefinition Width="300"/>
       </Grid.ColumnDefinitions>
     <!-- Sidebar -->
-    <ScrollViewer Grid.Column="0" Grid.Row="0" Background="#F0F0F0">
+    <ScrollViewer Grid.Column="0" Grid.Row="0" Background="{DynamicResource ChromeBgBrush}">
       <StackPanel>
         <!-- Analyze Mode controls -->
         <StackPanel x:Name="AnalyzeModePanel">
           <!-- Folder picker -->
           <StackPanel Margin="8">
             <TextBlock Text="Source Folder" FontWeight="Bold" Margin="0,0,0,4"/>
-            <TextBox x:Name="FolderTextBox" PlaceholderText="Select folder..." IsReadOnly="True" Margin="0,0,0,4" Foreground="White"/>
+            <TextBox x:Name="FolderTextBox" PlaceholderText="Select folder..." IsReadOnly="True" Margin="0,0,0,4"/>
             <Grid ColumnDefinitions="*,*">
-              <Button Grid.Column="0" Content="Browse..." Click="OnBrowse" Margin="0,0,2,0" Foreground="White"/>
+              <Button Grid.Column="0" Content="Browse..." Click="OnBrowse" Margin="0,0,2,0"/>
               <Button Grid.Column="1" Content="Scan" Click="OnScan" Margin="2,0,0,0" Background="#4CAF50" Foreground="White"/>
             </Grid>
           </StackPanel>
@@ -236,12 +237,12 @@
           <StackPanel Margin="8,0,8,4">
             <TextBlock Text="Focus Depth" FontWeight="Bold" Margin="0,0,0,4"/>
             <WrapPanel Orientation="Horizontal">
-              <Button Content="D1" Click="OnFocusD1" MinWidth="50" Foreground="White" Margin="0,0,4,4"/>
-              <Button Content="D2" Click="OnFocusD2" MinWidth="50" Foreground="White" Margin="0,0,4,4"/>
-              <Button Content="D3" Click="OnFocusD3" MinWidth="50" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="D1" Click="OnFocusD1" MinWidth="50" Margin="0,0,4,4"/>
+              <Button Content="D2" Click="OnFocusD2" MinWidth="50" Margin="0,0,4,4"/>
+              <Button Content="D3" Click="OnFocusD3" MinWidth="50" Margin="0,0,4,4"/>
             </WrapPanel>
             <TextBlock Text="Traversal" FontWeight="Bold" Margin="0,6,0,4"/>
-            <ComboBox x:Name="TraversalComboBox" MinWidth="200" SelectionChanged="OnTraversalChanged" Foreground="White">
+            <ComboBox x:Name="TraversalComboBox" MinWidth="200" SelectionChanged="OnTraversalChanged">
               <ComboBoxItem Content="Undirected" IsSelected="True"/>
               <ComboBoxItem Content="Outgoing"/>
               <ComboBoxItem Content="Incoming"/>
@@ -249,9 +250,9 @@
             </ComboBox>
             <TextBlock Text="Seeds" FontWeight="Bold" Margin="0,6,0,4"/>
             <WrapPanel Orientation="Horizontal">
-              <Button Content="Add Seed" Click="OnAddSeed" MinWidth="70" Foreground="White" Margin="0,0,4,4"/>
-              <Button Content="Remove Seed" Click="OnRemoveSeed" MinWidth="80" Foreground="White" Margin="0,0,4,4"/>
-              <Button Content="Clear" Click="OnClearSeeds" MinWidth="50" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="Add Seed" Click="OnAddSeed" MinWidth="70" Margin="0,0,4,4"/>
+              <Button Content="Remove Seed" Click="OnRemoveSeed" MinWidth="80" Margin="0,0,4,4"/>
+              <Button Content="Clear" Click="OnClearSeeds" MinWidth="50" Margin="0,0,4,4"/>
             </WrapPanel>
             <Button Content="Focus Current Selection" Click="OnFocusCurrent" Margin="0,4,0,0" Background="#2196F3" Foreground="White"/>
           </StackPanel>
@@ -260,21 +261,20 @@
           <StackPanel Margin="8,0,8,4">
             <TextBlock Text="Edge Filters" FontWeight="Bold" Margin="0,0,0,4"/>
             <WrapPanel Orientation="Horizontal">
-              <CheckBox x:Name="ShowInheritanceCheck" Content="Inheritance" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0" Foreground="White"/>
-              <CheckBox x:Name="ShowImplementsCheck" Content="Implements" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0" Foreground="White"/>
-              <CheckBox x:Name="ShowAssociationsCheck" Content="Associations" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0" Foreground="White"/>
+              <CheckBox x:Name="ShowInheritanceCheck" Content="Inheritance" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0"/>
+              <CheckBox x:Name="ShowImplementsCheck" Content="Implements" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0"/>
+              <CheckBox x:Name="ShowAssociationsCheck" Content="Associations" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0"/>
             </WrapPanel>
-            <CheckBox x:Name="AutoRedrawCheck" Content="Auto-redraw edges on move (Ctrl+R = manual)" IsChecked="True" Click="OnAutoRedrawChanged" Margin="0,4,0,0" Foreground="White" FontSize="11"/>
+            <CheckBox x:Name="AutoRedrawCheck" Content="Auto-redraw edges on move (Ctrl+R = manual)" IsChecked="True" Click="OnAutoRedrawChanged" Margin="0,4,0,0" FontSize="11"/>
           </StackPanel>
 
           <!-- Move scope (marquee + related-1D drag) -->
           <StackPanel Margin="8,0,8,4">
             <TextBlock Text="Move Scope" FontWeight="Bold" Margin="0,0,0,4"/>
-            <ComboBox x:Name="AnalyzeMoveScopeCombo" SelectedIndex="0" SelectionChanged="OnAnalyzeMoveScopeChanged" MinWidth="200" Foreground="White">
+            <ComboBox x:Name="AnalyzeMoveScopeCombo" SelectedIndex="0" SelectionChanged="OnAnalyzeMoveScopeChanged" MinWidth="200">
               <ComboBoxItem Content="Move: Selected only"/>
               <ComboBoxItem Content="Move: +Related 1D"/>
             </ComboBox>
-            <TextBlock x:Name="CodeOutputIndicator" Text="Code → Clipboard (Ctrl+Shift+C)" FontSize="11" Opacity="0.7" Margin="0,4,0,0"/>
           </StackPanel>
 
           <!-- Namespace Focus -->
@@ -282,12 +282,12 @@
             <TextBlock Text="Namespace Focus" FontWeight="Bold" Margin="0,0,0,4"/>
             <ComboBox x:Name="NamespaceFocusCombo" MinWidth="160" SelectionChanged="OnNamespaceFocusChanged" Margin="0,0,0,4" />
             <WrapPanel Orientation="Horizontal">
-              <CheckBox x:Name="ShowConnectedNamespacesCheck" Content="Show connected" Click="OnNamespaceFocusToggleChanged" Margin="0,0,8,0" Foreground="White" FontSize="11"/>
+              <CheckBox x:Name="ShowConnectedNamespacesCheck" Content="Show connected" Click="OnNamespaceFocusToggleChanged" Margin="0,0,8,0" FontSize="11"/>
             </WrapPanel>
             <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
-              <Button Content="D1" Click="OnNamespaceFocusD1" MinWidth="40" Foreground="White" Margin="0,0,4,2" FontSize="11"/>
-              <Button Content="D2" Click="OnNamespaceFocusD2" MinWidth="40" Foreground="White" Margin="0,0,4,2" FontSize="11"/>
-              <Button Content="D3" Click="OnNamespaceFocusD3" MinWidth="40" Foreground="White" Margin="0,0,4,2" FontSize="11"/>
+              <Button Content="Depth 1" Click="OnNamespaceFocusD1" MinWidth="40" Margin="0,0,4,2" FontSize="11"/>
+              <Button Content="Depth 2" Click="OnNamespaceFocusD2" MinWidth="40" Margin="0,0,4,2" FontSize="11"/>
+              <Button Content="Depth 3" Click="OnNamespaceFocusD3" MinWidth="40" Margin="0,0,4,2" FontSize="11"/>
             </WrapPanel>
           </StackPanel>
 
@@ -316,7 +316,7 @@
           <!-- Move scope -->
           <StackPanel Margin="8">
             <TextBlock Text="Move Scope" FontWeight="Bold" Margin="0,0,0,4"/>
-            <ComboBox x:Name="DesignMoveScopeCombo" SelectedIndex="0" SelectionChanged="OnDesignMoveScopeChanged" MinWidth="200" Foreground="White">
+            <ComboBox x:Name="DesignMoveScopeCombo" SelectedIndex="0" SelectionChanged="OnDesignMoveScopeChanged" MinWidth="200">
               <ComboBoxItem Content="Move: Selected only"/>
               <ComboBoxItem Content="Move: +Related 1D"/>
             </ComboBox>
@@ -327,8 +327,8 @@
           <StackPanel Margin="8">
             <TextBlock Text="Add" FontWeight="Bold" Margin="0,0,0,4"/>
             <WrapPanel Orientation="Horizontal">
-              <Button Content="Class" Click="OnDesignAddClass" MinWidth="60" Foreground="White" Margin="0,0,4,4"/>
-              <Button x:Name="DesignConnectButton" Content="Connect" Click="OnDesignConnect" MinWidth="70" Foreground="White" Margin="0,0,4,4"/>
+              <Button Content="Class" Click="OnDesignAddClass" MinWidth="60" Margin="0,0,4,4"/>
+              <Button x:Name="DesignConnectButton" Content="Connect" Click="OnDesignConnect" MinWidth="70" Margin="0,0,4,4"/>
               <ComboBox x:Name="DesignEdgeCombo" SelectedIndex="0" SelectionChanged="OnDesignEdgeTypeSelected" MinWidth="80" Margin="0,0,4,4">
                 <ComboBoxItem Content="Edge: Assoc"/>
                 <ComboBoxItem Content="Edge: Inherit"/>
@@ -346,7 +346,7 @@
     </ScrollViewer>
 
     <!-- Left Splitter -->
-    <GridSplitter x:Name="LeftSplitter" Grid.Column="1" Grid.Row="0" Background="#D0D0D0" Width="1"/>
+    <GridSplitter x:Name="LeftSplitter" Grid.Column="1" Grid.Row="0" Background="{DynamicResource ChromeBorderBrush}" Width="1"/>
 
     <!-- Graph canvas -->
     <Grid Grid.Column="2" Grid.Row="0">
@@ -354,7 +354,7 @@
       <!-- Inline edit TextBox overlay (Design Mode only, positioned on top of canvas) -->
       <TextBox x:Name="InlineEditTextBox"
                IsVisible="False"
-               Background="#2A2E34" Foreground="White"
+               Background="{DynamicResource ChromeBgAltBrush}" Foreground="White"
                BorderBrush="#FFA040" BorderThickness="2"
                Padding="4,2"
                MinWidth="120"
@@ -372,17 +372,17 @@
                                   IsVisible="False"/>
       <!-- Zoom controls overlay -->
       <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Spacing="4">
-        <Button Content="Fit" Click="OnFit" MinWidth="40" Background="#3A4250" Foreground="White"/>
-        <Button Content="+" Click="OnZoomIn" MinWidth="40" Background="#3A4250" Foreground="White"/>
-        <Button Content="−" Click="OnZoomOut" MinWidth="40" Background="#3A4250" Foreground="White"/>
+        <Button Content="Fit" Click="OnFit" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
+        <Button Content="+" Click="OnZoomIn" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
+        <Button Content="−" Click="OnZoomOut" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
       </StackPanel>
     </Grid>
 
     <!-- Right Splitter -->
-    <GridSplitter x:Name="RightSplitter" Grid.Column="3" Grid.Row="0" Background="#D0D0D0" Width="1"/>
+    <GridSplitter x:Name="RightSplitter" Grid.Column="3" Grid.Row="0" Background="{DynamicResource ChromeBorderBrush}" Width="1"/>
 
     <!-- Inspector Panel — switches between Analyze Mode and Design Mode states -->
-    <ScrollViewer x:Name="InspectorScrollViewer" Grid.Column="4" Grid.Row="0" Background="#F5F5F5">
+    <ScrollViewer x:Name="InspectorScrollViewer" Grid.Column="4" Grid.Row="0" Background="{DynamicResource ChromeBgBrush}">
       <Grid x:Name="InspectorPanel" RowDefinitions="Auto">
 
         <!-- Analyze Mode inspector — shows selected node info, members, relations -->
@@ -390,9 +390,16 @@
           <TextBlock Text="Inspector" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
           <TextBlock x:Name="AnalyzeMultiSelectCount" Text="" FontWeight="SemiBold" Foreground="#FF8C00" Margin="0,0,0,8" TextWrapping="Wrap" IsVisible="False"/>
           <TextBlock x:Name="AnalyzeInspectorTitle" Text="No node selected" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" TextWrapping="Wrap"/>
+          <!-- Empty-state summary: shown when nothing is selected -->
+          <StackPanel x:Name="AnalyzeEmptySummary" Margin="0,8,0,0">
+            <TextBlock Text="Graph Summary" FontWeight="SemiBold" Margin="0,0,0,4"/>
+            <TextBlock x:Name="AnalyzeEmptyClassCount" Text="" Margin="0,2" FontSize="11" Opacity="0.7"/>
+            <TextBlock x:Name="AnalyzeEmptyEdgeCount" Text="" Margin="0,2" FontSize="11" Opacity="0.7"/>
+            <TextBlock Text="Click a class to inspect, or press Ctrl+K to search symbols." FontSize="11" Opacity="0.5" Margin="0,12,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
           <TextBlock x:Name="AnalyzeInspectorKind" Text="" Margin="0,2" FontSize="11" Opacity="0.7"/>
           <TextBlock x:Name="AnalyzeInspectorFile" Text="" Margin="0,2" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
-          <Button Content="Open in Explorer" Click="OnOpenInExplorer" Margin="0,4,0,8" MinWidth="100" Foreground="White"/>
+          <Button x:Name="OpenInExplorerButton" Content="Open in Explorer" Click="OnOpenInExplorer" Margin="0,4,0,8" MinWidth="100" IsEnabled="False"/>
           <TextBlock Text="Members" FontWeight="SemiBold" Margin="0,4,0,4"/>
           <ItemsControl x:Name="AnalyzeInspectorMembers">
             <ItemsControl.ItemTemplate>
@@ -467,13 +474,13 @@
           <!-- Add member buttons -->
           <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
             <Button Content="+Field" Click="OnInspectorAddField" MinWidth="56" FontSize="10"
-                    Background="#3A4250" Foreground="White" Padding="4,2"/>
+                    Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" Padding="4,2"/>
             <Button Content="+Prop" Click="OnInspectorAddProperty" MinWidth="56" FontSize="10"
-                    Background="#3A4250" Foreground="White" Padding="4,2"/>
+                    Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" Padding="4,2"/>
             <Button Content="+Method" Click="OnInspectorAddMethod" MinWidth="60" FontSize="10"
-                    Background="#3A4250" Foreground="White" Padding="4,2"/>
+                    Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" Padding="4,2"/>
             <Button Content="+Ctor" Click="OnInspectorAddConstructor" MinWidth="48" FontSize="10"
-                    Background="#3A4250" Foreground="White" Padding="4,2"/>
+                    Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" Padding="4,2"/>
           </StackPanel>
           <ItemsControl x:Name="InspectorMembersList">
             <ItemsControl.ItemTemplate>
@@ -560,10 +567,11 @@
     </ScrollViewer>
 
     <!-- Status Bar -->
-    <Border Grid.ColumnSpan="5" Grid.Row="1" Background="#2A2E34" Padding="8,3" BorderBrush="#3A4250" BorderThickness="0,1,0,0">
-      <Grid ColumnDefinitions="*,Auto">
-        <TextBlock x:Name="StatusBarText" Grid.Column="0" Text="Ready" FontSize="11" Foreground="#889098"/>
-        <TextBlock x:Name="ZoomStatusText" Grid.Column="1" Text="100%" FontSize="11" Foreground="#889098" Margin="12,0,0,0"/>
+    <Border Grid.ColumnSpan="5" Grid.Row="1" Background="{DynamicResource StatusBarBgBrush}" Padding="8,3" BorderBrush="{DynamicResource ChromeBorderBrush}" BorderThickness="0,1,0,0">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBlock x:Name="StatusBarText" Grid.Column="0" Text="Ready" FontSize="11" Foreground="{DynamicResource StatusBarTextBrush}"/>
+        <TextBlock x:Name="CodeOutputIndicator" Grid.Column="1" Text="Code → Clipboard (Ctrl+Shift+C)" FontSize="11" Foreground="{DynamicResource StatusBarTextBrush}" Margin="12,0,0,0" Opacity="0.8"/>
+        <TextBlock x:Name="ZoomStatusText" Grid.Column="2" Text="100%" FontSize="11" Foreground="{DynamicResource StatusBarTextBrush}" Margin="12,0,0,0"/>
       </Grid>
     </Border>
     </Grid>

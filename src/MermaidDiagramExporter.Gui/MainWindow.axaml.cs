@@ -19,6 +19,7 @@ using MermaidDiagramExporter.Gui.Search;
 using MermaidDiagramExporter.Gui.Settings;
 using MermaidDiagramExporter.Gui.Persistence;
 using MermaidDiagramExporter.Gui.Matrix;
+using MermaidDiagramExporter.Gui.Theming;
 using MermaidDiagramExporter.Llm;
 using SkiaSharp;
 
@@ -31,6 +32,8 @@ public partial class MainWindow : Window
     private readonly FocusedGraphNavigationController _focusNavigationController = new();
     private readonly GraphSeedSelectionState _seedSelectionState = new();
     private readonly SettingsService _settingsService;
+    private readonly AppSettingsService _appSettingsService;
+    private readonly ThemeService _themeService;
     private readonly DesignModeController _designModeController = new();
     private readonly DesignCanvasController _designCanvasController;
     private DesignGraph? _designGraph;
@@ -64,9 +67,11 @@ public partial class MainWindow : Window
 
     public ProjectSettings CurrentSettings => _currentSettings;
 
-    public MainWindow(SettingsService settingsService, LayoutEngine layoutEngine, RoslynTypeScanner scanner)
+    public MainWindow(SettingsService settingsService, AppSettingsService appSettingsService, LayoutEngine layoutEngine, RoslynTypeScanner scanner, ThemeService themeService)
     {
         _settingsService = settingsService;
+        _appSettingsService = appSettingsService;
+        _themeService = themeService;
         _layoutEngine = layoutEngine;
         _scanner = scanner;
         _cacheService = new TypeGraphCacheService(_settingsService);
@@ -110,6 +115,8 @@ public partial class MainWindow : Window
         UpdateCodeOutputIndicator();
         MatrixView.CellClicked += OnMatrixCellClicked;
         RefreshRecentDesignsMenu();
+        SyncThemeMenu();
+        _themeService.ThemeChanged += OnThemeChanged;
         _initialized = true;
     }
 
@@ -1401,13 +1408,13 @@ public partial class MainWindow : Window
         InspectorSingleClassState.IsVisible = isDesign && _designCanvasController.Selection.SelectedClassIds.Count == 1;
         InspectorMultiSelectState.IsVisible = isDesign && _designCanvasController.Selection.SelectedClassIds.Count > 1;
 
-        // Highlight the active mode toggle button
+        // Highlight the active mode toggle button (colors come from the active palette)
         AnalyzeModeButton.Background = isDesign
-            ? Avalonia.Media.Brush.Parse("#3A4250")
-            : Avalonia.Media.Brush.Parse("#4CAF50");
+            ? _themeService.ActivePalette.ModeInactiveBg
+            : _themeService.ActivePalette.AccentPrimary;
         DesignModeButton.Background = isDesign
-            ? Avalonia.Media.Brush.Parse("#4CAF50")
-            : Avalonia.Media.Brush.Parse("#3A4250");
+            ? _themeService.ActivePalette.AccentPrimary
+            : _themeService.ActivePalette.ModeInactiveBg;
 
         UpdateMenuModeState();
     }
@@ -1570,6 +1577,7 @@ public partial class MainWindow : Window
         SyncViewMenuChecks();
         UpdateClassList(graph);
         UpdateStats(graph);
+        UpdateAnalyzeInspectorEmptyState();
 
         if (graph != null)
         {
@@ -1642,11 +1650,13 @@ public partial class MainWindow : Window
             AnalyzeInspectorOutgoing.ItemsSource = Array.Empty<string>();
             AnalyzeInspectorIncoming.ItemsSource = Array.Empty<string>();
             _currentSelectedNodeId = string.Empty;
-            UpdateSeedButtons();
+            UpdateAnalyzeInspectorEmptyState();
+            UpdateOpenInExplorerButton(null);
             return;
         }
 
         _currentSelectedNodeId = node.Id;
+        AnalyzeEmptySummary.IsVisible = false;
 
         // Update inspector from the actual graph node
         TypeGraph? graph = _focusNavigationController.CurrentGraph;
@@ -1657,7 +1667,38 @@ public partial class MainWindow : Window
                 UpdateInspector(typeNode);
         }
 
+        UpdateOpenInExplorerButton(node);
         UpdateSeedButtons();
+    }
+
+    /// <summary>
+    /// Shows the graph summary in the Analyze inspector when nothing is
+    /// selected, and hides it once a node is picked.
+    /// </summary>
+    private void UpdateAnalyzeInspectorEmptyState()
+    {
+        AnalyzeEmptySummary.IsVisible = true;
+        if (_currentGraph != null)
+        {
+            AnalyzeEmptyClassCount.Text = $"{_currentGraph.Nodes.Count} classes";
+            AnalyzeEmptyEdgeCount.Text = $"{_currentGraph.Edges.Count} relations";
+        }
+        else
+        {
+            AnalyzeEmptyClassCount.Text = "No graph loaded — browse to a folder and click Scan.";
+            AnalyzeEmptyEdgeCount.Text = "";
+        }
+    }
+
+    /// <summary>
+    /// Enables the "Open in Explorer" button only when a node with a real file
+    /// path is selected. Avoids a dead-looking button in the empty inspector.
+    /// </summary>
+    private void UpdateOpenInExplorerButton(GraphNode? node)
+    {
+        var btn = this.FindControl<Button>("OpenInExplorerButton");
+        if (btn == null) return;
+        btn.IsEnabled = node != null && !string.IsNullOrEmpty(node.AssetPath) && File.Exists(node.AssetPath);
     }
 
     /// <summary>
@@ -2298,9 +2339,6 @@ public partial class MainWindow : Window
         MenuSeeds.IsEnabled = !isDesign;
         MenuImportFromScan.IsEnabled = !isDesign;
         ToolbarScanButton.IsEnabled = !isDesign;
-        ToolbarD1Button.IsEnabled = !isDesign;
-        ToolbarD2Button.IsEnabled = !isDesign;
-        ToolbarD3Button.IsEnabled = !isDesign;
 
         UpdateNavigationButtons();
     }
@@ -2473,6 +2511,57 @@ public partial class MainWindow : Window
     {
         SearchTextBox.Focus();
         SearchTextBox.SelectAll();
+    }
+
+    // ── Theme menu ──
+
+    /// <summary>
+    /// Applies the chosen theme, persists it, and re-syncs the menu checkmarks.
+    /// </summary>
+    private void OnMenuThemeChanged(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag }) return;
+        UiTheme chosen = tag switch
+        {
+            "Dark" => UiTheme.Dark,
+            "Light" => UiTheme.Light,
+            _ => UiTheme.System,
+        };
+        _themeService.Apply(chosen);
+        _appSettingsService.Save(new AppSettings { Theme = chosen });
+        SyncThemeMenu();
+    }
+
+    /// <summary>
+    /// Keeps the three Theme menu items in sync with the currently applied
+    /// theme. Called at startup and after every theme change.
+    /// </summary>
+    private void SyncThemeMenu()
+    {
+        if (!_initialized) return;
+        MenuThemeSystem.IsChecked = _themeService.Current == UiTheme.System;
+        MenuThemeDark.IsChecked = _themeService.Current == UiTheme.Dark;
+        MenuThemeLight.IsChecked = _themeService.Current == UiTheme.Light;
+    }
+
+    /// <summary>
+    /// Theme-change redraw hook. Refreshes the cached Skia paints and forces
+    /// the canvas, minimap, and matrix to redraw with the new palette.
+    /// </summary>
+    private void OnThemeChanged()
+    {
+        CanvasRenderer.ReloadPaletteColors();
+        GraphCanvasView.ForceRedraw();
+        if (_currentGraph != null)
+        {
+            MinimapView.SetGraph(_allNodes, _allEdges);
+        }
+        if (_matrixVisible && _currentGraph != null)
+        {
+            MatrixView.SetGraph(_currentGraph);
+        }
+        UpdateModeUi();
+        SyncThemeMenu();
     }
 
     // ── Design menu ──

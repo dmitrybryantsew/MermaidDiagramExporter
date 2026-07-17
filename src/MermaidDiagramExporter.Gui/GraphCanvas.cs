@@ -139,6 +139,15 @@ public class GraphCanvas : Control
     /// </summary>
     private string? _draggedNodeIdDuringRender;
 
+    /// <summary>
+    /// Tracks whether routed edge Points have been cleared for the current
+    /// drag. False on drag start; set true on the first actual movement. This
+    /// prevents a click-select (no movement) from permanently destroying the
+    /// routed edge paths — the renderer keeps using the original polylines
+    /// until the user actually drags the node.
+    /// </summary>
+    private bool _edgePointsClearedForDrag;
+
     // ── Extracted rendering and hit-test services (Step 17) ──
     private readonly CanvasRenderer _renderer = new();
 
@@ -154,7 +163,7 @@ public class GraphCanvas : Control
     private static readonly SKColor ColorNodeStrokeSearchMatch = new(0xFF, 0xE0, 0x40);
 
     // Colors (dark theme matching Unity)
-    private static readonly SKColor ColorBg = new(0x1A, 0x1E, 0x24);
+    private static SKColor ColorBg => Theming.RenderPalette.Current.CanvasBg;
     private static readonly SKColor ColorNodeFill = new(0x2D, 0x33, 0x3F);
     private static readonly SKColor ColorNodeStroke = new(0x4A, 0x6A, 0x8A);
     private static readonly SKColor ColorNodeStrokeSelected = new(0xFF, 0x8C, 0x00);
@@ -288,6 +297,13 @@ public class GraphCanvas : Control
     /// (class, edge, or empty canvas). Per docs/design/07 W6.
     /// </summary>
     public event Action<DesignContextTarget>? DesignContextMenuRequested;
+
+    /// <summary>
+    /// Raised when the user right-clicks on a class node in Analyze Mode.
+    /// The subscriber (MainWindow) shows a context menu with "get code" and
+    /// focus actions for the clicked class (and any active multi-selection).
+    /// </summary>
+    public event Action<GraphNode, SKPoint>? AnalyzeContextMenuRequested;
 
     public GraphCanvas()
     {
@@ -793,6 +809,20 @@ public class GraphCanvas : Control
         var pos = e.GetPosition(this);
         var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
 
+        // Right-click on a class in Analyze Mode → fire context menu event.
+        // Right-click on empty canvas falls through to the pan handler below so
+        // users can still pan with right-drag. Per the RMB-context-menu feature.
+        if (_designGraph == null && e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+        {
+            var hit = HitTest(worldPos);
+            if (hit != null)
+            {
+                AnalyzeContextMenuRequested?.Invoke(hit, new SKPoint((float)pos.X, (float)pos.Y));
+                e.Handled = true;
+                return;
+            }
+        }
+
         // Right-drag = pan in Analyze Mode (Design Mode reserves right-click for
         // the context menu). LMB-drag on empty canvas is now marquee selection,
         // so this gives users a discoverable pan alternative. Per UIContract §5.
@@ -1032,6 +1062,11 @@ public class GraphCanvas : Control
         // Node dragging
         if (_isDraggingNode && _draggedNode != null)
         {
+            if (!_edgePointsClearedForDrag)
+            {
+                ClearEdgePointsForNodes(new HashSet<string> { _draggedNode.Id });
+                _edgePointsClearedForDrag = true;
+            }
             var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
             float deltaWorldX = worldPos.X - _dragStartMouseX;
             float deltaWorldY = worldPos.Y - _dragStartMouseY;
@@ -1054,6 +1089,11 @@ public class GraphCanvas : Control
         // Cluster dragging
         if (_isDraggingCluster && _draggedClusterId != null)
         {
+            if (!_edgePointsClearedForDrag)
+            {
+                ClearEdgePointsForNodes(_clusterDragStartPositions.Keys.ToHashSet());
+                _edgePointsClearedForDrag = true;
+            }
             var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
             float deltaWorldX = worldPos.X - _dragStartMouseX;
             float deltaWorldY = worldPos.Y - _dragStartMouseY;
@@ -1083,6 +1123,11 @@ public class GraphCanvas : Control
         // manual override is updated so the move persists across re-layout.
         if (_isMultiDragging)
         {
+            if (!_edgePointsClearedForDrag)
+            {
+                ClearEdgePointsForNodes(_multiDragNodeIds);
+                _edgePointsClearedForDrag = true;
+            }
             var worldPos = ScreenToWorld((float)pos.X, (float)pos.Y);
             float deltaWorldX = worldPos.X - _dragStartMouseX;
             float deltaWorldY = worldPos.Y - _dragStartMouseY;
@@ -1252,10 +1297,10 @@ public class GraphCanvas : Control
         _dragStartNodeX = node.X;
         _dragStartNodeY = node.Y;
         _draggedNodeIdDuringRender = node.Id;
-        // Clear stale routed Points on edges connected to this node so the
-        // renderer falls back to EdgePortAssigner (dynamic closest-perimeter)
-        // during drag. Without this, edges use the old polyline coordinates.
-        ClearEdgePointsForNodes(new HashSet<string> { node.Id });
+        // Don't clear edge Points yet — defer until the node actually moves.
+        // This prevents a click-select (no movement) from permanently destroying
+        // routed edge paths. See _edgePointsClearedForDrag.
+        _edgePointsClearedForDrag = false;
         _staticContentDirty = true; // Re-record static content without the dragged node
         Cursor = new Cursor(StandardCursorType.Hand);
     }
@@ -1285,7 +1330,8 @@ public class GraphCanvas : Control
         // Multi-drag disables the single-node partial-redraw optimization (it
         // only tracks one node); a full re-render each frame is correct here.
         _draggedNodeIdDuringRender = null;
-        ClearEdgePointsForNodes(_multiDragNodeIds);
+        // Don't clear edge Points yet — defer until actual movement.
+        _edgePointsClearedForDrag = false;
         _staticContentDirty = true;
         Cursor = new Cursor(StandardCursorType.Hand);
     }
@@ -1398,8 +1444,8 @@ public class GraphCanvas : Control
                 clusterNodeIds.Add(node.Id);
             }
         }
-        // Clear stale routed Points on edges connected to any cluster node
-        ClearEdgePointsForNodes(clusterNodeIds);
+        // Don't clear edge Points yet — defer until actual movement.
+        _edgePointsClearedForDrag = false;
         _staticContentDirty = true;
         Cursor = new Cursor(StandardCursorType.Hand);
     }

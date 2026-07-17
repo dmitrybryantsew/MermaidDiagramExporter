@@ -10,6 +10,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using SkiaSharp;
 using MermaidDiagramExporter.Gui.Layout;
+using MermaidDiagramExporter.Gui.Theming;
 using LayoutRect = MermaidDiagramExporter.Gui.Layout.Rect;
 
 namespace MermaidDiagramExporter.Gui;
@@ -29,11 +30,12 @@ public partial class MinimapControl : UserControl
     private float _mainCanvasViewportW = 800f;
     private float _mainCanvasViewportH = 600f;
 
-    private static readonly SKColor MinimapBg = new(0x15, 0x19, 0x1E);
-    private static readonly SKColor MinimapNodeFill = new(0x2D, 0x33, 0x3F);
-    private static readonly SKColor MinimapNodeStroke = new(0x4A, 0x6A, 0x8A);
-    private static readonly SKColor MinimapEdgeColor = new(0x3A, 0x42, 0x50);
-    private static readonly SKColor ViewportBorderColor = new(0xFF, 0xE0, 0x40);
+    // Palette-driven colors (read from RenderPalette.Current)
+    private static SKColor MinimapBg => RenderPalette.Current.MinimapBg;
+    private static SKColor MinimapNodeFill => RenderPalette.Current.MinimapNodeFill;
+    private static SKColor MinimapNodeStroke => RenderPalette.Current.MinimapNodeStroke;
+    private static SKColor MinimapEdgeColor => RenderPalette.Current.MinimapEdge;
+    private static SKColor ViewportBorderColor => RenderPalette.Current.MinimapViewportBorder;
 
     /// <summary>
     /// Raised when the user clicks on the minimap. Arguments are the requested pan offset.
@@ -188,6 +190,13 @@ public partial class MinimapControl : UserControl
         Canvas.SetTop(ViewportRect, vpY);
         ViewportRect.Width = vpW;
         ViewportRect.Height = vpH;
+
+        // When the viewport covers most of the minimap (zoomed out far), hide
+        // the yellow fill so the map content stays readable. Border always shows.
+        float fillFraction = (vpW * vpH) / (float)(w * h);
+        ViewportRect.Background = fillFraction >= 0.9f
+            ? new SolidColorBrush(Color.FromArgb(0, 0, 0, 0))
+            : new SolidColorBrush(Color.Parse("#FFE04020"));
     }
 
     private void OnMinimapPointerPressed(object? sender, PointerPressedEventArgs e)
