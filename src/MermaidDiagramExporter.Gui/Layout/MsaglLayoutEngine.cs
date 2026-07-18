@@ -107,7 +107,7 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
             NodeSeparation = Math.Max(options.NodeSpacing, 20),
             LayerSeparation = Math.Max(options.RankSpacing, 20),
             ClusterMargin = Math.Max(options.GroupSpacing, 10),
-            PackingMethod = (options.SeparateAppAndTests || options.PartitionByFirstLevelNamespace)
+            PackingMethod = options.Msagl.Partition != MsaglPartitionMode.None
                 ? PackingMethod.Columns
                 : PackingMethod.Compact,
             EdgeRoutingSettings = new EdgeRoutingSettings
@@ -208,11 +208,11 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
     private const string PartitionPrefix = "__NS:";
 
     /// <summary>
-    /// When a partitioning option is enabled, creates synthetic top-level
+    /// When a partitioning mode is enabled, creates synthetic top-level
     /// clusters and re-parents existing namespace clusters under them.
     /// Two modes:
-    /// - SeparateAppAndTests: two buckets (Application / Tests) by test-namespace pattern.
-    /// - PartitionByFirstLevelNamespace: N buckets by first-level sub-namespace
+    /// - AppVsTests: two buckets (Application / Tests) by test-namespace pattern.
+    /// - FirstLevelNamespace: N buckets by first-level sub-namespace
     ///   after auto-detecting the topmost common prefix (e.g. PFE.Data, PFE.Systems).
     /// </summary>
     private List<LayoutCluster> PartitionClustersIfEnabled(LayoutGraph graph, LayoutOptions options)
@@ -225,13 +225,12 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
         if (clusters.Count == 1 && clusters[0].Id == "fallback")
             return clusters;
 
-        // PartitionByFirstLevelNamespace takes precedence (mutually exclusive)
-        if (options.PartitionByFirstLevelNamespace)
-            return PartitionByFirstLevel(clusters);
-        if (options.SeparateAppAndTests)
-            return PartitionByAppAndTests(clusters);
-
-        return clusters;
+        return options.Msagl.Partition switch
+        {
+            MsaglPartitionMode.FirstLevelNamespace => PartitionByFirstLevel(clusters),
+            MsaglPartitionMode.AppVsTests => PartitionByAppAndTests(clusters),
+            _ => clusters,
+        };
     }
 
     private List<LayoutCluster> PartitionByAppAndTests(List<LayoutCluster> clusters)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using MermaidDiagramExporter.Gui.Layout;
 using MermaidDiagramExporter.Llm;
 
 namespace MermaidDiagramExporter.Gui.Settings;
@@ -87,33 +88,65 @@ public sealed class ProjectSettings
     public bool EnableNodeDragging { get; set; } = true;
 
     /// <summary>
-    /// Whether to use the experimental compound layout engine (unified node+border-dummy
-    /// ranking, cluster-contiguity ordering). Default false until validated per docs/09.
-    /// When false, the original cluster-as-supernode layered engine is used.
+    /// Which layout engine to use (Layered / Compound / MSAGL). Replaces the
+    /// legacy UseCompoundLayoutEngine / UseMsaglEngine boolean pair.
     /// </summary>
+    public LayoutEngineKind Engine { get; set; } = LayoutEngineKind.Layered;
+
+    /// <summary>
+    /// MSAGL-engine-specific layout settings. Applies only when
+    /// <see cref="Engine"/> is <see cref="LayoutEngineKind.Msagl"/>.
+    /// </summary>
+    public MsaglLayoutSettings Msagl { get; set; } = new();
+
+    // ── Legacy layout flags (kept only to migrate old settings JSON) ──
+    // Normalize() folds these into Engine / Msagl.PartitionMode and resets
+    // them to false, so re-saved files carry only the new shape.
+
+    [Obsolete("Use Engine. Kept for deserializing old settings files.")]
     public bool UseCompoundLayoutEngine { get; set; } = false;
 
-    /// <summary>
-    /// Whether to use the MSAGL-based layout engine (Microsoft Automatic Graph
-    /// Layout, Sugiyama framework with native cluster + orthogonal routing
-    /// support). Prototype — default false while being evaluated. When true,
-    /// UseCompoundLayoutEngine is ignored.
-    /// </summary>
+    [Obsolete("Use Engine. Kept for deserializing old settings files.")]
     public bool UseMsaglEngine { get; set; } = false;
 
-    /// <summary>
-    /// When true (MSAGL engine only), partitions classes into "Application" and
-    /// "Tests" top-level clusters based on namespace patterns. Produces a
-    /// left/right visual separation.
-    /// </summary>
+    [Obsolete("Use Msagl.PartitionMode. Kept for deserializing old settings files.")]
     public bool SeparateAppAndTests { get; set; } = false;
 
-    /// <summary>
-    /// When true (MSAGL engine only), auto-detects the topmost namespace prefix
-    /// and partitions classes into synthetic clusters by first-level sub-namespace
-    /// (e.g. PFE.Data, PFE.Systems). Mutually exclusive with SeparateAppAndTests.
-    /// </summary>
+    [Obsolete("Use Msagl.PartitionMode. Kept for deserializing old settings files.")]
     public bool PartitionByFirstLevelNamespace { get; set; } = false;
+
+    /// <summary>
+    /// Folds legacy boolean layout flags into the enum model and applies
+    /// cross-field dependency rules. Called by <see cref="SettingsService"/>
+    /// after every load. Idempotent. This is the single home for setting
+    /// dependencies that the type system (enums, nested groups) can't encode.
+    /// </summary>
+    public void Normalize()
+    {
+        // Tolerate hand-edited JSON with "msagl": null.
+        Msagl ??= new MsaglLayoutSettings();
+
+#pragma warning disable CS0618 // legacy flags are migration inputs only
+        if (Engine == LayoutEngineKind.Layered)
+        {
+            if (UseMsaglEngine) Engine = LayoutEngineKind.Msagl;
+            else if (UseCompoundLayoutEngine) Engine = LayoutEngineKind.Compound;
+        }
+
+        if (Msagl.PartitionMode == MsaglPartitionMode.None)
+        {
+            // Matches the old engine precedence: first-level namespace won
+            // when both legacy bools were true.
+            if (PartitionByFirstLevelNamespace) Msagl.PartitionMode = MsaglPartitionMode.FirstLevelNamespace;
+            else if (SeparateAppAndTests) Msagl.PartitionMode = MsaglPartitionMode.AppVsTests;
+        }
+
+        UseMsaglEngine = false;
+        UseCompoundLayoutEngine = false;
+        SeparateAppAndTests = false;
+        PartitionByFirstLevelNamespace = false;
+#pragma warning restore CS0618
+    }
 
     /// <summary>
     /// When true, edges are re-routed automatically after node/cluster drag
@@ -141,6 +174,19 @@ public sealed class ProjectSettings
     /// per-project so different projects can use different providers/models.
     /// </summary>
     public LlmSettings Llm { get; set; } = new();
+
+    /// <summary>
+    /// Where "Get Code" actions (Analyze Mode RMB context menu) send the
+    /// assembled source. Clipboard = copy text to OS clipboard; File = write
+    /// a code-bundle .txt to the source bundle folder. Default Clipboard.
+    /// </summary>
+    public CodeExtractionOutputMode CodeExtractionOutput { get; set; } = CodeExtractionOutputMode.Clipboard;
+}
+
+public enum CodeExtractionOutputMode
+{
+    Clipboard,
+    File
 }
 
 public enum CacheInvalidationMode
@@ -148,6 +194,20 @@ public enum CacheInvalidationMode
     WarnAndPrompt,
     AutoRescan,
     Ignore
+}
+
+/// <summary>
+/// MSAGL-engine-specific per-project layout settings. Persisted as a nested
+/// object in ProjectSettings JSON (mirrors the LlmSettings precedent).
+/// Applies only when <see cref="ProjectSettings.Engine"/> is Msagl.
+/// </summary>
+public sealed class MsaglLayoutSettings
+{
+    /// <summary>
+    /// Top-level cluster partitioning for the MSAGL engine (columns by
+    /// app/tests or by first-level sub-namespace).
+    /// </summary>
+    public MsaglPartitionMode PartitionMode { get; set; } = MsaglPartitionMode.None;
 }
 
 /// <summary>

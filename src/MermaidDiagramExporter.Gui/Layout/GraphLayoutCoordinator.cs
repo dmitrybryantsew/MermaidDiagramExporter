@@ -49,14 +49,15 @@ public sealed class GraphLayoutCoordinator
         // MSAGL engine uses a stripped-down prep pipeline — the anchor/boundary
         // passes are workarounds for the custom engines and produce dummy nodes
         // that MSAGL doesn't understand.
-        LayoutGraph preparedGraph = resolvedOptions.UseMsaglEngine
+        bool useMsagl = resolvedOptions.Engine == LayoutEngineKind.Msagl;
+        LayoutGraph preparedGraph = useMsagl
             ? _msaglPipeline.Run(layoutGraph, resolvedOptions)
             : _pipeline.Run(layoutGraph, resolvedOptions);
 
-        // Engine selection. MSAGL takes precedence over the compound flag.
-        // The simple-column fallback is only for empty real-node graphs.
+        // Engine selection. The simple-column fallback is only for empty
+        // real-node graphs.
         LayoutResult layoutResult;
-        if (resolvedOptions.UseMsaglEngine)
+        if (useMsagl)
         {
             layoutResult = preparedGraph.Nodes.Any(n => n.Role == LayoutNodeRole.Real)
                 ? _msaglLayoutEngine.Run(preparedGraph, resolvedOptions)
@@ -66,7 +67,7 @@ public sealed class GraphLayoutCoordinator
         {
             layoutResult = preparedGraph.Nodes.Count == 0
                 ? _simpleColumnLayoutEngine.Run(preparedGraph, resolvedOptions)
-                : resolvedOptions.UseCompoundLayoutEngine
+                : resolvedOptions.Engine == LayoutEngineKind.Compound
                     ? _compoundLayeredLayoutEngine.Run(preparedGraph, resolvedOptions)
                     : _layeredLayoutEngine.Run(preparedGraph, resolvedOptions);
         }
@@ -75,7 +76,7 @@ public sealed class GraphLayoutCoordinator
         // custom engines. MSAGL produces its own cluster bounds (including
         // padding), so we skip the polish passes for it — they assume the
         // custom engines' bound semantics and would distort MSAGL output.
-        if (!resolvedOptions.UseMsaglEngine)
+        if (!useMsagl)
         {
             layoutResult = _postLayoutPipeline.Run(preparedGraph, layoutResult, resolvedOptions);
         }

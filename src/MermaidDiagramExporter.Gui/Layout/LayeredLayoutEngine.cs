@@ -33,15 +33,15 @@ public sealed class LayeredLayoutEngine : IGraphLayoutEngine
         {
             var layout = BuildComponentLayout(component, graph, nodeById, clusterIdByNodeId, options);
 
-            if (currentX > options.OuterMarginX && currentX + layout.Size.X > options.TargetRowWidth)
+            if (currentX > options.OuterMarginX && currentX + layout.Size.X > options.Layered.TargetRowWidth)
             {
                 currentX = options.OuterMarginX;
-                currentY += rowHeight + options.ComponentSpacing;
+                currentY += rowHeight + options.Layered.ComponentSpacing;
                 rowHeight = 0f;
             }
 
             OffsetLayout(layout, new Vector2(currentX, currentY), nodeBounds, clusterBounds);
-            currentX += layout.Size.X + options.ComponentSpacing;
+            currentX += layout.Size.X + options.Layered.ComponentSpacing;
             rowHeight = Mathf.Max(rowHeight, layout.Size.Y);
             maxContentWidth = Mathf.Max(maxContentWidth, currentX + options.OuterMarginX);
         }
@@ -292,8 +292,8 @@ public sealed class LayeredLayoutEngine : IGraphLayoutEngine
             if (rowIndex > 0)
             {
                 currentY += row.Rank == previousRank
-                    ? options.StructuredWrappedRowGap
-                    : options.StructuredRankGap;
+                    ? options.Layered.StructuredWrappedRowGap
+                    : options.Layered.StructuredRankGap;
             }
 
             float currentX = 0f;
@@ -304,11 +304,11 @@ public sealed class LayeredLayoutEngine : IGraphLayoutEngine
             {
                 nodeBounds[node.Id] = new Rect(currentX, currentY, node.Width, node.Height);
                 rowNodeIds[rowIndex].Add(node.Id);
-                currentX += node.Width + options.StructuredNodeColumnSpacing;
+                currentX += node.Width + options.Layered.StructuredNodeColumnSpacing;
                 rowHeight = Mathf.Max(rowHeight, node.Height);
             }
 
-            float rowWidth = row.Nodes.Count > 0 ? currentX - options.StructuredNodeColumnSpacing : 0f;
+            float rowWidth = row.Nodes.Count > 0 ? currentX - options.Layered.StructuredNodeColumnSpacing : 0f;
             rowWidths[rowIndex] = rowWidth;
             maxContentWidth = Mathf.Max(maxContentWidth, rowWidth);
             currentY += rowHeight;
@@ -474,9 +474,9 @@ public sealed class LayeredLayoutEngine : IGraphLayoutEngine
 
         foreach (var node in row)
         {
-            float nodeWidth = node.Width + (current.Count > 0 ? options.StructuredNodeColumnSpacing : 0f);
-            bool exceedsWidth = current.Count > 0 && currentWidth + nodeWidth > options.StructuredClusterMaxRowWidth;
-            bool exceedsCount = current.Count >= options.StructuredClusterMaxNodesPerRow;
+            float nodeWidth = node.Width + (current.Count > 0 ? options.Layered.StructuredNodeColumnSpacing : 0f);
+            bool exceedsWidth = current.Count > 0 && currentWidth + nodeWidth > options.Layered.StructuredClusterMaxRowWidth;
+            bool exceedsCount = current.Count >= options.Layered.StructuredClusterMaxNodesPerRow;
 
             if (exceedsWidth || exceedsCount)
             {
@@ -519,8 +519,8 @@ public sealed class LayeredLayoutEngine : IGraphLayoutEngine
             if (!rowWidths.TryGetValue(row.Key, out float rowWidth)) continue;
             float slack = Mathf.Max(0f, contentWidth - rowWidth);
             float offsetX = Mathf.Min(
-                options.StructuredRowMaxIndent,
-                (slack * options.StructuredRowCenteringBias) + (row.Key * options.StructuredRowIndentStep));
+                options.Layered.StructuredRowMaxIndent,
+                (slack * options.Layered.StructuredRowCenteringBias) + (row.Key * options.Layered.StructuredRowIndentStep));
             foreach (var nodeId in row.Value)
             {
                 var r = nodeBounds[nodeId];

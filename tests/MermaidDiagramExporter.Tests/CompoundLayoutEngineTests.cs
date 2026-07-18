@@ -71,9 +71,9 @@ public class CompoundLayoutEngineTests
     [Fact]
     public void CompoundEngine_FeatureFlagDefaultIsFalse()
     {
-        // Verify the feature flag defaults to off so existing behavior is preserved
+        // Verify the engine selection defaults to Layered so existing behavior is preserved
         var options = new LayoutOptions();
-        Assert.False(options.UseCompoundLayoutEngine);
+        Assert.Equal(LayoutEngineKind.Layered, options.Engine);
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class Cat : Animal { }
 ");
 
         var coordinator = new GraphLayoutCoordinator();
-        var options = new LayoutOptions { UseCompoundLayoutEngine = true };
+        var options = new LayoutOptions { Engine = LayoutEngineKind.Compound };
         var result = coordinator.CreateLayout(typeGraph, options);
 
         Assert.NotNull(result);
@@ -160,7 +160,7 @@ public class B : A { }
 ");
 
         var coordinator = new GraphLayoutCoordinator();
-        var options = new LayoutOptions(); // UseCompoundLayoutEngine defaults to false
+        var options = new LayoutOptions(); // Engine defaults to Layered
         var result = coordinator.CreateLayout(typeGraph, options);
 
         Assert.NotNull(result);
@@ -183,7 +183,7 @@ public class B2 { }
 ");
 
         var coordinator = new GraphLayoutCoordinator();
-        var options = new LayoutOptions { UseCompoundLayoutEngine = true };
+        var options = new LayoutOptions { Engine = LayoutEngineKind.Compound };
         var result = coordinator.CreateLayout(typeGraph, options);
 
         // Every input node must appear in output
@@ -216,7 +216,7 @@ public class B3 { }
 ");
 
         var coordinator = new GraphLayoutCoordinator();
-        var options = new LayoutOptions { UseCompoundLayoutEngine = true };
+        var options = new LayoutOptions { Engine = LayoutEngineKind.Compound };
         var result = coordinator.CreateLayout(typeGraph, options);
 
         // Build a compound graph from the same input to get order-index data
@@ -241,7 +241,7 @@ public class InnerB { }
 ");
 
         var coordinator = new GraphLayoutCoordinator();
-        var options = new LayoutOptions { UseCompoundLayoutEngine = true };
+        var options = new LayoutOptions { Engine = LayoutEngineKind.Compound };
         var result = coordinator.CreateLayout(typeGraph, options);
 
         AssertContiguityFromCoordinator(typeGraph, options);
@@ -295,7 +295,7 @@ public class B4 { }
 ");
 
         var coordinator = new GraphLayoutCoordinator();
-        var options = new LayoutOptions { UseCompoundLayoutEngine = true };
+        var options = new LayoutOptions { Engine = LayoutEngineKind.Compound };
         var result = coordinator.CreateLayout(typeGraph, options);
 
         Assert.Equal(typeGraph.Nodes.Count, result.NodeBounds.Count);
@@ -316,7 +316,7 @@ public class C { }
 ");
 
         var coordinator = new GraphLayoutCoordinator();
-        var options = new LayoutOptions { UseCompoundLayoutEngine = true };
+        var options = new LayoutOptions { Engine = LayoutEngineKind.Compound };
         var result = coordinator.CreateLayout(typeGraph, options);
 
         Assert.NotNull(result.EdgePaths);
@@ -414,7 +414,7 @@ public class C { }
     /// </summary>
     private static int CountCrossingsForCompoundEngine(Core.TypeGraph typeGraph)
     {
-        var options = new LayoutOptions { UseCompoundLayoutEngine = true };
+        var options = new LayoutOptions { Engine = LayoutEngineKind.Compound };
         var layoutGraph = LayoutGraphFactoryForTest.Create(typeGraph, options);
         var compound = CompoundGraphBuilder.Build(layoutGraph, options);
         RankAssignment.Run(compound, options);
@@ -432,7 +432,7 @@ public class C { }
     /// </summary>
     private static int CountCrossingsForOldEngine(Core.TypeGraph typeGraph)
     {
-        var options = new LayoutOptions { UseCompoundLayoutEngine = false };
+        var options = new LayoutOptions { Engine = LayoutEngineKind.Layered };
         var coordinator = new GraphLayoutCoordinator();
         var result = coordinator.CreateLayout(typeGraph, options);
 

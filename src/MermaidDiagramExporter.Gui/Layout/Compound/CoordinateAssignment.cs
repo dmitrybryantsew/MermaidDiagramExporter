@@ -71,7 +71,7 @@ public static class CoordinateAssignment
         // fixes the "sink-like nodes never move" bug where nodes with only
         // incoming edges got desired.Count == 0)
         var adjacency = BuildUndirectedAdjacency(compound);
-        int passes = options.CoordinateAssignmentPasses;
+        int passes = options.Compound.CoordinateAssignmentPasses;
         for (int pass = 0; pass < passes; pass++)
         {
             bool downward = pass % 2 == 0;

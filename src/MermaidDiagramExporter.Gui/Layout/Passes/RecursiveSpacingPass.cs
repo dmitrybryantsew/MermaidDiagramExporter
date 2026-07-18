@@ -31,7 +31,7 @@ public sealed class RecursiveSpacingPass : ILayoutPass
         {
             NodeSeparation = parentSpacing.NodeSeparation > 0f ? parentSpacing.NodeSeparation : options.NodeSpacing,
             RankSeparation = (parentSpacing.RankSeparation > 0f ? parentSpacing.RankSeparation : options.RankSpacing)
-                + options.RecursiveRankSpacingBonus,
+                + options.Pipeline.RecursiveRankSpacingBonus,
             MarginX = parentSpacing.MarginX,
             MarginY = parentSpacing.MarginY
         };

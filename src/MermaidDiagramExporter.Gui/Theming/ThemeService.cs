@@ -13,6 +13,10 @@ namespace MermaidDiagramExporter.Gui.Theming;
 public sealed class ThemeService
 {
     private UiTheme _current = UiTheme.System;
+    // The first Apply must always run — even when it re-applies the default
+    // System theme — so chrome resources and the render palette match the
+    // effective OS variant before the main window is created.
+    private bool _hasApplied;
 
     /// <summary>
     /// The most recently applied theme.
@@ -20,14 +24,16 @@ public sealed class ThemeService
     public UiTheme Current => _current;
 
     /// <summary>
-    /// The palette matching the most recently applied theme. Read by code
-    /// that sets brushes dynamically (e.g. mode-toggle buttons in code-behind).
+    /// The palette matching the most recently applied theme. For
+    /// <see cref="UiTheme.System"/> this resolves against the effective OS
+    /// theme variant. Read by code that sets brushes dynamically (e.g.
+    /// mode-toggle buttons in code-behind).
     /// </summary>
-    public UiPalette ActivePalette => UiPalette.For(_current);
+    public UiPalette ActivePalette => ResolvePalette(_current);
 
     /// <summary>
-    /// Raised after <see cref="Apply"/>. Subscribers should force a redraw of
-    /// any cached pixel output (canvas, minimap, matrix).
+    /// Raised after the theme is applied. Subscribers should force a redraw
+    /// of any cached pixel output (canvas, minimap, matrix).
     /// </summary>
     public event Action? ThemeChanged;
 
@@ -37,41 +43,79 @@ public sealed class ThemeService
     /// </summary>
     public void Apply(UiTheme theme)
     {
-        if (_current == theme)
+        if (_hasApplied && _current == theme)
             return;
 
         _current = theme;
+        _hasApplied = true;
 
-        // Set the Skia palette FIRST so any ThemeChanged handlers that draw
-        // immediately see the new colors.
-        RenderPalette.SetCurrent(UiPalette.For(theme) == UiPalette.Dark
-            ? RenderPalette.Dark
-            : RenderPalette.Light);
+        ApplyCore();
+    }
 
+    /// <summary>
+    /// Re-resolves the palette when the OS theme changes while the app runs.
+    /// No-op unless the current theme is <see cref="UiTheme.System"/>.
+    /// </summary>
+    public void RefreshSystemTheme()
+    {
+        if (_current != UiTheme.System)
+            return;
+
+        ApplyCore();
+    }
+
+    private void ApplyCore()
+    {
         var app = Application.Current;
         if (app != null)
         {
-            app.RequestedThemeVariant = theme switch
+            // Set the Fluent variant FIRST: for System this resets
+            // ActualThemeVariant back to the OS value, so the palette
+            // resolution below never reads a previously forced variant.
+            app.RequestedThemeVariant = _current switch
             {
                 UiTheme.Dark => ThemeVariant.Dark,
                 UiTheme.Light => ThemeVariant.Light,
                 _ => ThemeVariant.Default,
             };
-
-            RewriteChromeBrushes(app);
         }
+
+        var palette = ResolvePalette(_current);
+
+        // Set the Skia palette BEFORE raising ThemeChanged so handlers that
+        // draw immediately see the new colors.
+        RenderPalette.SetCurrent(palette == UiPalette.Light
+            ? RenderPalette.Light
+            : RenderPalette.Dark);
+
+        if (app != null)
+            RewriteChromeBrushes(app, palette);
 
         ThemeChanged?.Invoke();
     }
 
     /// <summary>
+    /// Maps a theme to its palette. <see cref="UiTheme.System"/> follows the
+    /// OS via <see cref="Application.ActualThemeVariant"/> (meaningful once
+    /// RequestedThemeVariant is Default). Falls back to Dark when no
+    /// application exists (unit tests).
+    /// </summary>
+    private static UiPalette ResolvePalette(UiTheme theme) => theme switch
+    {
+        UiTheme.Dark => UiPalette.Dark,
+        UiTheme.Light => UiPalette.Light,
+        _ => Application.Current?.ActualThemeVariant == ThemeVariant.Light
+            ? UiPalette.Light
+            : UiPalette.Dark,
+    };
+
+    /// <summary>
     /// Overwrites the chrome brush resources in <see cref="Application.Resources"/>
-    /// with values from the active <see cref="UiPalette"/>. Controls using
+    /// with values from <paramref name="palette"/>. Controls using
     /// <c>{DynamicResource XyzBrush}</c> pick up the change automatically.
     /// </summary>
-    private void RewriteChromeBrushes(Application app)
+    private void RewriteChromeBrushes(Application app, UiPalette palette)
     {
-        var palette = ActivePalette;
         var resources = app.Resources;
 
         resources["ChromeBgBrush"] = palette.ChromeBg;

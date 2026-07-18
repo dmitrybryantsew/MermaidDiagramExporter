@@ -95,12 +95,7 @@ public sealed class UiPalette
         MatrixHotCell = new SolidColorBrush(Color.Parse("#E8532F")),
     };
 
-    /// <summary>
-    /// Returns the palette matching <paramref name="theme"/>.
-    /// </summary>
-    public static UiPalette For(UiTheme theme) => theme switch
-    {
-        UiTheme.Light => Light,
-        _ => Dark,
-    };
+    // NOTE: no theme→palette mapping here on purpose. UiTheme.System must
+    // resolve against the OS (Application.ActualThemeVariant), which only
+    // ThemeService can do correctly. Use ThemeService.ActivePalette.
 }

@@ -205,11 +205,7 @@ public partial class MainWindow : Window
 
         // Route edges so they get proper orthogonal/cluster-aware paths instead
         // of straight lines. This populates EdgePaths which the renderer uses.
-        var options = _layoutEngine.LayoutOptions ?? new LayoutOptions
-        {
-            UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
-            UseMsaglEngine = _currentSettings.UseMsaglEngine,
-        };
+        var options = _layoutEngine.LayoutOptions ?? LayoutOptionsFactory.FromSettings(_currentSettings);
         layoutResult.EdgePaths = _layoutEngine.RouteEdges(typeGraph, layoutResult, options);
 
         var (nodes, edges) = _layoutEngine.LayoutFromLayoutResult(typeGraph, layoutResult);
@@ -1056,11 +1052,7 @@ public partial class MainWindow : Window
         var typeGraph = DesignExporter.ToTypeGraph(_designGraph);
 
         // Run the layout engine (MSAGL / compound / simple depending on settings)
-        var options = _layoutEngine.LayoutOptions ?? new LayoutOptions
-        {
-            UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
-            UseMsaglEngine = _currentSettings.UseMsaglEngine,
-        };
+        var options = _layoutEngine.LayoutOptions ?? LayoutOptionsFactory.FromSettings(_currentSettings);
         _layoutEngine.LayoutOptions = options;
 
         var layoutResult = _layoutEngine.Layout(typeGraph);
@@ -1554,15 +1546,9 @@ public partial class MainWindow : Window
         }
         _layoutEngine.ManualOverrides = _manualOverrides;
 
-        // Build LayoutOptions from current settings so the compound engine toggle
+        // Build LayoutOptions from current settings so the engine selection
         // (and any future per-setting overrides) actually reaches the engine.
-        _layoutEngine.LayoutOptions = new LayoutOptions
-        {
-            UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
-            UseMsaglEngine = _currentSettings.UseMsaglEngine,
-            SeparateAppAndTests = _currentSettings.SeparateAppAndTests,
-            PartitionByFirstLevelNamespace = _currentSettings.PartitionByFirstLevelNamespace,
-        };
+        _layoutEngine.LayoutOptions = LayoutOptionsFactory.FromSettings(_currentSettings);
         AutoRedrawCheck.IsChecked = _currentSettings.AutoRedrawEdges;
 
         var (nodes, edges) = _layoutEngine.Layout(graph);
@@ -2065,11 +2051,7 @@ public partial class MainWindow : Window
     {
         if (_currentGraph == null || _allNodes.Count == 0) return;
 
-        var options = _layoutEngine.LayoutOptions ?? new LayoutOptions
-        {
-            UseCompoundLayoutEngine = _currentSettings.UseCompoundLayoutEngine,
-            UseMsaglEngine = _currentSettings.UseMsaglEngine,
-        };
+        var options = _layoutEngine.LayoutOptions ?? LayoutOptionsFactory.FromSettings(_currentSettings);
 
         _layoutEngine.RedrawEdges(_currentGraph, _allNodes, _allEdges, options);
         GraphCanvasView.SetGraph(_allNodes, _allEdges, preserveViewport: true, preserveSelectionAndHistory: true);
@@ -2338,7 +2320,6 @@ public partial class MainWindow : Window
         MenuFocusDepth.IsEnabled = !isDesign;
         MenuSeeds.IsEnabled = !isDesign;
         MenuImportFromScan.IsEnabled = !isDesign;
-        ToolbarScanButton.IsEnabled = !isDesign;
 
         UpdateNavigationButtons();
     }

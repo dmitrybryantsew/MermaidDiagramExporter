@@ -75,4 +75,32 @@ public sealed class FocusedGraphNavigationController
         _session.ResetToRoot();
         return _session.CurrentGraph;
     }
+
+    /// <summary>
+    /// Builds a focused subgraph from the given seeds without pushing onto
+    /// the back/forward navigation stack. Used by "Get Code" actions that need
+    /// the connected-classes set for a depth without mutating history.
+    /// Operates on <see cref="CurrentGraph"/> by default; pass
+    /// <paramref name="sourceGraph"/> to run against a different graph (e.g.
+    /// <see cref="RootGraph"/> for full-project bundles).
+    /// </summary>
+    public TypeGraph? BuildFocusedSubgraph(
+        IReadOnlyList<string> seedNodeIds,
+        int depth,
+        GraphFocusTraversalMode traversalMode,
+        TypeGraph? sourceGraph = null)
+    {
+        TypeGraph? graph = sourceGraph ?? CurrentGraph;
+        if (graph == null || seedNodeIds == null || seedNodeIds.Count == 0)
+            return null;
+
+        GraphFocusRequest request = new()
+        {
+            SeedNodeIds = seedNodeIds.ToArray(),
+            AssociationDepth = depth,
+            TraversalMode = traversalMode
+        };
+
+        return _focusedSubgraphBuilder.BuildFocusedGraph(graph, request);
+    }
 }

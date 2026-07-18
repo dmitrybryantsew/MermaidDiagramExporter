@@ -28,6 +28,10 @@ public partial class App : Application
             var themeService = new ThemeService();
             themeService.Apply(appSettingsService.Load().Theme);
 
+            // While the preference is System, keep chrome + canvas palettes in
+            // sync if the OS theme changes at runtime (no-op for Dark/Light).
+            ActualThemeVariantChanged += (_, _) => themeService.RefreshSystemTheme();
+
             desktop.MainWindow = new MainWindow(settingsService, appSettingsService, layoutEngine, scanner, themeService);
         }
 

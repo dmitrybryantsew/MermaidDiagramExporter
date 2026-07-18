@@ -115,7 +115,7 @@ public static class CompoundGraphBuilder
                 {
                     FromId = topBorderId,
                     ToId = memberId,
-                    Weight = options.ClusterContainmentEdgeWeight,
+                    Weight = options.Compound.ClusterContainmentEdgeWeight,
                     MinRankSpan = 1,
                     IsContainment = true
                 });
@@ -123,7 +123,7 @@ public static class CompoundGraphBuilder
                 {
                     FromId = memberId,
                     ToId = bottomBorderId,
-                    Weight = options.ClusterContainmentEdgeWeight,
+                    Weight = options.Compound.ClusterContainmentEdgeWeight,
                     MinRankSpan = 1,
                     IsContainment = true
                 });
@@ -139,7 +139,7 @@ public static class CompoundGraphBuilder
                 {
                     FromId = parentTop,
                     ToId = topBorderId,
-                    Weight = options.ClusterContainmentEdgeWeight,
+                    Weight = options.Compound.ClusterContainmentEdgeWeight,
                     MinRankSpan = 0,
                     IsContainment = true
                 });
@@ -147,7 +147,7 @@ public static class CompoundGraphBuilder
                 {
                     FromId = bottomBorderId,
                     ToId = parentBottom,
-                    Weight = options.ClusterContainmentEdgeWeight,
+                    Weight = options.Compound.ClusterContainmentEdgeWeight,
                     MinRankSpan = 0,
                     IsContainment = true
                 });

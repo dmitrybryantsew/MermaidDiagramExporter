@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using MermaidDiagramExporter.Gui.Stereotypes;
 using MermaidDiagramExporter.Gui.Design;
+using MermaidDiagramExporter.Gui.Layout;
 using MermaidDiagramExporter.Llm;
 
 namespace MermaidDiagramExporter.Gui.Settings;
@@ -79,25 +80,20 @@ public partial class SettingsWindow : Window
         SearchCaseSensitiveCheck.IsChecked = _settings.SearchCaseSensitive;
         SearchIncludeMembersCheck.IsChecked = _settings.SearchIncludeMembers;
         AutoFocusSearchCheck.IsChecked = _settings.AutoFocusSearchResults;
+        CodeExtractionOutputCombo.SelectedIndex = (int)_settings.CodeExtractionOutput;
         ApplyCustomStereotypesCheck.IsChecked = _settings.ApplyCustomStereotypes;
         PersistLayoutCheck.IsChecked = _settings.PersistManualLayout;
         EnableDraggingCheck.IsChecked = _settings.EnableNodeDragging;
         ShowMinimapCheck.IsChecked = _settings.ShowMinimap;
-        UseCompoundEngineCheck.IsChecked = _settings.UseCompoundLayoutEngine;
-        UseMsaglEngineCheck.IsChecked = _settings.UseMsaglEngine;
-        SeparateAppAndTestsCheck.IsChecked = _settings.SeparateAppAndTests;
-        PartitionByFirstLevelNsCheck.IsChecked = _settings.PartitionByFirstLevelNamespace;
+        EngineCombo.SelectedIndex = (int)_settings.Engine;
+        MsaglPartitionCombo.SelectedIndex = (int)_settings.Msagl.PartitionMode;
+        MsaglPartitionCombo.IsEnabled = _settings.Engine == LayoutEngineKind.Msagl;
 
-        // Wire mutual exclusivity: checking one partition toggle unchecks the other
-        SeparateAppAndTestsCheck.Click += (s, e) =>
+        // Partitioning only applies to the MSAGL engine — disable the combo
+        // otherwise so the dependency is visible instead of silently ignored.
+        EngineCombo.SelectionChanged += (s, e) =>
         {
-            if (SeparateAppAndTestsCheck.IsChecked == true)
-                PartitionByFirstLevelNsCheck.IsChecked = false;
-        };
-        PartitionByFirstLevelNsCheck.Click += (s, e) =>
-        {
-            if (PartitionByFirstLevelNsCheck.IsChecked == true)
-                SeparateAppAndTestsCheck.IsChecked = false;
+            MsaglPartitionCombo.IsEnabled = EngineCombo.SelectedIndex == (int)LayoutEngineKind.Msagl;
         };
         LoadEdgeStyleFields();
 
@@ -141,6 +137,7 @@ public partial class SettingsWindow : Window
             var message = string.Join("\n", invalidRules.Select(ir => $"Pattern \"{ir.Rule.Pattern}\": {ir.Error}"));
             StereotypeErrorText.Text = message;
             StereotypeErrorText.IsVisible = true;
+            StereotypesTab.IsSelected = true;
             return;
         }
         else
@@ -157,14 +154,13 @@ public partial class SettingsWindow : Window
         _settings.SearchCaseSensitive = SearchCaseSensitiveCheck.IsChecked == true;
         _settings.SearchIncludeMembers = SearchIncludeMembersCheck.IsChecked == true;
         _settings.AutoFocusSearchResults = AutoFocusSearchCheck.IsChecked == true;
+        _settings.CodeExtractionOutput = (CodeExtractionOutputMode)Math.Clamp(CodeExtractionOutputCombo.SelectedIndex, 0, 1);
         _settings.ApplyCustomStereotypes = ApplyCustomStereotypesCheck.IsChecked == true;
         _settings.PersistManualLayout = PersistLayoutCheck.IsChecked == true;
         _settings.EnableNodeDragging = EnableDraggingCheck.IsChecked == true;
         _settings.ShowMinimap = ShowMinimapCheck.IsChecked == true;
-        _settings.UseCompoundLayoutEngine = UseCompoundEngineCheck.IsChecked == true;
-        _settings.UseMsaglEngine = UseMsaglEngineCheck.IsChecked == true;
-        _settings.SeparateAppAndTests = SeparateAppAndTestsCheck.IsChecked == true;
-        _settings.PartitionByFirstLevelNamespace = PartitionByFirstLevelNsCheck.IsChecked == true;
+        _settings.Engine = (LayoutEngineKind)Math.Clamp(EngineCombo.SelectedIndex, 0, 2);
+        _settings.Msagl.PartitionMode = (MsaglPartitionMode)Math.Clamp(MsaglPartitionCombo.SelectedIndex, 0, 2);
         _settings.EdgeStyles = CollectEdgeStyles();
         _settings.StereotypeRules = _stereotypeRules.ToList();
 
@@ -195,14 +191,14 @@ public partial class SettingsWindow : Window
         SearchCaseSensitiveCheck.IsChecked = false;
         SearchIncludeMembersCheck.IsChecked = true;
         AutoFocusSearchCheck.IsChecked = false;
+        CodeExtractionOutputCombo.SelectedIndex = 0;
         ApplyCustomStereotypesCheck.IsChecked = true;
         PersistLayoutCheck.IsChecked = true;
         EnableDraggingCheck.IsChecked = true;
         ShowMinimapCheck.IsChecked = true;
-        UseCompoundEngineCheck.IsChecked = false;
-        UseMsaglEngineCheck.IsChecked = false;
-        SeparateAppAndTestsCheck.IsChecked = false;
-        PartitionByFirstLevelNsCheck.IsChecked = false;
+        EngineCombo.SelectedIndex = 0;
+        MsaglPartitionCombo.SelectedIndex = 0;
+        MsaglPartitionCombo.IsEnabled = false;
         ResetEdgeStyleFields();
     }
 

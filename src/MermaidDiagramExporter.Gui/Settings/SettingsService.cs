@@ -99,6 +99,7 @@ public sealed class SettingsService
                 if (settings != null)
                 {
                     settings.SourceFolderPath = sourceFolderPath;
+                    settings.Normalize();
                     return settings;
                 }
             }
