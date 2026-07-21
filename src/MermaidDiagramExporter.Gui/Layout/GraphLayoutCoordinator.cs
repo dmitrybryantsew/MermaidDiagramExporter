@@ -15,6 +15,8 @@ public sealed class GraphLayoutCoordinator
     private readonly IGraphLayoutEngine _compoundLayeredLayoutEngine = new CompoundLayeredLayoutEngine();
     private readonly IGraphLayoutEngine _simpleColumnLayoutEngine = new SimpleColumnLayoutEngine();
     private readonly IGraphLayoutEngine _msaglLayoutEngine = new MsaglLayoutEngine();
+    private readonly IGraphLayoutEngine _forceDirectedLayoutEngine = new ForceDirectedLayoutEngine();
+    private readonly IGraphLayoutEngine _zoneFirstLayoutEngine = new ZoneFirstLayoutEngine();
     private readonly EdgeRoutingService _edgeRoutingService = new();
     private readonly PostLayoutPipeline _postLayoutPipeline = new PostLayoutPipeline()
         .AddPass(new ClusterTitleMarginPass())
@@ -46,37 +48,39 @@ public sealed class GraphLayoutCoordinator
         LayoutOptions resolvedOptions = options ?? new LayoutOptions();
         LayoutGraph layoutGraph = LayoutGraphFactory.Create(graph, resolvedOptions);
 
-        // MSAGL engine uses a stripped-down prep pipeline — the anchor/boundary
-        // passes are workarounds for the custom engines and produce dummy nodes
-        // that MSAGL doesn't understand.
-        bool useMsagl = resolvedOptions.Engine == LayoutEngineKind.Msagl;
-        LayoutGraph preparedGraph = useMsagl
+        // MSAGL-family engines and the own force engine use a stripped-down
+        // prep pipeline — the anchor/boundary passes are workarounds for the
+        // custom engines and produce dummy nodes these engines don't understand.
+        bool minimalPrep = resolvedOptions.Engine.UsesMinimalPrepPipeline();
+        LayoutGraph preparedGraph = minimalPrep
             ? _msaglPipeline.Run(layoutGraph, resolvedOptions)
             : _pipeline.Run(layoutGraph, resolvedOptions);
 
         // Engine selection. The simple-column fallback is only for empty
         // real-node graphs.
-        LayoutResult layoutResult;
-        if (useMsagl)
+        bool hasRealNodes = preparedGraph.Nodes.Any(n => n.Role == LayoutNodeRole.Real);
+        LayoutResult layoutResult = resolvedOptions.Engine switch
         {
-            layoutResult = preparedGraph.Nodes.Any(n => n.Role == LayoutNodeRole.Real)
+            LayoutEngineKind.Force => hasRealNodes
+                ? _forceDirectedLayoutEngine.Run(preparedGraph, resolvedOptions)
+                : _simpleColumnLayoutEngine.Run(preparedGraph, resolvedOptions),
+            LayoutEngineKind.ZoneFirst => hasRealNodes
+                ? _zoneFirstLayoutEngine.Run(preparedGraph, resolvedOptions)
+                : _simpleColumnLayoutEngine.Run(preparedGraph, resolvedOptions),
+            _ when resolvedOptions.Engine.IsMsaglFamily() => hasRealNodes
                 ? _msaglLayoutEngine.Run(preparedGraph, resolvedOptions)
-                : _simpleColumnLayoutEngine.Run(preparedGraph, resolvedOptions);
-        }
-        else
-        {
-            layoutResult = preparedGraph.Nodes.Count == 0
-                ? _simpleColumnLayoutEngine.Run(preparedGraph, resolvedOptions)
-                : resolvedOptions.Engine == LayoutEngineKind.Compound
-                    ? _compoundLayeredLayoutEngine.Run(preparedGraph, resolvedOptions)
-                    : _layeredLayoutEngine.Run(preparedGraph, resolvedOptions);
-        }
+                : _simpleColumnLayoutEngine.Run(preparedGraph, resolvedOptions),
+            _ when preparedGraph.Nodes.Count == 0 => _simpleColumnLayoutEngine.Run(preparedGraph, resolvedOptions),
+            LayoutEngineKind.Compound => _compoundLayeredLayoutEngine.Run(preparedGraph, resolvedOptions),
+            _ => _layeredLayoutEngine.Run(preparedGraph, resolvedOptions),
+        };
 
         // The post-layout pipeline polishes cluster bounds produced by the
-        // custom engines. MSAGL produces its own cluster bounds (including
-        // padding), so we skip the polish passes for it — they assume the
-        // custom engines' bound semantics and would distort MSAGL output.
-        if (!useMsagl)
+        // custom engines. Minimal-prep engines produce their own cluster bounds
+        // (MSAGL natively / ClusterBoundsComputer), so we skip the polish
+        // passes for them — they assume the custom engines' bound semantics
+        // and would distort that output.
+        if (!minimalPrep)
         {
             layoutResult = _postLayoutPipeline.Run(preparedGraph, layoutResult, resolvedOptions);
         }

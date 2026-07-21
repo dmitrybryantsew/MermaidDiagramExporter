@@ -54,6 +54,58 @@ public class LayoutOptionsFactoryTests
     }
 
     [Fact]
+    public void FromSettings_MapsForcePreventClusterOverlap()
+    {
+        var settings = new ProjectSettings
+        {
+            Engine = LayoutEngineKind.Force,
+            Force = new ForceLayoutSettings { PreventClusterOverlap = false },
+        };
+
+        var options = LayoutOptionsFactory.FromSettings(settings);
+
+        Assert.Equal(LayoutEngineKind.Force, options.Engine);
+        Assert.False(options.Force.PreventClusterOverlap);
+    }
+
+    [Fact]
+    public void FromSettings_NullForceGroup_DefaultsToPreventOverlap()
+    {
+        var settings = new ProjectSettings { Engine = LayoutEngineKind.Force, Force = null! };
+
+        var options = LayoutOptionsFactory.FromSettings(settings);
+
+        Assert.True(options.Force.PreventClusterOverlap);
+    }
+
+    [Fact]
+    public void FromSettings_MapsZoneFirstGroup()
+    {
+        var settings = new ProjectSettings
+        {
+            Engine = LayoutEngineKind.ZoneFirst,
+            ZoneFirst = new ZoneFirstLayoutSettings { MicroEngine = ZoneFirstMicroEngine.Force, ZoneSpacing = 250f },
+        };
+
+        var options = LayoutOptionsFactory.FromSettings(settings);
+
+        Assert.Equal(LayoutEngineKind.ZoneFirst, options.Engine);
+        Assert.Equal(ZoneFirstMicroEngine.Force, options.ZoneFirst.MicroEngine);
+        Assert.Equal(250f, options.ZoneFirst.ZoneSpacing);
+    }
+
+    [Fact]
+    public void FromSettings_NullZoneFirstGroup_DefaultsToSugiyamaMicro()
+    {
+        var settings = new ProjectSettings { Engine = LayoutEngineKind.ZoneFirst, ZoneFirst = null! };
+
+        var options = LayoutOptionsFactory.FromSettings(settings);
+
+        Assert.Equal(ZoneFirstMicroEngine.Sugiyama, options.ZoneFirst.MicroEngine);
+        Assert.Equal(120f, options.ZoneFirst.ZoneSpacing);
+    }
+
+    [Fact]
     public void FromSettings_PreservesNumericDefaults()
     {
         // Behavior-preservation invariant: the factory must not alter any

@@ -156,6 +156,9 @@ public class GraphCanvas : Control
     private bool _showImplementsEdges = true;
     private bool _showAssociationEdges = true;
 
+    // Aggregate inter-namespace edges into highways (one thick line per pair)
+    private bool _aggregateHighways;
+
     // Per-kind edge visual style (color + arrowhead). Null = use renderer defaults.
     private Settings.EdgeStyleSettings? _edgeStyles;
 
@@ -505,6 +508,17 @@ public class GraphCanvas : Control
     }
 
     /// <summary>
+    /// Toggles aggregate highway edges (one thick labeled edge per namespace
+    /// pair instead of N individual inter-namespace edges). Triggers a re-render.
+    /// </summary>
+    public void SetAggregateHighways(bool aggregate)
+    {
+        _aggregateHighways = aggregate;
+        _staticContentDirty = true;
+        Invalidate();
+    }
+
+    /// <summary>
     /// Sets the per-kind edge visual style (color + arrowhead). Null restores
     /// built-in UML defaults. Triggers a re-render.
     /// </summary>
@@ -569,6 +583,7 @@ public class GraphCanvas : Control
         ShowInheritanceEdges = _showInheritanceEdges,
         ShowImplementsEdges = _showImplementsEdges,
         ShowAssociationEdges = _showAssociationEdges,
+        AggregateHighways = _aggregateHighways,
         SelectedNode = _selectedNode,
         HoveredNode = _hoveredNode,
         SearchText = _searchText,
@@ -740,7 +755,7 @@ public class GraphCanvas : Control
 
     private void DrawEdges(SKCanvas canvas, string? excludeNodeId = null)
     {
-        _renderer.DrawEdges(canvas, _edges, GetViewportState(), excludeNodeId);
+        _renderer.DrawEdges(canvas, _nodes, _edges, GetViewportState(), excludeNodeId);
     }
 
     private void DrawArrowhead(SKCanvas canvas, float x, float y, SKColor color)

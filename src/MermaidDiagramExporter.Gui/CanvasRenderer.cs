@@ -38,6 +38,13 @@ public sealed class ViewportState
     /// Per-kind edge visual style (color + arrowhead). Null = use built-in UML defaults.
     /// </summary>
     public EdgeStyleSettings? EdgeStyles { get; init; }
+
+    /// <summary>
+    /// When true (Analyze Mode only), inter-namespace edges collapse into one
+    /// thick labeled "highway" per namespace pair. Edges connected to the
+    /// selected node are still drawn individually (expand-on-select).
+    /// </summary>
+    public bool AggregateHighways { get; init; }
 }
 
 /// <summary>
@@ -82,6 +89,9 @@ public sealed class CanvasRenderer
     private static readonly SKColor ColorEdgeInheritance = new(0x50, 0x90, 0xD0);
     private static readonly SKColor ColorEdgeImplements = new(0x40, 0xB0, 0x70);
     private static readonly SKColor ColorEdgeAssociation = new(0x60, 0x60, 0x60);
+    private static readonly SKColor ColorEdgeHighway = new(0x8A, 0x92, 0xA8);
+    private static readonly SKPaint HighwayBadgePaint = new() { Style = SKPaintStyle.Fill, IsAntialias = true };
+    private static readonly SKPaint HighwayLabelPaint = new() { Color = SKColors.White, IsAntialias = true, TextSize = 10 };
     private static SKColor ColorNodeStroke => RenderPalette.Current.NodeStroke;
     private static SKColor ColorNodeStrokeSelected => RenderPalette.Current.Selection;
     private static SKColor ColorNodeStrokeHover => RenderPalette.Current.Hover;
@@ -134,9 +144,12 @@ public sealed class CanvasRenderer
     private const float ArrowheadHalfWidth = 5f;
 
     /// <summary>
-    /// Draws namespace group backgrounds and labels.
+    /// Computes the background rectangle per namespace (bbox of member nodes +
+    /// namespace padding + title strip). Shared by <see cref="DrawNamespaceGroups"/>
+    /// (backgrounds) and the highway edge drawing (anchor points), so highway
+    /// endpoints land exactly on the drawn zone borders.
     /// </summary>
-    public void DrawNamespaceGroups(SKCanvas canvas, List<GraphNode> nodes)
+    private static Dictionary<string, Rect> ComputeNamespaceRects(List<GraphNode> nodes)
     {
         var groups = new Dictionary<string, List<GraphNode>>();
         foreach (var node in nodes)
@@ -146,6 +159,7 @@ public sealed class CanvasRenderer
             groups[node.Namespace].Add(node);
         }
 
+        var rects = new Dictionary<string, Rect>();
         foreach (var (ns, nsNodes) in groups)
         {
             if (string.IsNullOrEmpty(ns) || nsNodes.Count == 0) continue;
@@ -160,14 +174,39 @@ public sealed class CanvasRenderer
                 maxY = Math.Max(maxY, n.Y + n.Height);
             }
 
-            float x = minX - NamespacePadding;
-            float y = minY - NamespacePadding - NamespaceTitleHeight;
-            float ww = maxX - minX + NamespacePadding * 2;
-            float hh = maxY - minY + NamespacePadding * 2 + NamespaceTitleHeight;
+            rects[ns] = new Rect(
+                minX - NamespacePadding,
+                minY - NamespacePadding - NamespaceTitleHeight,
+                (maxX - minX) + NamespacePadding * 2,
+                (maxY - minY) + NamespacePadding * 2 + NamespaceTitleHeight);
+        }
 
-            canvas.DrawRoundRect(x, y, ww, hh, 8, 8, NamespaceBgPaint);
-            canvas.DrawRoundRect(x, y, ww, hh, 8, 8, NamespaceBorderPaint);
-            canvas.DrawText(ns, x + 12, y + NamespaceTitleHeight - 6, NamespaceTextPaint);
+        return rects;
+    }
+
+    /// <summary>
+    /// Draws namespace group backgrounds and labels.
+    /// </summary>
+    public void DrawNamespaceGroups(SKCanvas canvas, List<GraphNode> nodes)
+    {
+        var groups = new Dictionary<string, List<GraphNode>>();
+        foreach (var node in nodes)
+        {
+            if (!groups.ContainsKey(node.Namespace))
+                groups[node.Namespace] = new();
+            groups[node.Namespace].Add(node);
+        }
+
+        var rects = ComputeNamespaceRects(nodes);
+
+        foreach (var (ns, nsNodes) in groups)
+        {
+            if (string.IsNullOrEmpty(ns) || nsNodes.Count == 0) continue;
+
+            var r = rects[ns];
+            canvas.DrawRoundRect(r.X, r.Y, r.Width, r.Height, 8, 8, NamespaceBgPaint);
+            canvas.DrawRoundRect(r.X, r.Y, r.Width, r.Height, 8, 8, NamespaceBorderPaint);
+            canvas.DrawText(ns, r.X + 12, r.Y + NamespaceTitleHeight - 6, NamespaceTextPaint);
         }
     }
 
@@ -175,12 +214,16 @@ public sealed class CanvasRenderer
     /// Draws all edges, optionally excluding edges connected to a specific node (for drag optimization).
     /// Uses routed Points when available (from the layout engine); otherwise computes
     /// closest-perimeter ports with overlap spreading via <see cref="EdgePortAssigner"/>.
+    /// When <see cref="ViewportState.AggregateHighways"/> is on (Analyze Mode),
+    /// inter-namespace edges collapse into one thick labeled highway per
+    /// namespace pair; edges of the selected node stay expanded.
     /// </summary>
-    public void DrawEdges(SKCanvas canvas, List<GraphEdge> edges, ViewportState vp, string? excludeNodeId = null)
+    public void DrawEdges(SKCanvas canvas, List<GraphNode> nodes, List<GraphEdge> edges, ViewportState vp, string? excludeNodeId = null)
     {
         // Pre-compute ports for edges without routed points (spreads overlaps).
         var portMap = EdgePortAssigner.AssignPorts(edges);
 
+        var visibleEdges = new List<GraphEdge>(edges.Count);
         foreach (var edge in edges)
         {
             if (edge.FromNode == null || edge.ToNode == null) continue;
@@ -194,11 +237,86 @@ public sealed class CanvasRenderer
                 TypeEdgeKind.Association => vp.ShowAssociationEdges,
                 _ => true
             };
-            if (!visible) continue;
+            if (visible) visibleEdges.Add(edge);
+        }
 
+        if (!vp.AggregateHighways || vp.IsDesignMode)
+        {
+            foreach (var edge in visibleEdges)
+            {
+                var style = ResolveEdgeStyle(edge.Kind, vp);
+                DrawSingleEdgePath(canvas, edge, portMap, style, isSelected: IsEdgeHighlighted(edge, vp));
+            }
+            return;
+        }
+
+        // ── Highway mode: intra-zone edges individually, inter-zone edges as
+        // one thick labeled highway per namespace pair ──
+        var (intraZone, highways) = HighwayGrouper.Group(visibleEdges);
+        foreach (var edge in intraZone)
+        {
             var style = ResolveEdgeStyle(edge.Kind, vp);
             DrawSingleEdgePath(canvas, edge, portMap, style, isSelected: IsEdgeHighlighted(edge, vp));
         }
+
+        var zoneRects = ComputeNamespaceRects(nodes);
+        foreach (var highway in highways)
+        {
+            if (!zoneRects.TryGetValue(highway.ZoneA, out var rectA)) continue;
+            if (!zoneRects.TryGetValue(highway.ZoneB, out var rectB)) continue;
+            DrawHighway(canvas, highway, rectA, rectB);
+        }
+
+        // Expand-on-select: the selected node's inter-zone edges are hidden
+        // inside highways — draw them individually (highlighted) on top.
+        if (vp.SelectedNode != null)
+        {
+            foreach (var edge in visibleEdges)
+            {
+                if (!HighwayGrouper.IsInterZone(edge)) continue;
+                if (edge.FromNode!.Id != vp.SelectedNode.Id && edge.ToNode!.Id != vp.SelectedNode.Id) continue;
+                var style = ResolveEdgeStyle(edge.Kind, vp);
+                DrawSingleEdgePath(canvas, edge, portMap, style, isSelected: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Draws one aggregated highway: a thick line between the two zone border
+    /// points, arrowheads for each direction that has flow, and a count badge
+    /// at the midpoint.
+    /// </summary>
+    private static void DrawHighway(SKCanvas canvas, HighwayGroup highway, Rect rectA, Rect rectB)
+    {
+        var from = HighwayGrouper.BorderPointToward(rectA, rectB.center);
+        var to = HighwayGrouper.BorderPointToward(rectB, rectA.center);
+        var dir = to - from;
+        if (dir.sqrMagnitude < 0.001f) return;
+
+        EdgeStrokePaint.PathEffect = null;
+        EdgeStrokePaint.Color = ColorEdgeHighway;
+        EdgeStrokePaint.StrokeWidth = HighwayGrouper.ComputeStrokeWidth(highway.TotalCount);
+
+        using var path = new SKPath();
+        path.MoveTo(from.X, from.Y);
+        path.LineTo(to.X, to.Y);
+        canvas.DrawPath(path, EdgeStrokePaint);
+
+        // Arrowheads per flow direction (ZoneA→ZoneB and/or ZoneB→ZoneA).
+        if (highway.ForwardCount > 0)
+            DrawArrowhead(canvas, to.X, to.Y, dir, ColorEdgeHighway, EdgeArrowheadStyle.SolidArrow);
+        if (highway.BackwardCount > 0)
+            DrawArrowhead(canvas, from.X, from.Y, from - to, ColorEdgeHighway, EdgeArrowheadStyle.SolidArrow);
+
+        // Count badge at the midpoint.
+        float midX = (from.X + to.X) * 0.5f;
+        float midY = (from.Y + to.Y) * 0.5f;
+        string label = highway.TotalCount.ToString();
+        float badgeW = HighwayLabelPaint.MeasureText(label) + 12;
+        float badgeH = 16;
+        HighwayBadgePaint.Color = ColorEdgeHighway;
+        canvas.DrawRoundRect(midX - badgeW * 0.5f, midY - badgeH * 0.5f, badgeW, badgeH, 4, 4, HighwayBadgePaint);
+        canvas.DrawText(label, midX - badgeW * 0.5f + 6, midY + badgeH * 0.5f - 4, HighwayLabelPaint);
     }
 
     private static bool IsEdgeHighlighted(GraphEdge edge, ViewportState vp)

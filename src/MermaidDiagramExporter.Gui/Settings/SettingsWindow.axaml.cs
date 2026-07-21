@@ -85,15 +85,26 @@ public partial class SettingsWindow : Window
         PersistLayoutCheck.IsChecked = _settings.PersistManualLayout;
         EnableDraggingCheck.IsChecked = _settings.EnableNodeDragging;
         ShowMinimapCheck.IsChecked = _settings.ShowMinimap;
+        AggregateHighwaysCheck.IsChecked = _settings.AggregateHighways;
         EngineCombo.SelectedIndex = (int)_settings.Engine;
         MsaglPartitionCombo.SelectedIndex = (int)_settings.Msagl.PartitionMode;
         MsaglPartitionCombo.IsEnabled = _settings.Engine == LayoutEngineKind.Msagl;
+        ForcePreventOverlapCheck.IsChecked = _settings.Force.PreventClusterOverlap;
+        ForcePreventOverlapCheck.IsEnabled = _settings.Engine == LayoutEngineKind.Force;
+        ZoneFirstMicroCombo.SelectedIndex = (int)_settings.ZoneFirst.MicroEngine;
+        ZoneFirstMicroCombo.IsEnabled = _settings.Engine == LayoutEngineKind.ZoneFirst;
+        ZoneFirstSpacingText.Text = _settings.ZoneFirst.ZoneSpacing.ToString("0");
+        ZoneFirstSpacingText.IsEnabled = _settings.Engine == LayoutEngineKind.ZoneFirst;
 
-        // Partitioning only applies to the MSAGL engine — disable the combo
+        // Engine-specific options only apply to their engine — disable them
         // otherwise so the dependency is visible instead of silently ignored.
         EngineCombo.SelectionChanged += (s, e) =>
         {
             MsaglPartitionCombo.IsEnabled = EngineCombo.SelectedIndex == (int)LayoutEngineKind.Msagl;
+            ForcePreventOverlapCheck.IsEnabled = EngineCombo.SelectedIndex == (int)LayoutEngineKind.Force;
+            bool zoneFirst = EngineCombo.SelectedIndex == (int)LayoutEngineKind.ZoneFirst;
+            ZoneFirstMicroCombo.IsEnabled = zoneFirst;
+            ZoneFirstSpacingText.IsEnabled = zoneFirst;
         };
         LoadEdgeStyleFields();
 
@@ -159,8 +170,14 @@ public partial class SettingsWindow : Window
         _settings.PersistManualLayout = PersistLayoutCheck.IsChecked == true;
         _settings.EnableNodeDragging = EnableDraggingCheck.IsChecked == true;
         _settings.ShowMinimap = ShowMinimapCheck.IsChecked == true;
-        _settings.Engine = (LayoutEngineKind)Math.Clamp(EngineCombo.SelectedIndex, 0, 2);
+        _settings.AggregateHighways = AggregateHighwaysCheck.IsChecked == true;
+        _settings.Engine = (LayoutEngineKind)Math.Clamp(EngineCombo.SelectedIndex, 0, 5);
         _settings.Msagl.PartitionMode = (MsaglPartitionMode)Math.Clamp(MsaglPartitionCombo.SelectedIndex, 0, 2);
+        _settings.Force.PreventClusterOverlap = ForcePreventOverlapCheck.IsChecked == true;
+        _settings.ZoneFirst.MicroEngine = (ZoneFirstMicroEngine)Math.Clamp(ZoneFirstMicroCombo.SelectedIndex, 0, 1);
+        _settings.ZoneFirst.ZoneSpacing = float.TryParse(ZoneFirstSpacingText.Text, out float zoneSpacing)
+            ? Math.Clamp(zoneSpacing, 20f, 2000f)
+            : 120f;
         _settings.EdgeStyles = CollectEdgeStyles();
         _settings.StereotypeRules = _stereotypeRules.ToList();
 
@@ -196,9 +213,16 @@ public partial class SettingsWindow : Window
         PersistLayoutCheck.IsChecked = true;
         EnableDraggingCheck.IsChecked = true;
         ShowMinimapCheck.IsChecked = true;
+        AggregateHighwaysCheck.IsChecked = false;
         EngineCombo.SelectedIndex = 0;
         MsaglPartitionCombo.SelectedIndex = 0;
         MsaglPartitionCombo.IsEnabled = false;
+        ForcePreventOverlapCheck.IsChecked = true;
+        ForcePreventOverlapCheck.IsEnabled = false;
+        ZoneFirstMicroCombo.SelectedIndex = 0;
+        ZoneFirstMicroCombo.IsEnabled = false;
+        ZoneFirstSpacingText.Text = "120";
+        ZoneFirstSpacingText.IsEnabled = false;
         ResetEdgeStyleFields();
     }
 

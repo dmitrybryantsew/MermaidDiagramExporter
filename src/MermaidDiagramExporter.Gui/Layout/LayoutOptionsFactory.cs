@@ -26,6 +26,15 @@ public static class LayoutOptionsFactory
             {
                 Partition = settings.Msagl?.PartitionMode ?? MsaglPartitionMode.None,
             },
+            Force = new ForceEngineOptions
+            {
+                PreventClusterOverlap = settings.Force?.PreventClusterOverlap ?? true,
+            },
+            ZoneFirst = new ZoneFirstEngineOptions
+            {
+                MicroEngine = settings.ZoneFirst?.MicroEngine ?? ZoneFirstMicroEngine.Sugiyama,
+                ZoneSpacing = settings.ZoneFirst?.ZoneSpacing ?? 120f,
+            },
         };
     }
 }

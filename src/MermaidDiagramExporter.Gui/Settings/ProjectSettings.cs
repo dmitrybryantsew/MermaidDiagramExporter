@@ -88,6 +88,13 @@ public sealed class ProjectSettings
     public bool EnableNodeDragging { get; set; } = true;
 
     /// <summary>
+    /// Whether inter-namespace edges collapse into one thick labeled "highway"
+    /// edge per namespace pair on the canvas (Analyze Mode). Selecting a node
+    /// re-expands its individual edges. Default false (opt-in decluttering).
+    /// </summary>
+    public bool AggregateHighways { get; set; } = false;
+
+    /// <summary>
     /// Which layout engine to use (Layered / Compound / MSAGL). Replaces the
     /// legacy UseCompoundLayoutEngine / UseMsaglEngine boolean pair.
     /// </summary>
@@ -98,6 +105,18 @@ public sealed class ProjectSettings
     /// <see cref="Engine"/> is <see cref="LayoutEngineKind.Msagl"/>.
     /// </summary>
     public MsaglLayoutSettings Msagl { get; set; } = new();
+
+    /// <summary>
+    /// Force-engine-specific layout settings. Applies only when
+    /// <see cref="Engine"/> is <see cref="LayoutEngineKind.Force"/>.
+    /// </summary>
+    public ForceLayoutSettings Force { get; set; } = new();
+
+    /// <summary>
+    /// Zone-first-hybrid-specific layout settings. Applies only when
+    /// <see cref="Engine"/> is <see cref="LayoutEngineKind.ZoneFirst"/>.
+    /// </summary>
+    public ZoneFirstLayoutSettings ZoneFirst { get; set; } = new();
 
     // ── Legacy layout flags (kept only to migrate old settings JSON) ──
     // Normalize() folds these into Engine / Msagl.PartitionMode and resets
@@ -123,8 +142,10 @@ public sealed class ProjectSettings
     /// </summary>
     public void Normalize()
     {
-        // Tolerate hand-edited JSON with "msagl": null.
+        // Tolerate hand-edited JSON with "msagl": null / "force": null.
         Msagl ??= new MsaglLayoutSettings();
+        Force ??= new ForceLayoutSettings();
+        ZoneFirst ??= new ZoneFirstLayoutSettings();
 
 #pragma warning disable CS0618 // legacy flags are migration inputs only
         if (Engine == LayoutEngineKind.Layered)
@@ -208,6 +229,39 @@ public sealed class MsaglLayoutSettings
     /// app/tests or by first-level sub-namespace).
     /// </summary>
     public MsaglPartitionMode PartitionMode { get; set; } = MsaglPartitionMode.None;
+}
+
+/// <summary>
+/// Force-engine-specific per-project layout settings. Persisted as a nested
+/// object in ProjectSettings JSON (mirrors the MsaglLayoutSettings precedent).
+/// Applies only when <see cref="ProjectSettings.Engine"/> is Force.
+/// </summary>
+public sealed class ForceLayoutSettings
+{
+    /// <summary>
+    /// When true (default), namespace cluster rectangles are guaranteed not to
+    /// overlap: overlapping sibling clusters are rigidly translated apart after
+    /// layout. When false, clusters are drawn tight around members and may
+    /// overlap where zones interleave.
+    /// </summary>
+    public bool PreventClusterOverlap { get; set; } = true;
+}
+
+/// <summary>
+/// Zone-first-hybrid-specific per-project layout settings. Persisted as a
+/// nested object in ProjectSettings JSON (mirrors the ForceLayoutSettings
+/// precedent). Applies only when <see cref="ProjectSettings.Engine"/> is
+/// ZoneFirst.
+/// </summary>
+public sealed class ZoneFirstLayoutSettings
+{
+    /// <summary>Per-zone interior layout engine (default Sugiyama).</summary>
+    public ZoneFirstMicroEngine MicroEngine { get; set; } = ZoneFirstMicroEngine.Sugiyama;
+
+    /// <summary>
+    /// Minimum gap between zone boxes in the macro placement (default 120).
+    /// </summary>
+    public float ZoneSpacing { get; set; } = 120f;
 }
 
 /// <summary>

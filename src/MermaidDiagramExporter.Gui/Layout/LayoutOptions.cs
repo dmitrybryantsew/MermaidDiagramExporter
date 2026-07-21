@@ -39,6 +39,15 @@ public sealed class LayoutOptions
     /// <summary>Options for the MSAGL engine only.</summary>
     public MsaglEngineOptions Msagl { get; set; } = new();
 
+    /// <summary>Options for the own force-directed engine only.</summary>
+    public ForceEngineOptions Force { get; set; } = new();
+
+    /// <summary>Options for the MSAGL MDS engine variant only.</summary>
+    public MsaglMdsEngineOptions MsaglMds { get; set; } = new();
+
+    /// <summary>Options for the zone-first hybrid engine only.</summary>
+    public ZoneFirstEngineOptions ZoneFirst { get; set; } = new();
+
     /// <summary>Options for the custom (non-MSAGL) prep-pipeline passes.</summary>
     public CustomPipelineOptions Pipeline { get; set; } = new();
 
@@ -89,6 +98,28 @@ public sealed class LayoutOptions
         Msagl = new MsaglEngineOptions
         {
             Partition = Msagl.Partition,
+        },
+        Force = new ForceEngineOptions
+        {
+            Iterations = Force.Iterations,
+            RepulsionConstant = Force.RepulsionConstant,
+            SpringConstant = Force.SpringConstant,
+            ClusterGravity = Force.ClusterGravity,
+            Seed = Force.Seed,
+            PreventClusterOverlap = Force.PreventClusterOverlap,
+        },
+        MsaglMds = new MsaglMdsEngineOptions
+        {
+            PivotNumber = MsaglMds.PivotNumber,
+            IterationsWithMajorization = MsaglMds.IterationsWithMajorization,
+            ScaleX = MsaglMds.ScaleX,
+            ScaleY = MsaglMds.ScaleY,
+            RemoveOverlaps = MsaglMds.RemoveOverlaps,
+        },
+        ZoneFirst = new ZoneFirstEngineOptions
+        {
+            MicroEngine = ZoneFirst.MicroEngine,
+            ZoneSpacing = ZoneFirst.ZoneSpacing,
         },
         Pipeline = new CustomPipelineOptions
         {

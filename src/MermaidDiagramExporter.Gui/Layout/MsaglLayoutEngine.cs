@@ -6,19 +6,26 @@ using Microsoft.Msagl.Core.Geometry.Curves;
 using Microsoft.Msagl.Core.Layout;
 using Microsoft.Msagl.Core.Routing;
 using Microsoft.Msagl.Layout.Layered;
+using Microsoft.Msagl.Layout.MDS;
 using Microsoft.Msagl.Miscellaneous;
 
 namespace MermaidDiagramExporter.Gui.Layout;
 
 /// <summary>
-/// Prototype layout engine backed by Microsoft Automatic Graph Layout (MSAGL).
-/// Uses MSAGL's SugiyamaLayoutSettings (same algorithm family as Mermaid's dagre)
-/// with native cluster containment and rectilinear edge routing.
+/// Layout engine backed by Microsoft Automatic Graph Layout (MSAGL). Bridges
+/// our LayoutGraph to an MSAGL GeometryGraph and back; the actual algorithm
+/// is selected by <see cref="LayoutOptions.Engine"/>:
+/// - <see cref="LayoutEngineKind.Msagl"/>: Sugiyama layered layout (same family
+///   as Mermaid's dagre) with native cluster containment and partition support.
+/// - <see cref="LayoutEngineKind.MsaglMds"/>: PivotMDS + stress majorization —
+///   2D distances approximate graph-theoretic distances. MSAGL's MDS ignores
+///   clusters, so cluster bounds are computed by ClusterBoundsComputer.
 ///
 /// Maps our LayoutGraph → MSAGL GeometryGraph, runs layout, reads coordinates
 /// back into our LayoutResult. Y is flipped from MSAGL's Y-up to our Y-down.
 /// Edge routing is deferred to EdgeRoutingService (which runs after the engine
-/// in GraphLayoutCoordinator) — it consumes the node/cluster bounds we produce.
+/// in GraphLayoutCoordinator) — it consumes the node/cluster bounds we produce,
+/// so MSAGL's own edge routing is disabled for the MDS variant.
 /// </summary>
 public sealed class MsaglLayoutEngine : IGraphLayoutEngine
 {
@@ -32,8 +39,12 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
         // When a partitioning option is on, build a modified cluster list with
         // synthetic top-level clusters and re-parent namespace clusters under them.
         // MSAGL lays out each region independently and packs them side-by-side.
+        // Partitioning is a Sugiyama-only feature (columns make no sense for the
+        // force/MDS variants), so it applies exactly when Engine == Msagl.
         var originalClusterIds = new HashSet<string>(graph.Clusters.Select(c => c.Id));
-        var clusters = PartitionClustersIfEnabled(graph, options);
+        var clusters = options.Engine == LayoutEngineKind.Msagl
+            ? PartitionClustersIfEnabled(graph, options)
+            : new List<LayoutCluster>(graph.Clusters);
 
         // ── Build MSAGL GeometryGraph ──
         var geomGraph = new GeometryGraph();
@@ -92,41 +103,22 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
                 geomGraph.RootCluster.AddChild(msaglClusterById[lc.Id]);
         }
 
-        // Edges — only between real nodes that exist in the map
+        // Edges — only between real nodes that exist in the map.
+        // Weight by coupling kind: the Sugiyama ranker minimizes weighted edge
+        // span, so inheritance/implements pairs land closer together.
         foreach (var le in graph.Edges)
         {
             if (le.Role != LayoutEdgeRole.Direct) continue;
             if (!msaglNodeById.TryGetValue(le.FromNodeId, out var src)) continue;
             if (!msaglNodeById.TryGetValue(le.ToNodeId, out var tgt)) continue;
-            geomGraph.Edges.Add(new Edge(src, tgt) { UserData = le.Id });
-        }
-
-        // ── Layout settings ──
-        var settings = new SugiyamaLayoutSettings
-        {
-            NodeSeparation = Math.Max(options.NodeSpacing, 20),
-            LayerSeparation = Math.Max(options.RankSpacing, 20),
-            ClusterMargin = Math.Max(options.GroupSpacing, 10),
-            PackingMethod = options.Msagl.Partition != MsaglPartitionMode.None
-                ? PackingMethod.Columns
-                : PackingMethod.Compact,
-            EdgeRoutingSettings = new EdgeRoutingSettings
+            geomGraph.Edges.Add(new Edge(src, tgt)
             {
-                EdgeRoutingMode = EdgeRoutingMode.SugiyamaSplines,
-                Padding = 8,
-            },
-        };
-
-        // MSAGL's Sugiyama layout defaults to top-to-bottom. To match the
-        // user's LayoutDirection preference, apply a post-layout rotation:
-        // 90° CCW transforms TB → LR (root goes from top to left, children
-        // flow rightward). MSAGL applies the inverse before layout (to adjust
-        // label sizes) and the forward transform after layout to all geometry.
-        if (options.Direction == LayoutDirection.LeftToRight)
-        {
-            settings.Transformation = new PlaneTransformation(0, -1, 0, 1, 0, 0);
+                UserData = le.Id,
+                Weight = LayoutEdgeWeights.GetIntWeight(le.Kind),
+            });
         }
 
+        LayoutAlgorithmSettings settings = CreateSettings(options);
         LayoutHelpers.CalculateLayout(geomGraph, settings, null);
 
         // ── Read back, flipping Y from MSAGL's Y-up to our Y-down ──
@@ -149,21 +141,32 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
             nodeBounds[ln.Id] = new Rect(x, y, w, h);
         }
 
-        var clusterBounds = new Dictionary<string, Rect>();
-        foreach (var lc in graph.Clusters)
+        Dictionary<string, Rect> clusterBounds;
+        if (options.Engine == LayoutEngineKind.MsaglMds)
         {
-            if (!msaglClusterById.TryGetValue(lc.Id, out var cluster)) continue;
-            var cb = cluster.BoundingBox;
-            float cl = (float)cb.Left;
-            float cr = (float)cb.Right;
-            float cbot = (float)cb.Bottom;
-            float ctop = (float)cb.Top;
-            float x = cl - originX;
-            float y = originY - ctop;
-            float w = cr - cl;
-            float h = ctop - cbot;
-            if (w <= 0 || h <= 0) continue;
-            clusterBounds[lc.Id] = new Rect(x, y, w, h);
+            // MSAGL's MDS ignores clusters entirely (it lays out flat connected
+            // components), so its cluster boxes are meaningless. Compute tight
+            // cluster bounds from the member node positions instead.
+            clusterBounds = ClusterBoundsComputer.Compute(graph.Clusters, nodeBounds, options);
+        }
+        else
+        {
+            clusterBounds = new Dictionary<string, Rect>();
+            foreach (var lc in graph.Clusters)
+            {
+                if (!msaglClusterById.TryGetValue(lc.Id, out var cluster)) continue;
+                var cb = cluster.BoundingBox;
+                float cl = (float)cb.Left;
+                float cr = (float)cb.Right;
+                float cbot = (float)cb.Bottom;
+                float ctop = (float)cb.Top;
+                float x = cl - originX;
+                float y = originY - ctop;
+                float w = cr - cl;
+                float h = ctop - cbot;
+                if (w <= 0 || h <= 0) continue;
+                clusterBounds[lc.Id] = new Rect(x, y, w, h);
+            }
         }
 
         // Apply outer margin by offsetting everything
@@ -198,6 +201,71 @@ public sealed class MsaglLayoutEngine : IGraphLayoutEngine
             NodeBounds = nodeBounds,
             ClusterBounds = clusterBounds,
             ContentSize = new Vector2(finalW, finalH),
+        };
+    }
+
+    // ── Algorithm settings ──
+
+    private static LayoutAlgorithmSettings CreateSettings(LayoutOptions options)
+    {
+        return options.Engine switch
+        {
+            LayoutEngineKind.MsaglMds => CreateMdsSettings(options),
+            _ => CreateSugiyamaSettings(options),
+        };
+    }
+
+    private static SugiyamaLayoutSettings CreateSugiyamaSettings(LayoutOptions options)
+    {
+        var settings = new SugiyamaLayoutSettings
+        {
+            NodeSeparation = Math.Max(options.NodeSpacing, 20),
+            LayerSeparation = Math.Max(options.RankSpacing, 20),
+            ClusterMargin = Math.Max(options.GroupSpacing, 10),
+            PackingMethod = options.Msagl.Partition != MsaglPartitionMode.None
+                ? PackingMethod.Columns
+                : PackingMethod.Compact,
+            EdgeRoutingSettings = new EdgeRoutingSettings
+            {
+                EdgeRoutingMode = EdgeRoutingMode.SugiyamaSplines,
+                Padding = 8,
+            },
+        };
+
+        // MSAGL's Sugiyama layout defaults to top-to-bottom. To match the
+        // user's LayoutDirection preference, apply a post-layout rotation:
+        // 90° CCW transforms TB → LR (root goes from top to left, children
+        // flow rightward). MSAGL applies the inverse before layout (to adjust
+        // label sizes) and the forward transform after layout to all geometry.
+        if (options.Direction == LayoutDirection.LeftToRight)
+        {
+            settings.Transformation = new PlaneTransformation(0, -1, 0, 1, 0, 0);
+        }
+
+        return settings;
+    }
+
+    /// <summary>
+    /// MDS layout (PivotMDS + stress majorization): 2D distances approximate
+    /// graph distances, so tightly-coupled regions emerge from the topology.
+    /// MSAGL's own edge routing is disabled (same reason as above).
+    /// </summary>
+    private static MdsLayoutSettings CreateMdsSettings(LayoutOptions options)
+    {
+        var mo = options.MsaglMds;
+        return new MdsLayoutSettings
+        {
+            NodeSeparation = Math.Max(options.NodeSpacing, 20),
+            ClusterMargin = Math.Max(options.GroupSpacing, 10),
+            PivotNumber = mo.PivotNumber,
+            IterationsWithMajorization = mo.IterationsWithMajorization,
+            ScaleX = mo.ScaleX,
+            ScaleY = mo.ScaleY,
+            RemoveOverlaps = mo.RemoveOverlaps,
+            EdgeRoutingSettings = new EdgeRoutingSettings
+            {
+                EdgeRoutingMode = EdgeRoutingMode.None,
+            },
         };
     }
 
