@@ -99,24 +99,41 @@ public partial class LlmGenerateDialog : Window
             AllowMultiple = true
         });
 
-        foreach (var file in files)
-        {
-            if (file.TryGetLocalPath() is not { } path) continue;
-            if (_attachedFiles.Any(f => f.FilePath == path)) continue; // skip duplicates
+        var validFiles = files
+            .Select(f => f.TryGetLocalPath())
+            .Where(path => path != null && !_attachedFiles.Any(f => f.FilePath == path))
+            .Select(path => path!)
+            .ToList();
 
+        var readTasks = validFiles.Select(async path =>
+        {
             try
             {
                 var content = await File.ReadAllTextAsync(path);
-                _attachedFiles.Add(new AttachedFileItem
-                {
-                    FileName = Path.GetFileName(path),
-                    FilePath = path,
-                    Content = content
-                });
+                return new { Path = path, Content = content, Error = (Exception?)null };
             }
             catch (Exception ex)
             {
-                StatusText.Text = $"Failed to read {Path.GetFileName(path)}: {ex.Message}";
+                return new { Path = path, Content = string.Empty, Error = ex };
+            }
+        }).ToList();
+
+        var results = await Task.WhenAll(readTasks);
+
+        foreach (var result in results)
+        {
+            if (result.Error == null)
+            {
+                _attachedFiles.Add(new AttachedFileItem
+                {
+                    FileName = Path.GetFileName(result.Path),
+                    FilePath = result.Path,
+                    Content = result.Content
+                });
+            }
+            else
+            {
+                StatusText.Text = $"Failed to read {Path.GetFileName(result.Path)}: {result.Error.Message}";
             }
         }
     }
