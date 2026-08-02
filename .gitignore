@@ -26,6 +26,9 @@ test-output-self/
 **/export/
 docs/mermaid/
 
+# Internal planning/design documentation (not part of the shipped repo)
+docs/
+
 # Screenshots / images (artifacts)
 *.png
 *.PNG
