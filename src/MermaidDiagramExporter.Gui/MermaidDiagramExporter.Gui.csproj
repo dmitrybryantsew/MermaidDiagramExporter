@@ -27,6 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AvaloniaResource Include="Assets\icon.png" />
+    <AvaloniaResource Include="Assets\app.ico" />
+    <AvaloniaResource Include="Assets\icon.svg" />
   </ItemGroup>
 </Project>

@@ -9,7 +9,7 @@ using MermaidDiagramExporter.Core;
 
 namespace MermaidDiagramExporter.Extraction;
 
-public sealed class RoslynTypeScanner
+public sealed class RoslynTypeScanner : ITypeScanner
 {
     public TypeGraph ScanFolder(string folderPath, GraphBuildOptions options = null)
     {

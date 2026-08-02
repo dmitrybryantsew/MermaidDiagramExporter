@@ -27,7 +27,7 @@ namespace MermaidDiagramExporter.Gui;
 
 public partial class MainWindow : Window
 {
-    private readonly RoslynTypeScanner _scanner;
+    private readonly ITypeScanner _scanner;
     private readonly LayoutEngine _layoutEngine;
     private readonly FocusedGraphNavigationController _focusNavigationController = new();
     private readonly GraphSeedSelectionState _seedSelectionState = new();
@@ -67,7 +67,7 @@ public partial class MainWindow : Window
 
     public ProjectSettings CurrentSettings => _currentSettings;
 
-    public MainWindow(SettingsService settingsService, AppSettingsService appSettingsService, LayoutEngine layoutEngine, RoslynTypeScanner scanner, ThemeService themeService)
+    public MainWindow(SettingsService settingsService, AppSettingsService appSettingsService, LayoutEngine layoutEngine, ITypeScanner scanner, ThemeService themeService)
     {
         _settingsService = settingsService;
         _appSettingsService = appSettingsService;

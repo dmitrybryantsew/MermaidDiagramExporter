@@ -23,7 +23,7 @@ public sealed class CachePromptRequest
 /// </summary>
 public sealed class ScanCoordinator
 {
-    private readonly RoslynTypeScanner _scanner;
+    private ITypeScanner _scanner;
     private readonly TypeGraphCacheService _cacheService;
     private readonly SourceBundleService _bundleService;
     private readonly SettingsService _settingsService;
@@ -33,7 +33,7 @@ public sealed class ScanCoordinator
     public event Action<string>? StatusChanged;
 
     public ScanCoordinator(
-        RoslynTypeScanner scanner,
+        ITypeScanner scanner,
         TypeGraphCacheService cacheService,
         SourceBundleService bundleService,
         SettingsService settingsService)
@@ -100,6 +100,10 @@ public sealed class ScanCoordinator
         }
 
         TypeGraph graph;
+
+        // Dynamically select scanner based on folder contents just before scanning
+        _scanner = ScannerFactory.CreateScanner(folder);
+
         if (clearCache)
         {
             // Force a fresh scan and wipe any cached state that could
