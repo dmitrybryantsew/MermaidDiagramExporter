@@ -80,9 +80,7 @@ public static class DesignHitTestService
 
     private static DesignClass? FindClass(ClassRectangle rect, IReadOnlyList<ClassRectangle> rectangles)
     {
-        // The rectangle's ClassId maps to a DesignClass in its owning Graph.
-        // For now, return the first class with matching Id (O(n) but fine for small designs).
-        var cls = rect.Graph.Classes.FirstOrDefault(c => c.Id == rect.ClassId);
-        return cls;
+        // The rectangle now directly holds its DesignClass object.
+        return rect.Class;
     }
 }

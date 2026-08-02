@@ -28,13 +28,17 @@ public enum ClassRectangleHitTest
 /// </summary>
 public sealed class ClassRectangle
 {
-    public ClassRectangle(string classId, DesignGraph graph)
+    public ClassRectangle(DesignClass cls, DesignGraph graph)
     {
-        ClassId = classId;
+        Class = cls;
+        ClassId = cls.Id;
         Graph = graph;
     }
 
-    /// <summary>The DesignClass this rectangle represents.</summary>
+    /// <summary>The DesignClass object this rectangle represents.</summary>
+    public DesignClass Class { get; }
+
+    /// <summary>The ID of the DesignClass this rectangle represents.</summary>
     public string ClassId { get; }
 
     /// <summary>The owning design graph.</summary>
