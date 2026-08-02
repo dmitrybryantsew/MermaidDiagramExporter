@@ -24,8 +24,10 @@ public static class ClusterBoundsComputer
         var result = new Dictionary<string, Rect>();
         if (clusters == null || clusters.Count == 0) return result;
 
+        var clusterById = clusters.ToDictionary(c => c.Id);
+
         // Deepest-first order: a parent is processed after all its children.
-        foreach (var cluster in clusters.OrderByDescending(c => Depth(c, clusters)))
+        foreach (var cluster in clusters.OrderByDescending(c => Depth(c, clusterById)))
         {
             float minX = float.MaxValue, minY = float.MaxValue;
             float maxX = float.MinValue, maxY = float.MinValue;
@@ -66,15 +68,14 @@ public static class ClusterBoundsComputer
         return result;
     }
 
-    private static int Depth(LayoutCluster cluster, IReadOnlyList<LayoutCluster> all)
+    private static int Depth(LayoutCluster cluster, IReadOnlyDictionary<string, LayoutCluster> all)
     {
         int depth = 0;
         var current = cluster;
         // Guard against parent cycles with a hard step cap.
         for (int guard = 0; guard < 64 && !string.IsNullOrEmpty(current.ParentClusterId); guard++)
         {
-            var parent = all.FirstOrDefault(c => c.Id == current.ParentClusterId);
-            if (parent == null) break;
+            if (!all.TryGetValue(current.ParentClusterId, out var parent)) break;
             depth++;
             current = parent;
         }
