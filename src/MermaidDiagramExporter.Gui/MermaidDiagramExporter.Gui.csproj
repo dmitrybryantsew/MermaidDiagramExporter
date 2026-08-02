@@ -18,9 +18,15 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="Msagl" Version="1.2.1" />
+    <PackageReference Include="Msagl.Drawing" Version="1.2.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MermaidDiagramExporter\MermaidDiagramExporter.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\icon.png" />
   </ItemGroup>
 </Project>
