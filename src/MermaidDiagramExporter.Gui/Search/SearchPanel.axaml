@@ -3,7 +3,7 @@
              xmlns:search="clr-namespace:MermaidDiagramExporter.Gui.Search"
              x:Class="MermaidDiagramExporter.Gui.Search.SearchPanel"
              Width="320">
-  <Border Background="#1E2329" BorderBrush="#3A4250" BorderThickness="1" Padding="8">
+  <Border Background="{DynamicResource ChromeBgAltBrush}" BorderBrush="{DynamicResource ChromeBorderBrush}" BorderThickness="1" Padding="8">
     <Grid RowDefinitions="Auto,Auto,*,Auto">
       <!-- Header -->
       <TextBlock Grid.Row="0" Text="Symbol Search" FontWeight="Bold" FontSize="14" Margin="0,0,0,8" />

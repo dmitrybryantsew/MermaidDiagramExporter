@@ -51,7 +51,7 @@ public sealed class MeasurementPreparationPass : ILayoutPass
             Nodes = nodes,
             Edges = graph.Edges.Select(LayoutCloneUtility.CloneEdge).ToList(),
             Clusters = clusters,
-            ExtractedSubgraphs = graph.ExtractedSubgraphs.Select(CloneMeasuredSubgraph).ToList(),
+            ExtractedSubgraphs = graph.ExtractedSubgraphs.Select(sg => CloneMeasuredSubgraph(sg, options)).ToList(),
             Metadata = LayoutCloneUtility.CloneMetadata(graph.Metadata)
         };
 
@@ -59,26 +59,30 @@ public sealed class MeasurementPreparationPass : ILayoutPass
         return measuredGraph;
     }
 
-    private LayoutSubgraph CloneMeasuredSubgraph(LayoutSubgraph subgraph)
+    private LayoutSubgraph CloneMeasuredSubgraph(LayoutSubgraph subgraph, LayoutOptions parentOptions)
     {
         var clone = LayoutCloneUtility.CloneSubgraph(subgraph);
-        clone.Graph = Run(clone.Graph, CreateSubgraphOptions(subgraph));
+        clone.Graph = Run(clone.Graph, CreateSubgraphOptions(parentOptions, subgraph));
         return clone;
     }
 
-    private static LayoutOptions CreateSubgraphOptions(LayoutSubgraph subgraph)
+    /// <summary>
+    /// Derives per-subgraph options by cloning the parent options and
+    /// overriding only what the subgraph explicitly specifies. Previously
+    /// this started from defaults, silently resetting every field the
+    /// subgraph didn't mention (NodeWidth, title margins, etc.).
+    /// </summary>
+    private static LayoutOptions CreateSubgraphOptions(LayoutOptions parent, LayoutSubgraph subgraph)
     {
-        return new LayoutOptions
+        var clone = parent.Clone();
+        clone.Direction = subgraph.Direction;
+        if (subgraph.Spacing is { } spacing)
         {
-            Direction = subgraph.Direction,
-            NodeSpacing = subgraph.Spacing != null && subgraph.Spacing.NodeSeparation > 0f
-                ? subgraph.Spacing.NodeSeparation
-                : new LayoutOptions().NodeSpacing,
-            RankSpacing = subgraph.Spacing != null && subgraph.Spacing.RankSeparation > 0f
-                ? subgraph.Spacing.RankSeparation
-                : new LayoutOptions().RankSpacing,
-            OuterMarginX = subgraph.Spacing?.MarginX ?? 0f,
-            OuterMarginY = subgraph.Spacing?.MarginY ?? 0f
-        };
+            if (spacing.NodeSeparation > 0f) clone.NodeSpacing = spacing.NodeSeparation;
+            if (spacing.RankSeparation > 0f) clone.RankSpacing = spacing.RankSeparation;
+            clone.OuterMarginX = spacing.MarginX;
+            clone.OuterMarginY = spacing.MarginY;
+        }
+        return clone;
     }
 }

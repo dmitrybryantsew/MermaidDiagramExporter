@@ -3,88 +3,289 @@
         xmlns:settings="clr-namespace:MermaidDiagramExporter.Gui.Settings"
         x:Class="MermaidDiagramExporter.Gui.Settings.SettingsWindow"
         Title="Project Settings"
-        Width="520"
-        Height="600"
+        Width="560"
+        Height="640"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
   <Border Padding="20">
     <Grid RowDefinitions="*,Auto">
-      <ScrollViewer Grid.Row="0">
-        <StackPanel Spacing="16">
-          <!-- Project Identification -->
-          <TextBlock Text="Project" FontWeight="Bold" FontSize="16" />
-          <Grid ColumnDefinitions="Auto,*">
-            <TextBlock Grid.Column="0" Text="Source Folder:" VerticalAlignment="Center" Width="120" />
-            <TextBlock Grid.Column="1" x:Name="SourceFolderText" TextWrapping="Wrap" Opacity="0.7" />
-          </Grid>
+      <TabControl Grid.Row="0">
 
-          <!-- Cache Settings -->
-          <TextBlock Text="Cache" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
-          <CheckBox x:Name="AutoSaveCacheCheck" Content="Auto-save relationship cache after scan" />
-          <CheckBox x:Name="AutoSaveSourceBundleCheck" Content="Auto-save source bundle after scan" />
-          <CheckBox x:Name="PromptLoadCacheCheck" Content="Prompt to load from cache when reopening project" />
-          <Grid ColumnDefinitions="Auto,*">
-            <TextBlock Grid.Column="0" Text="On source change:" VerticalAlignment="Center" Width="120" />
-            <ComboBox x:Name="CacheInvalidationCombo" Grid.Column="1" Width="260" HorizontalAlignment="Left">
-              <ComboBoxItem Content="Warn and prompt to rescan" />
-              <ComboBoxItem Content="Automatically rescan" />
-              <ComboBoxItem Content="Ignore (use cache regardless)" />
-            </ComboBox>
-          </Grid>
-          <Grid ColumnDefinitions="Auto,*,Auto">
-            <TextBlock Grid.Column="0" Text="Cache folder:" VerticalAlignment="Center" Width="120" />
-            <TextBox Grid.Column="1" x:Name="CacheFolderText" PlaceholderText="(default)" IsReadOnly="True" />
-            <Button Grid.Column="2" x:Name="BrowseCacheButton" Content="Browse..." Margin="8,0,0,0" />
-          </Grid>
-          <Grid ColumnDefinitions="Auto,*,Auto">
-            <TextBlock Grid.Column="0" Text="Bundle folder:" VerticalAlignment="Center" Width="120" />
-            <TextBox Grid.Column="1" x:Name="BundleFolderText" PlaceholderText="(default)" IsReadOnly="True" />
-            <Button Grid.Column="2" x:Name="BrowseBundleButton" Content="Browse..." Margin="8,0,0,0" />
-          </Grid>
-
-          <!-- Search Settings -->
-          <TextBlock Text="Search" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
-          <CheckBox x:Name="SearchCaseSensitiveCheck" Content="Case-sensitive search" />
-          <CheckBox x:Name="SearchIncludeMembersCheck" Content="Include member names in semantic search" />
-          <CheckBox x:Name="AutoFocusSearchCheck" Content="Auto-focus canvas on search results" />
-
-          <!-- Stereotype Settings -->
-          <TextBlock Text="Stereotypes" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
-          <CheckBox x:Name="ApplyCustomStereotypesCheck" Content="Apply custom stereotype rules" />
-          <Border BorderBrush="#3A4250" BorderThickness="1" CornerRadius="4" Padding="8">
-            <Grid RowDefinitions="Auto,*">
-              <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0" Text="Rules" FontWeight="Bold" Margin="0,0,0,4" />
-                <Button Grid.Column="1" x:Name="AddStereotypeRuleButton" Content="+ Add" Padding="8,2" />
+        <!-- ═══ General: project, cache, search, code extraction ═══ -->
+        <TabItem Header="General">
+          <ScrollViewer>
+            <StackPanel Spacing="16" Margin="0,12,0,0">
+              <!-- Project Identification -->
+              <TextBlock Text="Project" FontWeight="Bold" FontSize="16" />
+              <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Grid.Column="0" Text="Source Folder:" VerticalAlignment="Center" Width="120" />
+                <TextBlock Grid.Column="1" x:Name="SourceFolderText" TextWrapping="Wrap" Opacity="0.7" />
               </Grid>
-              <ListBox Grid.Row="1" x:Name="StereotypeRulesList" Height="160" BorderThickness="0" Background="Transparent">
-                <ListBox.DataTemplates>
-                  <DataTemplate DataType="settings:StereotypeRule">
-                    <StackPanel>
-                      <Grid ColumnDefinitions="*,100,80,Auto">
-                        <TextBox Grid.Column="0" Text="{Binding Pattern}" PlaceholderText="Regex pattern" Margin="0,0,4,0" />
-                        <TextBox Grid.Column="1" Text="{Binding Label}" PlaceholderText="Label" Margin="0,0,4,0" />
-                        <TextBox Grid.Column="2" Text="{Binding ColorHex}" PlaceholderText="#RRGGBB" Margin="0,0,4,0" />
-                        <Button Grid.Column="3" Content="x" Tag="{Binding}" Click="OnRemoveStereotypeRule" />
-                      </Grid>
-                      <TextBlock x:Name="PatternErrorText" FontSize="10" Foreground="#FF6040" Margin="0,2,0,0" IsVisible="False" TextWrapping="Wrap" />
-                    </StackPanel>
-                  </DataTemplate>
-                </ListBox.DataTemplates>
-              </ListBox>
-            </Grid>
-          </Border>
 
-          <!-- Stereotype validation errors -->
-          <TextBlock x:Name="StereotypeErrorText" FontSize="11" Foreground="#FF6040" Margin="0,4,0,0" IsVisible="False" TextWrapping="Wrap" />
+              <!-- Cache Settings -->
+              <TextBlock Text="Cache" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
+              <CheckBox x:Name="AutoSaveCacheCheck" Content="Auto-save relationship cache after scan" />
+              <CheckBox x:Name="AutoSaveSourceBundleCheck" Content="Auto-save source bundle after scan" />
+              <CheckBox x:Name="PromptLoadCacheCheck" Content="Prompt to load from cache when reopening project" />
+              <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Grid.Column="0" Text="On source change:" VerticalAlignment="Center" Width="120" />
+                <ComboBox x:Name="CacheInvalidationCombo" Grid.Column="1" Width="260" HorizontalAlignment="Left">
+                  <ComboBoxItem Content="Warn and prompt to rescan" />
+                  <ComboBoxItem Content="Automatically rescan" />
+                  <ComboBoxItem Content="Ignore (use cache regardless)" />
+                </ComboBox>
+              </Grid>
+              <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Text="Cache folder:" VerticalAlignment="Center" Width="120" />
+                <TextBox Grid.Column="1" x:Name="CacheFolderText" PlaceholderText="(default)" IsReadOnly="True" />
+                <Button Grid.Column="2" x:Name="BrowseCacheButton" Content="Browse..." Margin="8,0,0,0" />
+              </Grid>
+              <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Text="Bundle folder:" VerticalAlignment="Center" Width="120" />
+                <TextBox Grid.Column="1" x:Name="BundleFolderText" PlaceholderText="(default)" IsReadOnly="True" />
+                <Button Grid.Column="2" x:Name="BrowseBundleButton" Content="Browse..." Margin="8,0,0,0" />
+              </Grid>
 
-          <!-- Canvas Settings -->
-          <TextBlock Text="Canvas" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
-          <CheckBox x:Name="PersistLayoutCheck" Content="Persist manual layout positions" />
-          <CheckBox x:Name="EnableDraggingCheck" Content="Enable node drag-to-reposition" />
-          <CheckBox x:Name="ShowMinimapCheck" Content="Show minimap" />
-        </StackPanel>
-      </ScrollViewer>
+              <!-- Search Settings -->
+              <TextBlock Text="Search" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
+              <CheckBox x:Name="SearchCaseSensitiveCheck" Content="Case-sensitive search" />
+              <CheckBox x:Name="SearchIncludeMembersCheck" Content="Include member names in semantic search" />
+              <CheckBox x:Name="AutoFocusSearchCheck" Content="Auto-focus canvas on search results" />
+
+              <!-- Code Extraction Settings -->
+              <TextBlock Text="Code Extraction" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
+              <TextBlock Text="Where &quot;Get Code&quot; actions (Analyze Mode right-click on a class) send the assembled source. Toggle quickly with Ctrl+Shift+C." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,8" />
+              <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Grid.Column="0" Text="Output target:" VerticalAlignment="Center" Width="120" />
+                <ComboBox Grid.Column="1" x:Name="CodeExtractionOutputCombo" Width="200" HorizontalAlignment="Left">
+                  <ComboBoxItem Content="Copy to Clipboard" />
+                  <ComboBoxItem Content="Save to .txt file" />
+                </ComboBox>
+              </Grid>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <!-- ═══ Diagram: canvas behavior, layout engine, edge styles ═══ -->
+        <TabItem Header="Diagram">
+          <ScrollViewer>
+            <StackPanel Spacing="16" Margin="0,12,0,0">
+              <!-- Canvas Settings -->
+              <TextBlock Text="Canvas" FontWeight="Bold" FontSize="16" />
+              <CheckBox x:Name="PersistLayoutCheck" Content="Persist manual layout positions" />
+              <CheckBox x:Name="EnableDraggingCheck" Content="Enable node drag-to-reposition" />
+              <CheckBox x:Name="ShowMinimapCheck" Content="Show minimap" />
+              <CheckBox x:Name="AggregateHighwaysCheck" Content="Aggregate inter-namespace edges into highways" ToolTip.Tip="One thick labeled edge per namespace pair instead of N individual lines. Selecting a class re-expands its edges." />
+
+              <!-- Layout Engine -->
+              <TextBlock Text="Layout Engine" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" Foreground="#FFA040" />
+              <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Engine:" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="0" Grid.Column="1" x:Name="EngineCombo" Width="320" HorizontalAlignment="Left">
+                  <ComboBoxItem Content="Layered (default)" />
+                  <ComboBoxItem Content="Compound (experimental)" />
+                  <ComboBoxItem Content="MSAGL — hierarchy (Sugiyama)" />
+                  <ComboBoxItem Content="MSAGL — distance map (MDS)" />
+                  <ComboBoxItem Content="Force-directed — proximity" />
+                  <ComboBoxItem Content="Zone-first — zones by coupling + hierarchy inside" />
+                </ComboBox>
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="Layered: original cluster-as-supernode engine. Compound: ranks all nodes globally with cluster-contiguity constraints. MSAGL hierarchy: Sugiyama framework (same family as Mermaid's dagre) with native cluster containment — best for inheritance flow. MSAGL distance map: 2D distance ≈ graph distance, zones emerge from topology. Force-directed: own spring/repulsion engine with cluster gravity — connected classes pull together, unrelated ones repel, namespaces stay cohesive. Zone-first: places namespace zones with the force engine (coupled zones adjacent, unrelated far apart), then lays out each zone's interior independently — zone boxes never overlap. Deterministic. Requires re-scan to take effect." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,0" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Partitioning:" VerticalAlignment="Center" Margin="0,8,0,0" />
+                <ComboBox Grid.Row="2" Grid.Column="1" x:Name="MsaglPartitionCombo" Width="320" HorizontalAlignment="Left" Margin="0,8,0,0">
+                  <ComboBoxItem Content="None" />
+                  <ComboBoxItem Content="Separate Application / Tests clusters" />
+                  <ComboBoxItem Content="Partition by first-level namespace" />
+                </ComboBox>
+                <TextBlock Grid.Row="3" Grid.Column="1" Text="MSAGL hierarchy (Sugiyama) engine only. 'Application / Tests' splits classes by test-namespace patterns (*.Tests, *.Test). 'First-level namespace' auto-detects the common namespace prefix and creates one column per sub-namespace (e.g. PFE.Data, PFE.Systems)." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,0" />
+
+                <CheckBox Grid.Row="4" Grid.Column="1" x:Name="ForcePreventOverlapCheck" Content="Keep namespace clusters non-overlapping (Force engine)" Margin="0,10,0,0" />
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Zone interior:" VerticalAlignment="Center" Margin="0,8,0,0" />
+                <ComboBox Grid.Row="5" Grid.Column="1" x:Name="ZoneFirstMicroCombo" Width="320" HorizontalAlignment="Left" Margin="0,8,0,0">
+                  <ComboBoxItem Content="Sugiyama — hierarchy inside zones" />
+                  <ComboBoxItem Content="Force — proximity inside zones" />
+                </ComboBox>
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Zone gap:" VerticalAlignment="Center" Margin="0,8,0,0" />
+                <Grid Grid.Row="6" Grid.Column="1" ColumnDefinitions="Auto,*" Margin="0,8,0,0">
+                  <TextBox Grid.Column="0" x:Name="ZoneFirstSpacingText" Width="80" HorizontalAlignment="Left" />
+                  <TextBlock Grid.Column="1" Text="px between zone boxes (Zone-first engine only)" FontSize="11" Opacity="0.6" VerticalAlignment="Center" Margin="10,0,0,0" />
+                </Grid>
+              </Grid>
+
+              <!-- Edge Styles -->
+              <TextBlock Text="Edge Styles" FontWeight="Bold" FontSize="16" Margin="0,8,0,0" />
+              <TextBlock Text="Per-kind color (hex) and arrowhead shape. UML defaults: inheritance/implements = hollow triangle, association = solid arrow." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,8" />
+
+              <Grid ColumnDefinitions="Auto,140,160" RowDefinitions="Auto,Auto,Auto" Margin="0,0,0,0">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Inheritance" VerticalAlignment="Center" Margin="0,0,12,4" />
+                <TextBox  Grid.Row="0" Grid.Column="1" x:Name="InheritanceColorText" Watermark="#RRGGBB" Margin="0,0,8,4" />
+                <ComboBox  Grid.Row="0" Grid.Column="2" x:Name="InheritanceArrowCombo" Margin="0,0,0,4">
+                  <ComboBoxItem Content="Solid Arrow" />
+                  <ComboBoxItem Content="Hollow Triangle" />
+                  <ComboBoxItem Content="Hollow Diamond" />
+                  <ComboBoxItem Content="Filled Diamond" />
+                  <ComboBoxItem Content="None" />
+                </ComboBox>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Implements" VerticalAlignment="Center" Margin="0,0,12,4" />
+                <TextBox  Grid.Row="1" Grid.Column="1" x:Name="ImplementsColorText" Watermark="#RRGGBB" Margin="0,0,8,4" />
+                <ComboBox  Grid.Row="1" Grid.Column="2" x:Name="ImplementsArrowCombo" Margin="0,0,0,4">
+                  <ComboBoxItem Content="Solid Arrow" />
+                  <ComboBoxItem Content="Hollow Triangle" />
+                  <ComboBoxItem Content="Hollow Diamond" />
+                  <ComboBoxItem Content="Filled Diamond" />
+                  <ComboBoxItem Content="None" />
+                </ComboBox>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Association" VerticalAlignment="Center" Margin="0,0,12,4" />
+                <TextBox  Grid.Row="2" Grid.Column="1" x:Name="AssociationColorText" Watermark="#RRGGBB" Margin="0,0,8,4" />
+                <ComboBox  Grid.Row="2" Grid.Column="2" x:Name="AssociationArrowCombo" Margin="0,0,0,4">
+                  <ComboBoxItem Content="Solid Arrow" />
+                  <ComboBoxItem Content="Hollow Triangle" />
+                  <ComboBoxItem Content="Hollow Diamond" />
+                  <ComboBoxItem Content="Filled Diamond" />
+                  <ComboBoxItem Content="None" />
+                </ComboBox>
+              </Grid>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <!-- ═══ Stereotypes ═══ -->
+        <TabItem Header="Stereotypes" x:Name="StereotypesTab">
+          <ScrollViewer>
+            <StackPanel Spacing="16" Margin="0,12,0,0">
+              <TextBlock Text="Stereotypes" FontWeight="Bold" FontSize="16" />
+              <CheckBox x:Name="ApplyCustomStereotypesCheck" Content="Apply custom stereotype rules" />
+              <Border BorderBrush="#3A4250" BorderThickness="1" CornerRadius="4" Padding="8">
+                <Grid RowDefinitions="Auto,*">
+                  <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="Rules" FontWeight="Bold" Margin="0,0,0,4" />
+                    <Button Grid.Column="1" x:Name="AddStereotypeRuleButton" Content="+ Add" Padding="8,2" />
+                  </Grid>
+                  <ListBox Grid.Row="1" x:Name="StereotypeRulesList" Height="280" BorderThickness="0" Background="Transparent">
+                    <ListBox.DataTemplates>
+                      <DataTemplate DataType="settings:StereotypeRule">
+                        <StackPanel>
+                          <Grid ColumnDefinitions="*,100,80,Auto">
+                            <TextBox Grid.Column="0" Text="{Binding Pattern}" PlaceholderText="Regex pattern" Margin="0,0,4,0" />
+                            <TextBox Grid.Column="1" Text="{Binding Label}" PlaceholderText="Label" Margin="0,0,4,0" />
+                            <TextBox Grid.Column="2" Text="{Binding ColorHex}" PlaceholderText="#RRGGBB" Margin="0,0,4,0" />
+                            <Button Grid.Column="3" Content="x" Tag="{Binding}" Click="OnRemoveStereotypeRule" />
+                          </Grid>
+                          <TextBlock x:Name="PatternErrorText" FontSize="10" Foreground="#FF6040" Margin="0,2,0,0" IsVisible="False" TextWrapping="Wrap" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ListBox.DataTemplates>
+                  </ListBox>
+                </Grid>
+              </Border>
+
+              <!-- Stereotype validation errors -->
+              <TextBlock x:Name="StereotypeErrorText" FontSize="11" Foreground="#FF6040" Margin="0,4,0,0" IsVisible="False" TextWrapping="Wrap" />
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <!-- ═══ Shortcuts ═══ -->
+        <TabItem Header="Shortcuts">
+          <ScrollViewer>
+            <StackPanel Spacing="16" Margin="0,12,0,0">
+              <TextBlock Text="Design Mode Shortcuts" FontWeight="Bold" FontSize="16" />
+              <TextBlock Text="Press a key in the text field to rebind. Leave blank for default." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,8" />
+              <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="140,60,140,60">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Select" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="0" Grid.Column="1" x:Name="ShortcutSelect" Width="50" FontSize="12" />
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Inheritance" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="0" Grid.Column="3" x:Name="ShortcutEdgeInheritance" Width="50" FontSize="12" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Class" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="1" Grid.Column="1" x:Name="ShortcutClass" Width="50" FontSize="12" />
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Implements" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="1" Grid.Column="3" x:Name="ShortcutEdgeImplements" Width="50" FontSize="12" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Interface" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="2" Grid.Column="1" x:Name="ShortcutInterface" Width="50" FontSize="12" />
+                <TextBlock Grid.Row="2" Grid.Column="2" Text="Association" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="2" Grid.Column="3" x:Name="ShortcutEdgeAssociation" Width="50" FontSize="12" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Enum" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="3" Grid.Column="1" x:Name="ShortcutEnum" Width="50" FontSize="12" />
+                <TextBlock Grid.Row="3" Grid.Column="2" Text="Dependency" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="3" Grid.Column="3" x:Name="ShortcutEdgeDependency" Width="50" FontSize="12" />
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Struct" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="4" Grid.Column="1" x:Name="ShortcutStruct" Width="50" FontSize="12" />
+                <TextBlock Grid.Row="4" Grid.Column="2" Text="Aggregation" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="4" Grid.Column="3" x:Name="ShortcutEdgeAggregation" Width="50" FontSize="12" />
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Abstract" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="5" Grid.Column="1" x:Name="ShortcutAbstractClass" Width="50" FontSize="12" />
+                <TextBlock Grid.Row="5" Grid.Column="2" Text="Composition" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="5" Grid.Column="3" x:Name="ShortcutEdgeComposition" Width="50" FontSize="12" />
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Static" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="6" Grid.Column="1" x:Name="ShortcutStaticClass" Width="50" FontSize="12" />
+
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="Namespace" VerticalAlignment="Center" FontSize="12" />
+                <TextBox  Grid.Row="7" Grid.Column="1" x:Name="ShortcutNamespace" Width="50" FontSize="12" />
+              </Grid>
+              <Button x:Name="ResetShortcutsButton" Content="Reset to Defaults" Margin="0,8,0,0" HorizontalAlignment="Right" />
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <!-- ═══ LLM ═══ -->
+        <TabItem Header="LLM">
+          <ScrollViewer>
+            <StackPanel Spacing="16" Margin="0,12,0,0">
+              <TextBlock Text="LLM" FontWeight="Bold" FontSize="16" />
+              <TextBlock Text="Configure an LLM provider for generating class diagrams from natural language prompts in Design Mode." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,2,0,8" />
+
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Provider:" VerticalAlignment="Center" Width="120" />
+                <ComboBox Grid.Row="0" Grid.Column="1" x:Name="LlmProviderCombo" Width="260" HorizontalAlignment="Left" SelectionChanged="OnLlmProviderChanged">
+                  <ComboBoxItem Content="OpenAI-NIM Proxy" />
+                  <ComboBoxItem Content="OpenRouter" />
+                  <ComboBoxItem Content="Chutes" />
+                  <ComboBoxItem Content="Custom" />
+                </ComboBox>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Base URL:" VerticalAlignment="Center" Width="120" />
+                <TextBox  Grid.Row="1" Grid.Column="1" x:Name="LlmBaseUrlText" Watermark="http://... (auto-filled from provider)" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="API Key:" VerticalAlignment="Center" Width="120" />
+                <TextBox  Grid.Row="2" Grid.Column="1" x:Name="LlmApiKeyText" Watermark="sk-... or your key" PasswordChar="*" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Model:" VerticalAlignment="Center" Width="120" />
+                <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto">
+                  <TextBox  Grid.Column="0" x:Name="LlmModelText" Watermark="e.g. nim:z-ai/glm-5.1" />
+                  <Button Grid.Column="1" x:Name="LlmRefreshModelsButton" Content="&#x1F504;" MinWidth="36" Margin="4,0,0,0" ToolTip.Tip="Refresh model list from provider" Click="OnLlmRefreshModels" />
+                </Grid>
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Temperature:" VerticalAlignment="Center" Width="120" />
+                <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="Auto,Auto">
+                  <Slider x:Name="LlmTemperatureSlider" Minimum="0" Maximum="2" Value="0.7" Width="180" HorizontalAlignment="Left" />
+                  <TextBlock x:Name="LlmTemperatureLabel" Text="0.7" VerticalAlignment="Center" Margin="8,0,0,0" Width="32" />
+                </Grid>
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Max tokens:" VerticalAlignment="Center" Width="120" />
+                <TextBox  Grid.Row="5" Grid.Column="1" x:Name="LlmMaxTokensText" Text="2048" Width="100" HorizontalAlignment="Left" />
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Timeout (s):" VerticalAlignment="Center" Width="120" />
+                <TextBox  Grid.Row="6" Grid.Column="1" x:Name="LlmTimeoutText" Text="120" Width="100" HorizontalAlignment="Left" />
+              </Grid>
+
+              <!-- Model picker dropdown (populated on Refresh) -->
+              <TextBlock Text="Available Models" FontWeight="SemiBold" Margin="0,8,0,4" />
+              <ListBox x:Name="LlmModelsList" Height="120" BorderThickness="1" BorderBrush="#3A4250" SelectionChanged="OnLlmModelSelected" />
+              <TextBlock x:Name="LlmModelsStatus" Text="" FontSize="11" Opacity="0.6" Margin="0,2,0,0" />
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+      </TabControl>
 
       <!-- Buttons -->
       <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">

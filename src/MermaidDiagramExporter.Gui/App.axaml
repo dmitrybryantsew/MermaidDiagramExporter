@@ -7,4 +7,30 @@
     <Application.Styles>
         <FluentTheme />
     </Application.Styles>
+
+    <!-- Chrome palette tokens. Initialized with Dark values; ThemeService.Apply
+         overwrites them at runtime when the user picks a theme. Consumed by
+         {DynamicResource XyzBrush} in XAML. -->
+    <Application.Resources>
+        <SolidColorBrush x:Key="ChromeBgBrush" Color="#1E2329"/>
+        <SolidColorBrush x:Key="ChromeBgAltBrush" Color="#252B33"/>
+        <SolidColorBrush x:Key="ChromeBorderBrush" Color="#3A4250"/>
+        <SolidColorBrush x:Key="ChromeTextBrush" Color="#E0E6EC"/>
+        <SolidColorBrush x:Key="ChromeTextMutedBrush" Color="#889098"/>
+        <SolidColorBrush x:Key="StatusBarBgBrush" Color="#15191E"/>
+        <SolidColorBrush x:Key="StatusBarTextBrush" Color="#889098"/>
+        <SolidColorBrush x:Key="AccentPrimaryBrush" Color="#4CAF50"/>
+        <SolidColorBrush x:Key="AccentSecondaryBrush" Color="#2196F3"/>
+        <SolidColorBrush x:Key="AccentWarningBrush" Color="#FF9800"/>
+        <SolidColorBrush x:Key="AccentAiBrush" Color="#9C27B0"/>
+        <SolidColorBrush x:Key="AccentSelectionBrush" Color="#FF8C00"/>
+        <SolidColorBrush x:Key="ModeInactiveBgBrush" Color="#3A4250"/>
+        <SolidColorBrush x:Key="MatrixHeaderBgBrush" Color="#252B33"/>
+        <SolidColorBrush x:Key="MatrixHeaderTextBrush" Color="#B0B8C4"/>
+        <SolidColorBrush x:Key="MatrixCellBorderBrush" Color="#3A4250"/>
+        <SolidColorBrush x:Key="MatrixTextBrush" Color="#E0E4EA"/>
+        <SolidColorBrush x:Key="MatrixCellBgBrush" Color="#1E242C"/>
+        <SolidColorBrush x:Key="MatrixCellAltBrush" Color="#1A1F26"/>
+        <SolidColorBrush x:Key="MatrixHotCellBrush" Color="#FF6040"/>
+    </Application.Resources>
 </Application>

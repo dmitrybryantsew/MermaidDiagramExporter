@@ -4,8 +4,8 @@
              Width="200"
              Height="150"
              IsVisible="False">
-  <Border Background="#15191E"
-          BorderBrush="#3A4250"
+  <Border Background="{DynamicResource ChromeBgAltBrush}"
+          BorderBrush="{DynamicResource ChromeBorderBrush}"
           BorderThickness="1"
           CornerRadius="4">
     <Panel>
@@ -14,7 +14,7 @@
       <!-- Viewport overlay rectangle -->
       <Canvas x:Name="ViewportOverlay">
         <Border x:Name="ViewportRect"
-                BorderBrush="#FFE040"
+                BorderBrush="{DynamicResource AccentSelectionBrush}"
                 BorderThickness="1"
                 Background="#FFE04020"
                 IsHitTestVisible="False" />
