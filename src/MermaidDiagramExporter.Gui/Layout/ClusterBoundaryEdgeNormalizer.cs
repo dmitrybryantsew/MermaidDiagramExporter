@@ -160,12 +160,12 @@ public static class ClusterBoundaryEdgeNormalizer
             Label = peerClusterId,
             Role = role,
             SourceNodeId = string.Empty,
-            Width = options.ClusterAnchorWidth,
-            Height = options.ClusterAnchorHeight,
-            EstimatedWidth = options.ClusterAnchorWidth,
-            EstimatedHeight = options.ClusterAnchorHeight,
-            MeasuredWidth = options.ClusterAnchorWidth,
-            MeasuredHeight = options.ClusterAnchorHeight,
+            Width = options.Pipeline.ClusterAnchorWidth,
+            Height = options.Pipeline.ClusterAnchorHeight,
+            EstimatedWidth = options.Pipeline.ClusterAnchorWidth,
+            EstimatedHeight = options.Pipeline.ClusterAnchorHeight,
+            MeasuredWidth = options.Pipeline.ClusterAnchorWidth,
+            MeasuredHeight = options.Pipeline.ClusterAnchorHeight,
             IsMeasured = true
         };
 

@@ -14,10 +14,16 @@ public partial class NamespaceMatrixView : UserControl
     private NamespaceMatrix? _matrix;
     private const int CellSize = 28;
     private const int HeaderSize = 120;
-    private readonly IBrush _headerBgBrush = new SolidColorBrush(Color.Parse("#252B33"));
-    private readonly IBrush _headerTextBrush = new SolidColorBrush(Color.Parse("#B0B8C4"));
-    private readonly IBrush _cellBorderBrush = new SolidColorBrush(Color.Parse("#3A4250"));
-    private readonly IBrush _textBrush = new SolidColorBrush(Color.Parse("#E0E4EA"));
+
+    // Brushes are pulled from the live Application.Resources so theme
+    // changes (which rewrite those resources) propagate automatically.
+    private IBrush _headerBgBrush => (IBrush)Application.Current!.Resources["MatrixHeaderBgBrush"];
+    private IBrush _headerTextBrush => (IBrush)Application.Current!.Resources["MatrixHeaderTextBrush"];
+    private IBrush _cellBorderBrush => (IBrush)Application.Current!.Resources["MatrixCellBorderBrush"];
+    private IBrush _textBrush => (IBrush)Application.Current!.Resources["MatrixTextBrush"];
+    private IBrush _cellBgBrush => (IBrush)Application.Current!.Resources["MatrixCellBgBrush"];
+    private IBrush _cellAltBrush => (IBrush)Application.Current!.Resources["MatrixCellAltBrush"];
+    private IBrush _hotCellBrush => (IBrush)Application.Current!.Resources["MatrixHotCellBrush"];
 
     /// <summary>
     /// Raised when the user clicks a cell. Arguments: (fromNamespace, toNamespace).
@@ -66,27 +72,31 @@ public partial class NamespaceMatrixView : UserControl
                 float x = HeaderSize + col * CellSize;
                 float y = HeaderSize + row * CellSize;
 
-                // Cell background
+                // Cell background — colors come from the active palette
                 IBrush cellBrush;
                 if (row == col)
                 {
-                    cellBrush = new SolidColorBrush(Color.Parse("#1E242C"));
+                    cellBrush = _cellBgBrush;
                 }
                 else if (circularPairs.Contains((row, col)))
                 {
-                    cellBrush = new SolidColorBrush(Color.Parse("#FF6040"));
+                    cellBrush = _hotCellBrush;
                 }
                 else
                 {
                     int count = _matrix.GetCount(row, col);
                     if (count == 0)
-                        cellBrush = new SolidColorBrush(Color.Parse("#1A1F26"));
+                        cellBrush = _cellAltBrush;
                     else
                     {
+                        // Heat-map intensity derived from the active palette's
+                        // cell-bg color. Dark theme gets a green-tinted ramp;
+                        // Light theme gets a darker-tinted ramp on white.
                         float intensity = (float)count / maxCount;
-                        byte r = (byte)(0x1A + intensity * 0x40);
-                        byte g = (byte)(0x30 + intensity * 0x80);
-                        byte b = (byte)(0x20 + intensity * 0x20);
+                        var baseRgb = ParseColor(_cellBgBrush);
+                        byte r = (byte)Math.Clamp(baseRgb.r + intensity * 60, 0, 255);
+                        byte g = (byte)Math.Clamp(baseRgb.g + intensity * 100, 0, 255);
+                        byte b = (byte)Math.Clamp(baseRgb.b + intensity * 40, 0, 255);
                         cellBrush = new SolidColorBrush(Color.FromArgb(255, r, g, b));
                     }
                 }
@@ -186,5 +196,16 @@ public partial class NamespaceMatrixView : UserControl
         if (parts.Length >= 2)
             return ".." + parts[^2] + "." + parts[^1];
         return ns[..20] + "…";
+    }
+
+    /// <summary>
+    /// Extracts the RGB triple from a SolidColorBrush. Returns (0,0,0) for
+    /// non-SolidColorBrush inputs (shouldn't happen for our palette).
+    /// </summary>
+    private static (byte r, byte g, byte b) ParseColor(IBrush brush)
+    {
+        if (brush is SolidColorBrush scb)
+            return (scb.Color.R, scb.Color.G, scb.Color.B);
+        return (0, 0, 0);
     }
 }

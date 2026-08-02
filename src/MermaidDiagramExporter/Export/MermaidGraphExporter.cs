@@ -18,8 +18,15 @@ public static class MermaidGraphExporter
             ValidateInputs = true
         };
 
+        // Mermaid frontmatter uses YAML syntax — colons in the title break parsing
+        // (e.g. "Focused: Foo (depth 1)" is parsed as a mapping key). Strip colons
+        // from the title to keep the frontmatter valid.
+        string safeTitle = string.IsNullOrEmpty(graph.Title)
+            ? "Diagram"
+            : graph.Title.Replace(":", " -");
+
         var builder = MermaidApi.ClassDiagram(
-            title: graph.Title,
+            title: safeTitle,
             direction: ClassDiagramDirection.LeftToRight,
             options: options);
 
@@ -31,13 +38,16 @@ public static class MermaidGraphExporter
 
         foreach (IGrouping<string, TypeNodeData> group in orderedNodes.GroupBy(node => node.Namespace ?? string.Empty))
         {
+            string namespaceLabel = string.IsNullOrEmpty(group.Key)
+                ? "Global"
+                : group.Key.Replace('<', '_').Replace('>', '_');
             if (string.IsNullOrEmpty(group.Key))
             {
                 AddClasses(builder, group, classMap);
             }
             else
             {
-                builder.AddNamespace(group.Key, namespaceBuilder => AddClasses(namespaceBuilder, group, classMap));
+                builder.AddNamespace(namespaceLabel, namespaceBuilder => AddClasses(namespaceBuilder, group, classMap));
             }
         }
 

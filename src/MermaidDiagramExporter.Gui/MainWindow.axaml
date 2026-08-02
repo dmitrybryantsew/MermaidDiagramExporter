@@ -3,98 +3,361 @@
         xmlns:local="clr-namespace:MermaidDiagramExporter.Gui"
         xmlns:search="clr-namespace:MermaidDiagramExporter.Gui.Search"
         xmlns:matrix="clr-namespace:MermaidDiagramExporter.Gui.Matrix"
+        xmlns:design="clr-namespace:MermaidDiagramExporter.Gui.Design"
+        xmlns:core="clr-namespace:MermaidDiagramExporter.Core"
         x:Class="MermaidDiagramExporter.Gui.MainWindow"
         Title="Mermaid Diagram Exporter" Width="1400" Height="900"
         WindowState="Maximized">
-  <Grid ColumnDefinitions="320,1,*,1,300">
-    <!-- Sidebar -->
-    <Grid Grid.Column="0" Background="#F0F0F0" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
-      <!-- Folder picker -->
-      <StackPanel Grid.Row="0" Margin="8">
-        <TextBlock Text="Source Folder" FontWeight="Bold" Margin="0,0,0,4"/>
-        <TextBox x:Name="FolderTextBox" PlaceholderText="Select folder..." IsReadOnly="True" Margin="0,0,0,4"/>
-        <Grid ColumnDefinitions="*,*">
-          <Button Grid.Column="0" Content="Browse..." Click="OnBrowse" Margin="0,0,2,0"/>
-          <Button Grid.Column="1" Content="Scan" Click="OnScan" Margin="2,0,0,0" Background="#4CAF50" Foreground="White"/>
-        </Grid>
-      </StackPanel>
+  <Grid RowDefinitions="Auto,Auto,*">
 
-      <!-- Navigation buttons -->
-      <StackPanel Grid.Row="1" Margin="8,0,8,4" Orientation="Horizontal" Spacing="4">
-        <Button x:Name="BackButton" Content="← Back" Click="OnBack" IsEnabled="False" MinWidth="70"/>
-        <Button x:Name="ForwardButton" Content="Forward →" Click="OnForward" IsEnabled="False" MinWidth="70"/>
-        <Button x:Name="ResetButton" Content="Reset" Click="OnReset" IsEnabled="False" MinWidth="50"/>
-        <Button x:Name="SettingsButton" Content="Settings" Click="OnOpenSettings" MinWidth="60"/>
-        <Button x:Name="ResetLayoutButton" Content="Reset Layout" Click="OnResetLayout" MinWidth="80"/>
-        <Button x:Name="MatrixButton" Content="Matrix" Click="OnToggleMatrix" MinWidth="60"/>
-      </StackPanel>
+    <!-- ═══ Row 0: Menu bar ═══ -->
+    <Menu Grid.Row="0">
+      <!-- File -->
+      <MenuItem Header="_File">
+        <MenuItem Header="_Open Source Folder..." HotKey="Ctrl+Shift+O" Click="OnBrowse"/>
+        <MenuItem x:Name="MenuRescan" Header="_Rescan" HotKey="F5" Click="OnScan"/>
+        <Separator/>
+        <MenuItem Click="OnDesignNew">
+          <MenuItem.Header>
+            <Grid Width="220"><TextBlock Text="New Design"/><TextBlock Text="Ctrl+N" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <MenuItem Click="OnDesignOpen">
+          <MenuItem.Header>
+            <Grid Width="220"><TextBlock Text="Open Design..."/><TextBlock Text="Ctrl+O" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <MenuItem x:Name="RecentDesignsMenu" Header="Recent _Designs"/>
+        <MenuItem x:Name="MenuSave" Click="OnDesignSave">
+          <MenuItem.Header>
+            <Grid Width="220"><TextBlock Text="Save"/><TextBlock Text="Ctrl+S" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <MenuItem x:Name="MenuSaveAs" Click="OnDesignSaveAs">
+          <MenuItem.Header>
+            <Grid Width="220"><TextBlock Text="Save _As..."/><TextBlock Text="Ctrl+Shift+S" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <Separator/>
+        <MenuItem Header="_Export">
+          <MenuItem Header="PNG Image..." Click="OnSavePng"/>
+          <MenuItem Header="Mermaid (.mmd)..." Click="OnSaveMmd"/>
+          <MenuItem Header="Markdown (.md)..." Click="OnSaveMd"/>
+          <MenuItem Header="Copy Mermaid to Clipboard" HotKey="Ctrl+Shift+M" Click="OnCopyMermaid"/>
+          <MenuItem Header="Open in Mermaid Live Editor" Click="OnOpenLiveEditor"/>
+          <Separator/>
+          <MenuItem x:Name="MenuExportDesignMermaid" Header="Design: Mermaid (.mmd)..." Click="OnDesignExportMermaid"/>
+          <MenuItem x:Name="MenuExportCSharp" Header="Design: C# Stub..." Click="OnDesignExportCSharp"/>
+          <MenuItem x:Name="MenuExportJson" Header="Design: JSON..." Click="OnDesignExportJson"/>
+        </MenuItem>
+        <Separator/>
+        <MenuItem Header="_Project Settings..." HotKey="Ctrl+OemComma" Click="OnOpenSettings"/>
+        <Separator/>
+        <MenuItem Header="E_xit" Click="OnExit"/>
+      </MenuItem>
 
-      <!-- Focus controls -->
-      <StackPanel Grid.Row="2" Margin="8,0,8,4">
-        <TextBlock Text="Focus Depth" FontWeight="Bold" Margin="0,0,0,4"/>
-        <StackPanel Orientation="Horizontal" Spacing="4">
-          <Button Content="D1" Click="OnFocusD1" MinWidth="50"/>
-          <Button Content="D2" Click="OnFocusD2" MinWidth="50"/>
-          <Button Content="D3" Click="OnFocusD3" MinWidth="50"/>
+      <!-- Edit -->
+      <MenuItem Header="_Edit">
+        <MenuItem Click="OnMenuUndo">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Undo"/><TextBlock Text="Ctrl+Z" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <MenuItem Click="OnMenuRedo">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Redo"/><TextBlock Text="Ctrl+Y" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <Separator/>
+        <MenuItem x:Name="MenuRename" Click="OnMenuRename">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Rename Class"/><TextBlock Text="F2" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <MenuItem x:Name="MenuDeleteSelection" Click="OnMenuDeleteSelection">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Delete Selection"/><TextBlock Text="Del" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <Separator/>
+        <MenuItem Click="OnToggleCodeOutput">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Toggle Code _Output Target"/><TextBlock Text="Ctrl+Shift+C" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <Separator/>
+        <MenuItem x:Name="MenuAddClass" Header="_Add Class Tool" Click="OnDesignAddClass"/>
+        <MenuItem x:Name="MenuConnect" Header="_Connect (arm edge tool)">
+          <MenuItem Header="Association" Tag="0" Click="OnMenuConnectEdge"/>
+          <MenuItem Header="Inheritance" Tag="1" Click="OnMenuConnectEdge"/>
+          <MenuItem Header="Implements" Tag="2" Click="OnMenuConnectEdge"/>
+          <MenuItem Header="Dependency" Tag="3" Click="OnMenuConnectEdge"/>
+          <MenuItem Header="Aggregation" Tag="4" Click="OnMenuConnectEdge"/>
+          <MenuItem Header="Composition" Tag="5" Click="OnMenuConnectEdge"/>
+        </MenuItem>
+      </MenuItem>
+
+      <!-- View -->
+      <MenuItem Header="_View">
+        <MenuItem Click="OnZoomIn">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Zoom _In"/><TextBlock Text="+" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <MenuItem Click="OnZoomOut">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Zoom _Out"/><TextBlock Text="−" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <MenuItem Click="OnFit">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Fit to Screen"/><TextBlock Text="F" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <Separator/>
+        <MenuItem x:Name="MatrixMenuItem" Header="_Matrix" HotKey="Ctrl+M" ToggleType="CheckBox" Click="OnToggleMatrix"/>
+        <MenuItem x:Name="ViewMinimapItem" Header="_Minimap" ToggleType="CheckBox" Click="OnToggleMinimapMenu"/>
+        <MenuItem x:Name="ViewSidebarItem" Header="_Sidebar" HotKey="Ctrl+B" ToggleType="CheckBox" IsChecked="True" Click="OnToggleSidebar"/>
+        <MenuItem x:Name="ViewInspectorItem" Header="_Inspector Panel" HotKey="Ctrl+Shift+I" ToggleType="CheckBox" IsChecked="True" Click="OnToggleInspector"/>
+        <Separator/>
+        <MenuItem Header="_Edge Filters">
+          <MenuItem x:Name="MenuFilterInheritance" Header="Inheritance" ToggleType="CheckBox" IsChecked="True" Click="OnMenuEdgeFilterChanged"/>
+          <MenuItem x:Name="MenuFilterImplements" Header="Implements" ToggleType="CheckBox" IsChecked="True" Click="OnMenuEdgeFilterChanged"/>
+          <MenuItem x:Name="MenuFilterAssociations" Header="Associations" ToggleType="CheckBox" IsChecked="True" Click="OnMenuEdgeFilterChanged"/>
+        </MenuItem>
+        <MenuItem x:Name="MenuAutoRedraw" Header="_Auto-redraw Edges on Move" ToggleType="CheckBox" IsChecked="True" Click="OnMenuAutoRedrawChanged"/>
+        <MenuItem Click="OnMenuRedrawEdges">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Redraw Edges Now"/><TextBlock Text="Ctrl+R" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <Separator/>
+        <MenuItem Header="Reset _Layout" Click="OnMenuResetLayout"/>
+      </MenuItem>
+
+      <!-- Theme -->
+      <MenuItem Header="_Theme">
+        <MenuItem x:Name="MenuThemeSystem" Header="_System (follow OS)" ToggleType="CheckBox" Click="OnMenuThemeChanged" Tag="System"/>
+        <MenuItem x:Name="MenuThemeDark" Header="_Dark" ToggleType="CheckBox" Click="OnMenuThemeChanged" Tag="Dark"/>
+        <MenuItem x:Name="MenuThemeLight" Header="_Light" ToggleType="CheckBox" Click="OnMenuThemeChanged" Tag="Light"/>
+      </MenuItem>
+
+      <!-- Navigate -->
+      <MenuItem Header="_Navigate">
+        <MenuItem x:Name="MenuNavBack" IsEnabled="False" Click="OnBack">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Back"/><TextBlock Text="Alt+←" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <MenuItem x:Name="MenuNavForward" IsEnabled="False" Click="OnForward">
+          <MenuItem.Header>
+            <Grid Width="240"><TextBlock Text="Forward"/><TextBlock Text="Alt+→" HorizontalAlignment="Right" Opacity="0.45" FontSize="11"/></Grid>
+          </MenuItem.Header>
+        </MenuItem>
+        <MenuItem x:Name="MenuNavReset" Header="_Reset View" IsEnabled="False" Click="OnReset"/>
+        <Separator/>
+        <MenuItem x:Name="MenuFocusCurrent" Header="Focus Current _Selection" Click="OnFocusCurrent"/>
+        <MenuItem x:Name="MenuFocusDepth" Header="Focus _Depth">
+          <MenuItem Header="D1" Click="OnFocusD1"/>
+          <MenuItem Header="D2" Click="OnFocusD2"/>
+          <MenuItem Header="D3" Click="OnFocusD3"/>
+        </MenuItem>
+        <MenuItem x:Name="MenuSeeds" Header="_Seeds">
+          <MenuItem Header="Add Seed" Click="OnAddSeed"/>
+          <MenuItem Header="Remove Seed" Click="OnRemoveSeed"/>
+          <MenuItem Header="Clear Seeds" Click="OnClearSeeds"/>
+        </MenuItem>
+        <Separator/>
+        <MenuItem Header="_Find Symbol..." HotKey="Ctrl+K" Click="OnFindSymbol"/>
+      </MenuItem>
+
+      <!-- Design -->
+      <MenuItem Header="_Design">
+        <MenuItem x:Name="MenuLlmGenerate" Header="_Generate from LLM..." Click="OnDesignLlmGenerate"/>
+        <MenuItem x:Name="MenuValidateDesign" Header="_Validate Diagram" Click="OnValidateDesign"/>
+        <Separator/>
+        <MenuItem x:Name="MenuImportFromScan" Header="_Import Scanned Architecture" Click="OnEditInDesignMode"
+                  ToolTip.Tip="Convert the scanned Analyze Mode graph into an editable design"/>
+      </MenuItem>
+
+      <!-- Help -->
+      <MenuItem Header="_Help">
+        <MenuItem Header="_Keyboard Shortcuts..." Click="OnShowShortcuts"/>
+        <MenuItem Header="_About" Click="OnShowAbout"/>
+      </MenuItem>
+    </Menu>
+
+    <!-- ═══ Row 1: Toolbar ═══ -->
+    <Border Grid.Row="1" Background="{DynamicResource ChromeBgBrush}" BorderBrush="{DynamicResource ChromeBorderBrush}" BorderThickness="0,0,0,1" Padding="6,4">
+      <Grid ColumnDefinitions="Auto,*">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <!-- Mode toggle -->
+          <Button x:Name="AnalyzeModeButton" Content="Analyze" Click="OnAnalyzeModeClick"
+                  Background="{DynamicResource AccentPrimaryBrush}" Foreground="White"/>
+          <Button x:Name="DesignModeButton" Content="Design" Click="OnDesignModeClick"
+                  Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" Margin="0,0,4,0"/>
+          <Border Width="1" Background="{DynamicResource ChromeBorderBrush}" Margin="4,2"/>
+          <Button x:Name="BackButton" Content="← Back" Click="OnBack" IsEnabled="False" ToolTip.Tip="Go back (Alt+Left)"/>
+          <Button x:Name="ForwardButton" Content="Forward →" Click="OnForward" IsEnabled="False" ToolTip.Tip="Go forward (Alt+Right)"/>
+          <Button x:Name="ResetButton" Content="Reset" Click="OnReset" IsEnabled="False" ToolTip.Tip="Reset to full graph"/>
         </StackPanel>
-        <TextBlock Text="Traversal" FontWeight="Bold" Margin="0,6,0,4"/>
-        <ComboBox x:Name="TraversalComboBox" MinWidth="200" SelectionChanged="OnTraversalChanged">
-          <ComboBoxItem Content="Undirected" IsSelected="True"/>
-          <ComboBoxItem Content="Outgoing"/>
-          <ComboBoxItem Content="Incoming"/>
-          <ComboBoxItem Content="All Visible"/>
-        </ComboBox>
-        <TextBlock Text="Seeds" FontWeight="Bold" Margin="0,6,0,4"/>
-        <StackPanel Orientation="Horizontal" Spacing="4">
-          <Button Content="Add Seed" Click="OnAddSeed" MinWidth="70"/>
-          <Button Content="Remove Seed" Click="OnRemoveSeed" MinWidth="80"/>
-          <Button Content="Clear" Click="OnClearSeeds" MinWidth="50"/>
-        </StackPanel>
-        <Button Content="Focus Current Selection" Click="OnFocusCurrent" Margin="0,4,0,0" Background="#2196F3" Foreground="White"/>
-      </StackPanel>
-
-      <!-- Edge filters -->
-      <StackPanel Grid.Row="3" Margin="8,0,8,4">
-        <TextBlock Text="Edge Filters" FontWeight="Bold" Margin="0,0,0,4"/>
-        <StackPanel Orientation="Horizontal" Spacing="12">
-          <CheckBox x:Name="ShowInheritanceCheck" Content="Inheritance" IsChecked="True" Click="OnEdgeFilterChanged"/>
-          <CheckBox x:Name="ShowImplementsCheck" Content="Implements" IsChecked="True" Click="OnEdgeFilterChanged"/>
-          <CheckBox x:Name="ShowAssociationsCheck" Content="Associations" IsChecked="True" Click="OnEdgeFilterChanged"/>
-        </StackPanel>
-      </StackPanel>
-
-      <!-- Search -->
-      <StackPanel Grid.Row="4" Margin="8,0,8,4">
-        <TextBlock Text="Search" FontWeight="Bold" Margin="0,0,0,4"/>
-        <TextBox x:Name="SearchTextBox" PlaceholderText="Type to highlight..." TextChanged="OnSearchTextChanged"/>
-      </StackPanel>
-
-      <!-- Semantic Search Panel -->
-      <search:SearchPanel Grid.Row="5" x:Name="SymbolSearchPanel" />
-
-      <!-- Class list -->
-      <Grid Grid.Row="6" Margin="8,0,8,0" RowDefinitions="Auto,*">
-        <TextBlock Grid.Row="0" Text="Classes" FontWeight="Bold" Margin="0,0,0,4"/>
-        <ListBox Grid.Row="1" x:Name="ClassListBox" SelectionChanged="OnClassSelected"/>
+        <TextBox Grid.Column="1" x:Name="SearchTextBox" PlaceholderText="Highlight symbols... (Ctrl+K)"
+                 Width="260" HorizontalAlignment="Right" VerticalAlignment="Center"
+                 TextChanged="OnSearchTextChanged"/>
       </Grid>
+    </Border>
 
-      <!-- Selected node info -->
-      <StackPanel Grid.Row="7" Margin="8">
-        <TextBlock Text="Selected" FontWeight="Bold" Margin="0,0,0,4"/>
-        <TextBlock x:Name="SelectedNodeText" Text="" TextWrapping="Wrap"/>
-        <Button Content="Open in Explorer" Click="OnOpenInExplorer" Margin="0,4,0,0" MinWidth="100"/>
+    <!-- ═══ Row 2: Main content ═══ -->
+    <Grid Grid.Row="2" x:Name="MainContentGrid" RowDefinitions="*,Auto">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="320"/>
+        <ColumnDefinition Width="1"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="1"/>
+        <ColumnDefinition Width="300"/>
+      </Grid.ColumnDefinitions>
+    <!-- Sidebar -->
+    <ScrollViewer Grid.Column="0" Grid.Row="0" Background="{DynamicResource ChromeBgBrush}">
+      <StackPanel>
+        <!-- Analyze Mode controls -->
+        <StackPanel x:Name="AnalyzeModePanel">
+          <!-- Folder picker -->
+          <StackPanel Margin="8">
+            <TextBlock Text="Source Folder" FontWeight="Bold" Margin="0,0,0,4"/>
+            <TextBox x:Name="FolderTextBox" PlaceholderText="Select folder..." IsReadOnly="True" Margin="0,0,0,4"/>
+            <Grid ColumnDefinitions="*,*">
+              <Button Grid.Column="0" Content="Browse..." Click="OnBrowse" Margin="0,0,2,0"/>
+              <Button Grid.Column="1" Content="Scan" Click="OnScan" Margin="2,0,0,0" Background="{DynamicResource AccentPrimaryBrush}" Foreground="White"
+                      ToolTip.Tip="Scan source folder (F5)"/>
+            </Grid>
+          </StackPanel>
+
+          <!-- Focus controls -->
+          <StackPanel Margin="8,0,8,4">
+            <TextBlock Text="Focus Depth" FontWeight="Bold" Margin="0,0,0,4"/>
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="D1" Click="OnFocusD1" MinWidth="50" Margin="0,0,4,4"/>
+              <Button Content="D2" Click="OnFocusD2" MinWidth="50" Margin="0,0,4,4"/>
+              <Button Content="D3" Click="OnFocusD3" MinWidth="50" Margin="0,0,4,4"/>
+            </WrapPanel>
+            <TextBlock Text="Traversal" FontWeight="Bold" Margin="0,6,0,4"/>
+            <ComboBox x:Name="TraversalComboBox" MinWidth="200" SelectionChanged="OnTraversalChanged">
+              <ComboBoxItem Content="Undirected" IsSelected="True"/>
+              <ComboBoxItem Content="Outgoing"/>
+              <ComboBoxItem Content="Incoming"/>
+              <ComboBoxItem Content="All Visible"/>
+            </ComboBox>
+            <TextBlock Text="Seeds" FontWeight="Bold" Margin="0,6,0,4"/>
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Add Seed" Click="OnAddSeed" MinWidth="70" Margin="0,0,4,4"/>
+              <Button Content="Remove Seed" Click="OnRemoveSeed" MinWidth="80" Margin="0,0,4,4"/>
+              <Button Content="Clear" Click="OnClearSeeds" MinWidth="50" Margin="0,0,4,4"/>
+            </WrapPanel>
+            <Button Content="Focus Current Selection" Click="OnFocusCurrent" Margin="0,4,0,0" Background="{DynamicResource AccentSecondaryBrush}" Foreground="White"/>
+          </StackPanel>
+
+          <!-- Edge filters -->
+          <StackPanel Margin="8,0,8,4">
+            <TextBlock Text="Edge Filters" FontWeight="Bold" Margin="0,0,0,4"/>
+            <WrapPanel Orientation="Horizontal">
+              <CheckBox x:Name="ShowInheritanceCheck" Content="Inheritance" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0"/>
+              <CheckBox x:Name="ShowImplementsCheck" Content="Implements" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0"/>
+              <CheckBox x:Name="ShowAssociationsCheck" Content="Associations" IsChecked="True" Click="OnEdgeFilterChanged" Margin="0,0,8,0"/>
+            </WrapPanel>
+            <CheckBox x:Name="AutoRedrawCheck" Content="Auto-redraw edges on move (Ctrl+R = manual)" IsChecked="True" Click="OnAutoRedrawChanged" Margin="0,4,0,0" FontSize="11"/>
+          </StackPanel>
+
+          <!-- Move scope (marquee + related-1D drag) -->
+          <StackPanel Margin="8,0,8,4">
+            <TextBlock Text="Move Scope" FontWeight="Bold" Margin="0,0,0,4"/>
+            <ComboBox x:Name="AnalyzeMoveScopeCombo" SelectedIndex="0" SelectionChanged="OnAnalyzeMoveScopeChanged" MinWidth="200">
+              <ComboBoxItem Content="Move: Selected only"/>
+              <ComboBoxItem Content="Move: +Related 1D"/>
+            </ComboBox>
+          </StackPanel>
+
+          <!-- Namespace Focus -->
+          <StackPanel Margin="8,0,8,4">
+            <TextBlock Text="Namespace Focus" FontWeight="Bold" Margin="0,0,0,4"/>
+            <ComboBox x:Name="NamespaceFocusCombo" MinWidth="160" SelectionChanged="OnNamespaceFocusChanged" Margin="0,0,0,4" />
+            <WrapPanel Orientation="Horizontal">
+              <CheckBox x:Name="ShowConnectedNamespacesCheck" Content="Show connected" Click="OnNamespaceFocusToggleChanged" Margin="0,0,8,0" FontSize="11"/>
+            </WrapPanel>
+            <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+              <Button Content="Depth 1" Click="OnNamespaceFocusD1" MinWidth="40" Margin="0,0,4,2" FontSize="11"/>
+              <Button Content="Depth 2" Click="OnNamespaceFocusD2" MinWidth="40" Margin="0,0,4,2" FontSize="11"/>
+              <Button Content="Depth 3" Click="OnNamespaceFocusD3" MinWidth="40" Margin="0,0,4,2" FontSize="11"/>
+            </WrapPanel>
+          </StackPanel>
+
+          <!-- Semantic Search Panel -->
+          <search:SearchPanel x:Name="SymbolSearchPanel" />
+
+          <!-- Design bridge -->
+          <StackPanel Margin="8,0,8,4">
+            <TextBlock Text="Design" FontWeight="Bold" Margin="0,0,0,4"/>
+            <Button Content="Edit in Design Mode" Click="OnEditInDesignMode" MinWidth="140" Background="{DynamicResource AccentWarningBrush}" Foreground="White"/>
+            <TextBlock Text="Convert scanned architecture to editable design" FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+          </StackPanel>
+
+          <!-- Class list -->
+          <Grid Margin="8,0,8,0" RowDefinitions="Auto,*" MinHeight="150">
+            <TextBlock Grid.Row="0" Text="Classes" FontWeight="Bold" Margin="0,0,0,4"/>
+            <ListBox Grid.Row="1" x:Name="ClassListBox" SelectionChanged="OnClassSelected"/>
+          </Grid>
+
+          <!-- Stats -->
+          <TextBlock x:Name="StatsText" Text="" Margin="8" Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Design Mode controls (W2) -->
+        <StackPanel x:Name="DesignModePanel" IsVisible="False">
+          <!-- Move scope -->
+          <StackPanel Margin="8">
+            <TextBlock Text="Move Scope" FontWeight="Bold" Margin="0,0,0,4"/>
+            <ComboBox x:Name="DesignMoveScopeCombo" SelectedIndex="0" SelectionChanged="OnDesignMoveScopeChanged" MinWidth="200">
+              <ComboBoxItem Content="Move: Selected only"/>
+              <ComboBoxItem Content="Move: +Related 1D"/>
+            </ComboBox>
+            <TextBlock Text="Drag LMB on empty canvas to marquee-select. Shift = additive." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+          </StackPanel>
+
+          <!-- Add tools -->
+          <StackPanel Margin="8">
+            <TextBlock Text="Add" FontWeight="Bold" Margin="0,0,0,4"/>
+            <WrapPanel Orientation="Horizontal">
+              <Button Content="Class" Click="OnDesignAddClass" MinWidth="60" Margin="0,0,4,4"/>
+              <Button x:Name="DesignConnectButton" Content="Connect" Click="OnDesignConnect" MinWidth="70" Margin="0,0,4,4"/>
+              <ComboBox x:Name="DesignEdgeCombo" SelectedIndex="0" SelectionChanged="OnDesignEdgeTypeSelected" MinWidth="80" Margin="0,0,4,4">
+                <ComboBoxItem Content="Edge: Assoc"/>
+                <ComboBoxItem Content="Edge: Inherit"/>
+                <ComboBoxItem Content="Edge: Implmn"/>
+                <ComboBoxItem Content="Edge: Depend"/>
+                <ComboBoxItem Content="Edge: Aggreg"/>
+                <ComboBoxItem Content="Edge: Compos"/>
+              </ComboBox>
+            </WrapPanel>
+            <TextBlock Text="Tip: Select 2 classes, then click Connect. Or pick edge type, click source, click target." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,4,0,0"/>
+            <TextBlock Text="File, Edit, Export and AI Generate actions are now in the menu bar. Press C to arm the Class tool; see Help → Keyboard Shortcuts." FontSize="11" Opacity="0.6" TextWrapping="Wrap" Margin="0,8,0,0"/>
+          </StackPanel>
+        </StackPanel>
       </StackPanel>
-
-      <!-- Stats -->
-      <TextBlock Grid.Row="8" x:Name="StatsText" Text="" Margin="8" Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
-    </Grid>
+    </ScrollViewer>
 
     <!-- Left Splitter -->
-    <GridSplitter Grid.Column="1" Background="#D0D0D0" Width="1"/>
+    <GridSplitter x:Name="LeftSplitter" Grid.Column="1" Grid.Row="0" Background="{DynamicResource ChromeBorderBrush}" Width="1"/>
 
     <!-- Graph canvas -->
-    <Grid Grid.Column="2">
+    <Grid Grid.Column="2" Grid.Row="0">
       <local:GraphCanvas x:Name="GraphCanvasView" MinWidth="100" MinHeight="100"/>
+      <!-- Inline edit TextBox overlay (Design Mode only, positioned on top of canvas) -->
+      <TextBox x:Name="InlineEditTextBox"
+               IsVisible="False"
+               Background="{DynamicResource ChromeBgAltBrush}" Foreground="{DynamicResource ChromeTextBrush}"
+               BorderBrush="#FFA040" BorderThickness="2"
+               Padding="4,2"
+               MinWidth="120"
+               FontSize="13"/>
       <!-- Minimap overlay -->
       <local:MinimapControl x:Name="MinimapView"
                             HorizontalAlignment="Right"
@@ -108,66 +371,208 @@
                                   IsVisible="False"/>
       <!-- Zoom controls overlay -->
       <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Spacing="4">
-        <Button Content="Fit" Click="OnFit" MinWidth="40"/>
-        <Button Content="+" Click="OnZoomIn" MinWidth="40"/>
-        <Button Content="−" Click="OnZoomOut" MinWidth="40"/>
-      </StackPanel>
-      <!-- Export buttons overlay (bottom-left, to avoid overlapping the minimap at bottom-right) -->
-      <StackPanel HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8" Spacing="4" ZIndex="10">
-        <Button Content="Save PNG" Click="OnSavePng" MinWidth="90"/>
-        <Button Content="Save .mmd" Click="OnSaveMmd" MinWidth="90"/>
-        <Button Content="Save .md" Click="OnSaveMd" MinWidth="90"/>
-        <Button Content="Copy Mermaid" Click="OnCopyMermaid" MinWidth="90"/>
-        <Button Content="Open Live Editor" Click="OnOpenLiveEditor" MinWidth="90"/>
+        <Button Content="Fit" Click="OnFit" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
+        <Button Content="+" Click="OnZoomIn" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
+        <Button Content="−" Click="OnZoomOut" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
       </StackPanel>
     </Grid>
 
     <!-- Right Splitter -->
-    <GridSplitter Grid.Column="3" Background="#D0D0D0" Width="1"/>
+    <GridSplitter x:Name="RightSplitter" Grid.Column="3" Grid.Row="0" Background="{DynamicResource ChromeBorderBrush}" Width="1"/>
 
-    <!-- Inspector Panel -->
-    <Grid Grid.Column="4" Background="#F5F5F5" RowDefinitions="Auto,*,*,*">
-      <TextBlock Grid.Row="0" Text="Inspector" FontWeight="Bold" Margin="8,8,8,4"/>
-      <ScrollViewer Grid.Row="1" Margin="4">
-        <StackPanel Margin="4">
-          <TextBlock Text="Node Details" FontWeight="SemiBold" Margin="0,0,0,2"/>
-          <TextBlock x:Name="InspectorNodeText" Text="" TextWrapping="Wrap"/>
+    <!-- Inspector Panel — switches between Analyze Mode and Design Mode states -->
+    <ScrollViewer x:Name="InspectorScrollViewer" Grid.Column="4" Grid.Row="0" Background="{DynamicResource ChromeBgBrush}">
+      <Grid x:Name="InspectorPanel" RowDefinitions="Auto">
+
+        <!-- Analyze Mode inspector — shows selected node info, members, relations -->
+        <StackPanel x:Name="AnalyzeInspectorState" IsVisible="True" Margin="8">
+          <TextBlock Text="Inspector" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+          <TextBlock x:Name="AnalyzeMultiSelectCount" Text="" FontWeight="SemiBold" Foreground="{DynamicResource AccentSelectionBrush}" Margin="0,0,0,8" TextWrapping="Wrap" IsVisible="False"/>
+          <TextBlock x:Name="AnalyzeInspectorTitle" Text="No node selected" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8" TextWrapping="Wrap"/>
+          <!-- Empty-state summary: shown when nothing is selected -->
+          <StackPanel x:Name="AnalyzeEmptySummary" Margin="0,8,0,0">
+            <TextBlock Text="Graph Summary" FontWeight="SemiBold" Margin="0,0,0,4"/>
+            <TextBlock x:Name="AnalyzeEmptyClassCount" Text="" Margin="0,2" FontSize="11" Opacity="0.7"/>
+            <TextBlock x:Name="AnalyzeEmptyEdgeCount" Text="" Margin="0,2" FontSize="11" Opacity="0.7"/>
+            <TextBlock Text="Click a class to inspect, or press Ctrl+K to search symbols." FontSize="11" Opacity="0.5" Margin="0,12,0,0" TextWrapping="Wrap"/>
+          </StackPanel>
+          <TextBlock x:Name="AnalyzeInspectorKind" Text="" Margin="0,2" FontSize="11" Opacity="0.7"/>
+          <TextBlock x:Name="AnalyzeInspectorFile" Text="" Margin="0,2" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+          <Button x:Name="OpenInExplorerButton" Content="Open in Explorer" Click="OnOpenInExplorer" Margin="0,4,0,8" MinWidth="100" IsEnabled="False"/>
+          <TextBlock Text="Members" FontWeight="SemiBold" Margin="0,4,0,4"/>
+          <ItemsControl x:Name="AnalyzeInspectorMembers">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" FontSize="11" FontFamily="Consolas,monospace" Margin="0,1" TextWrapping="Wrap"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="Outgoing" FontWeight="SemiBold" Margin="0,8,0,4"/>
+          <ItemsControl x:Name="AnalyzeInspectorOutgoing">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" FontSize="11" Margin="0,1" TextWrapping="Wrap"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="Incoming" FontWeight="SemiBold" Margin="0,8,0,4"/>
+          <ItemsControl x:Name="AnalyzeInspectorIncoming">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" FontSize="11" Margin="0,1" TextWrapping="Wrap"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
         </StackPanel>
-      </ScrollViewer>
-      <Grid Grid.Row="2" Margin="4" RowDefinitions="Auto,*">
-        <TextBlock Grid.Row="0" Text="Members" FontWeight="SemiBold" Margin="4,0,4,2"/>
-        <ScrollViewer Grid.Row="1">
+
+        <!-- State: Nothing selected — show summary + unnamed classes warning -->
+        <StackPanel x:Name="InspectorNothingState" IsVisible="False" Margin="8">
+          <TextBlock Text="Inspector" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+          <TextBlock Text="Design Summary" FontWeight="SemiBold" Margin="0,0,0,4"/>
+          <TextBlock x:Name="InspectorClassCountText" Text="" Margin="0,2"/>
+          <TextBlock x:Name="InspectorEdgeCountText" Text="" Margin="0,2"/>
+          <TextBlock x:Name="InspectorUnnamedText" Text="" Margin="0,8" Foreground="#CC6600"
+                     IsVisible="False"/>
+          <TextBlock Text="Click a class to edit its properties" Opacity="0.6" Margin="0,16,0,0"
+                     TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- State: Single class selected — show properties + members + relations -->
+        <StackPanel x:Name="InspectorSingleClassState" IsVisible="False" Margin="8">
+          <TextBlock Text="Class:" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+          <TextBlock x:Name="InspectorClassNameLabel" Text="" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+          <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="80"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition/><RowDefinition/><RowDefinition/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" VerticalAlignment="Center"/>
+            <TextBox  Grid.Row="0" Grid.Column="1" x:Name="InspectorNameBox"/>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Kind" VerticalAlignment="Center"/>
+            <ComboBox  Grid.Row="1" Grid.Column="1" x:Name="InspectorKindCombo">
+              <ComboBoxItem Content="Class"/>
+              <ComboBoxItem Content="Interface"/>
+              <ComboBoxItem Content="Enum"/>
+              <ComboBoxItem Content="Struct"/>
+              <ComboBoxItem Content="Static Class"/>
+              <ComboBoxItem Content="Abstract Class"/>
+            </ComboBox>
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Namespace" VerticalAlignment="Center"/>
+            <TextBox  Grid.Row="2" Grid.Column="1" x:Name="InspectorNamespaceBox"/>
+          </Grid>
+
+          <!-- Members -->
+          <TextBlock Text="Members" FontWeight="SemiBold" Margin="0,8,0,4"/>
+          <!-- Add member buttons -->
+          <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+            <Button Content="+Field" Click="OnInspectorAddField" MinWidth="56" FontSize="10"
+                    Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" Padding="4,2"/>
+            <Button Content="+Prop" Click="OnInspectorAddProperty" MinWidth="56" FontSize="10"
+                    Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" Padding="4,2"/>
+            <Button Content="+Method" Click="OnInspectorAddMethod" MinWidth="60" FontSize="10"
+                    Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" Padding="4,2"/>
+            <Button Content="+Ctor" Click="OnInspectorAddConstructor" MinWidth="48" FontSize="10"
+                    Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" Padding="4,2"/>
+          </StackPanel>
           <ItemsControl x:Name="InspectorMembersList">
             <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="4,1" FontFamily="Consolas,monospace" FontSize="11"/>
+              <DataTemplate x:DataType="design:MemberRow">
+                <Grid ColumnDefinitions="Auto,Auto,*,*,Auto" Margin="0,1">
+                  <!-- Visibility badge — click to cycle -->
+                  <Button Grid.Column="0" Content="{Binding VisibilityBadge}" MinWidth="22"
+                          FontSize="10" Padding="2,0" Tag="{Binding}"
+                          Click="OnInspectorCycleVisibility" Background="Transparent"
+                          Foreground="{Binding VisibilityColor}"/>
+                  <!-- Kind label -->
+                  <TextBlock Grid.Column="1" Text="{Binding KindBadge}" FontSize="10"
+                             VerticalAlignment="Center" Opacity="0.6" Margin="2,0,4,0"/>
+                  <!-- Name — editable -->
+                  <TextBox Grid.Column="2" Text="{Binding Name, Mode=TwoWay}" FontSize="11"
+                           FontFamily="Consolas,monospace" Padding="2,0"
+                           LostFocus="OnInspectorMemberNameChanged" Tag="{Binding}"/>
+                  <!-- Type — editable -->
+                  <TextBox Grid.Column="3" Text="{Binding TypeName, Mode=TwoWay}" FontSize="11"
+                           FontFamily="Consolas,monospace" Padding="2,0" Opacity="0.8"
+                           LostFocus="OnInspectorMemberTypeChanged" Tag="{Binding}"/>
+                  <!-- Delete -->
+                  <Button Grid.Column="4" Content="×" MinWidth="24" Padding="4,0"
+                          Tag="{Binding}" Click="OnInspectorDeleteMember"/>
+                </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-        </ScrollViewer>
-      </Grid>
-      <Grid Grid.Row="3" Margin="4" RowDefinitions="Auto,*,Auto,*">
-        <TextBlock Grid.Row="0" Text="Outgoing Relations" FontWeight="SemiBold" Margin="4,0,4,2"/>
-        <ScrollViewer Grid.Row="1">
+
+          <!-- Outgoing relations -->
+          <TextBlock Text="Outgoing" FontWeight="SemiBold" Margin="0,8,0,4"/>
           <ItemsControl x:Name="InspectorOutgoingList">
             <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="4,1" FontFamily="Consolas,monospace" FontSize="11"/>
+              <DataTemplate x:DataType="design:EdgeRow">
+                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+                  <TextBlock Grid.Column="0" Text="{Binding DisplayText}" FontSize="11"/>
+                  <ComboBox Grid.Column="1" SelectedValue="{Binding Kind, Mode=TwoWay}"
+                            SelectionChanged="OnInspectorEdgeKindChanged" MinWidth="100">
+                    <ComboBoxItem Content="Association"/>
+                    <ComboBoxItem Content="Inheritance"/>
+                    <ComboBoxItem Content="Implements"/>
+                  </ComboBox>
+                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24"/>
+                </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-        </ScrollViewer>
-        <TextBlock Grid.Row="2" Text="Incoming Relations" FontWeight="SemiBold" Margin="4,0,4,2"/>
-        <ScrollViewer Grid.Row="3">
+
+          <!-- Incoming relations -->
+          <TextBlock Text="Incoming" FontWeight="SemiBold" Margin="0,8,0,4"/>
           <ItemsControl x:Name="InspectorIncomingList">
             <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="4,1" FontFamily="Consolas,monospace" FontSize="11"/>
+              <DataTemplate x:DataType="design:EdgeRow">
+                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,1">
+                  <TextBlock Grid.Column="0" Text="{Binding DisplayText}" FontSize="11"/>
+                  <ComboBox Grid.Column="1" SelectedValue="{Binding Kind, Mode=TwoWay}"
+                            SelectionChanged="OnInspectorEdgeKindChanged" MinWidth="100">
+                    <ComboBoxItem Content="Association"/>
+                    <ComboBoxItem Content="Inheritance"/>
+                    <ComboBoxItem Content="Implements"/>
+                  </ComboBox>
+                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24"/>
+                </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-        </ScrollViewer>
+        </StackPanel>
+
+        <!-- State: Multi-select — show bulk operations (gated on GAP-2) -->
+        <StackPanel x:Name="InspectorMultiSelectState" IsVisible="False" Margin="8">
+          <TextBlock Text="Multi-Select" FontWeight="Bold" FontSize="14" Margin="0,0,0,8"/>
+          <TextBlock x:Name="InspectorMultiSelectCountText" Text="" Margin="0,0,0,8"/>
+          <Button Content="Delete All" Click="OnInspectorMultiDelete" Margin="0,4"/>
+          <TextBlock Text="Selected:" FontWeight="SemiBold" Margin="0,12,0,4"/>
+          <ItemsControl x:Name="InspectorMultiSelectList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="design:DesignClass">
+                <TextBlock Text="{Binding Name}" Margin="4,1" FontSize="11"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
       </Grid>
+    </ScrollViewer>
+
+    <!-- Status Bar -->
+    <Border Grid.ColumnSpan="5" Grid.Row="1" Background="{DynamicResource StatusBarBgBrush}" Padding="8,3" BorderBrush="{DynamicResource ChromeBorderBrush}" BorderThickness="0,1,0,0">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBlock x:Name="StatusBarText" Grid.Column="0" Text="Ready" FontSize="11" Foreground="{DynamicResource StatusBarTextBrush}"/>
+        <TextBlock x:Name="CodeOutputIndicator" Grid.Column="1" Text="Code → Clipboard (Ctrl+Shift+C)" FontSize="11" Foreground="{DynamicResource StatusBarTextBrush}" Margin="12,0,0,0" Opacity="0.8"/>
+        <TextBlock x:Name="ZoomStatusText" Grid.Column="2" Text="100%" FontSize="11" Foreground="{DynamicResource StatusBarTextBrush}" Margin="12,0,0,0"/>
+      </Grid>
+    </Border>
     </Grid>
   </Grid>
 </Window>

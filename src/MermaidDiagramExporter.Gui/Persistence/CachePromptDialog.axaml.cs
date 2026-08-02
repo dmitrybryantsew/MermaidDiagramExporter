@@ -10,6 +10,7 @@ public partial class CachePromptDialog : Window
     {
         InitializeComponent();
         RescanButton.Click += (s, e) => { Result = CachePromptResult.Rescan; Close(); };
+        RescanAsNewButton.Click += (s, e) => { Result = CachePromptResult.RescanAsNew; Close(); };
         LoadCacheButton.Click += (s, e) => { Result = CachePromptResult.LoadCache; Close(); };
     }
 
@@ -30,6 +31,7 @@ public partial class CachePromptDialog : Window
 public enum CachePromptResult
 {
     Rescan,
+    RescanAsNew,
     LoadCache,
     Cancelled
 }
