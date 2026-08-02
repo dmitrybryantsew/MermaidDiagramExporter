@@ -18,11 +18,19 @@ public static class DesignValidator
         var errors = new List<string>();
 
         // Check for duplicate class names within the same namespace
-        var duplicates = graph.Classes
-            .GroupBy(c => (c.Namespace, c.Name))
-            .Where(g => g.Count() > 1);
-        foreach (var dup in duplicates)
-            errors.Add($"Duplicate class '{dup.Key.Name}' in namespace '{dup.Key.Namespace}'");
+        var seen = new HashSet<(string Namespace, string Name)>();
+        var reportedDuplicates = new HashSet<(string Namespace, string Name)>();
+        foreach (var c in graph.Classes)
+        {
+            var key = (c.Namespace, c.Name);
+            if (!seen.Add(key))
+            {
+                if (reportedDuplicates.Add(key))
+                {
+                    errors.Add($"Duplicate class '{key.Name}' in namespace '{key.Namespace}'");
+                }
+            }
+        }
 
         // Check for edges referencing non-existent classes
         var classIds = new HashSet<string>(graph.Classes.Select(c => c.Id));
