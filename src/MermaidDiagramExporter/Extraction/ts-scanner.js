@@ -84,6 +84,7 @@ const TypeGroupKind = {
 
 const edgeSet = new Set();
 function addEdge(from, to, kind, label = '', isStrong = false) {
+    if (!from || !to || from === to) return;
     const key = `${from}|${to}|${kind}|${label}`;
     if (!edgeSet.has(key)) {
         edgeSet.add(key);
@@ -95,6 +96,21 @@ function addEdge(from, to, kind, label = '', isStrong = false) {
             isStrongRelation: isStrong
         });
     }
+}
+
+// Stable, unique node id from symbol + file.
+// Uses the full hex of the file path (not a truncated 8 chars, which collides
+// across files) plus a per-(file,name) counter so duplicate declarations of the
+// same name in the same file get distinct ids.
+const idCounter = new Map();
+const symbolToId = new Map();
+function makeId(name, sourceFile, currentNamespace = '') {
+    const nsPrefix = currentNamespace ? currentNamespace + '_' : '';
+    const fileHex = Buffer.from(sourceFile.fileName).toString('hex');
+    const base = `T_${nsPrefix}${name}_${fileHex}`;
+    const count = (idCounter.get(base) || 0) + 1;
+    idCounter.set(base, count);
+    return count > 1 ? `${base}#${count}` : base;
 }
 
 function getVisibility(node) {
@@ -111,8 +127,7 @@ function visit(node, sourceFile, currentNamespace = '') {
         const symbol = node.name ? checker.getSymbolAtLocation(node.name) : null;
         if (symbol) {
             const name = symbol.getName();
-            // Generate id based on fully qualified path if possible, here we use file path + name
-            const id = `T_${currentNamespace ? currentNamespace + '_' : ''}${name}_${Buffer.from(sourceFile.fileName).toString('hex').substr(0, 8)}`;
+            const id = makeId(name, sourceFile, currentNamespace);
 
             let kind = TypeNodeKind.Class;
             if (ts.isInterfaceDeclaration(node)) kind = TypeNodeKind.Interface;
@@ -122,7 +137,8 @@ function visit(node, sourceFile, currentNamespace = '') {
             const members = [];
             const type = checker.getTypeAtLocation(node);
 
-            // Base classes / Interfaces
+            // Base classes / Interfaces — deferred until after the full visit
+            // so the target symbol's id is known (resolved via symbolToId).
             if (node.heritageClauses) {
                 for (const clause of node.heritageClauses) {
                     const isImplements = clause.token === ts.SyntaxKind.ImplementsKeyword;
@@ -130,11 +146,12 @@ function visit(node, sourceFile, currentNamespace = '') {
                         const targetType = checker.getTypeAtLocation(typeNode);
                         const targetSymbol = targetType.aliasSymbol || targetType.symbol;
                         if (targetSymbol) {
-                            const targetName = targetSymbol.getName();
-                            // We need to resolve ID properly in real scenario, here we do best effort fallback by name
-                            const targetId = `T_${targetName}_${Buffer.from(targetSymbol.valueDeclaration ? targetSymbol.valueDeclaration.getSourceFile().fileName : '').toString('hex').substr(0, 8)}`;
-
-                            addEdge(id, targetId, isImplements ? TypeEdgeKind.Implements : TypeEdgeKind.Inheritance, isImplements ? 'implements' : '', true);
+                            pendingHeritage.push({
+                                from: id,
+                                symbol: targetSymbol,
+                                kind: isImplements ? TypeEdgeKind.Implements : TypeEdgeKind.Inheritance,
+                                label: isImplements ? 'implements' : ''
+                            });
                         }
                     }
                 }
@@ -285,10 +302,19 @@ function extractAssociations(type, fromId) {
 }
 
 const pendingAssociations = [];
+const pendingHeritage = [];
 
 for (const sourceFile of program.getSourceFiles()) {
     if (!sourceFile.isDeclarationFile) {
         visit(sourceFile, sourceFile);
+    }
+}
+
+// Resolve pending heritage edges (inheritance / implements) via symbol -> id map.
+for (const h of pendingHeritage) {
+    const toId = nodeBySymbolMap.get(h.symbol);
+    if (toId && toId !== h.from) {
+        addEdge(h.from, toId, h.kind, h.label, true);
     }
 }
 
@@ -297,13 +323,6 @@ for (const assoc of pendingAssociations) {
     const toId = nodeBySymbolMap.get(assoc.symbol);
     if (toId && toId !== assoc.from) {
         addEdge(assoc.from, toId, TypeEdgeKind.Association, '', false);
-    } else if (assoc.symbol.valueDeclaration) {
-        // Try to guess ID if we didn't map it properly for some reason
-        const file = assoc.symbol.valueDeclaration.getSourceFile();
-        if (file && !file.isDeclarationFile) {
-             const guessId = `T_${assoc.symbol.getName()}_${Buffer.from(file.fileName).toString('hex').substr(0, 8)}`;
-             addEdge(assoc.from, guessId, TypeEdgeKind.Association, '', false);
-        }
     }
 }
 
