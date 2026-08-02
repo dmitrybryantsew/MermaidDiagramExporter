@@ -81,7 +81,7 @@ public sealed class ScanCoordinator
     /// <summary>
     /// Phase 2: Execute the actual scan (or load from cache). Runs on background thread.
     /// </summary>
-    public TypeGraph ExecuteScan(string folder, bool useCache)
+    public TypeGraph ExecuteScan(string folder, bool useCache, bool clearCache = false)
     {
         var settings = _settingsService.LoadSettings(folder);
 
@@ -100,7 +100,15 @@ public sealed class ScanCoordinator
         }
 
         TypeGraph graph;
-        if (useCache)
+        if (clearCache)
+        {
+            // Force a fresh scan and wipe any cached state that could
+            // resurrect stale manual layout overrides.
+            _cacheService.ClearCache(settings);
+            _cacheService.SaveManualOverrides(new ManualLayoutOverrides(), settings);
+            graph = _scanner.ScanFolder(folder, buildOptions);
+        }
+        else if (useCache)
         {
             var cached = _cacheService.LoadCache(settings);
             if (cached != null)

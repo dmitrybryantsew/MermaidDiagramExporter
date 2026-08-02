@@ -1465,6 +1465,7 @@ public partial class MainWindow : Window
 
             // Phase 2: If cache prompt needed, show dialog on UI thread
             bool useCache = false;
+            bool clearCache = false;
             if (promptRequest != null)
             {
                 var dialog = new CachePromptDialog();
@@ -1477,17 +1478,23 @@ public partial class MainWindow : Window
                 }
                 if (dialog.Result == CachePromptResult.LoadCache)
                     useCache = true;
+                else if (dialog.Result == CachePromptResult.RescanAsNew)
+                    clearCache = true;
             }
 
             // Phase 3: Execute scan on background thread (Roslyn compilation, disk I/O)
-            var graph = await Task.Run(() => _scanCoordinator.ExecuteScan(folder, useCache));
+            var graph = await Task.Run(() => _scanCoordinator.ExecuteScan(folder, useCache, clearCache));
             if (graph == null)
             {
                 IsEnabled = true;
                 return;
             }
 
-            _currentSettings = _settingsService.LoadSettings(graph.Metadata.SourceDescription);
+            // Use the folder the user actually scanned, not the cached graph's
+            // SourceDescription — if the cache was created from a different path
+            // (moved folder, symlink, etc.) the settings/overrides would be
+            // loaded from the wrong project and corrupt the layout.
+            _currentSettings = _settingsService.LoadSettings(folder);
             _currentGraph = graph;
             _focusNavigationController.SetRootGraph(_currentGraph, _currentSettings.SourceFolderPath);
             _seedSelectionState.Clear();

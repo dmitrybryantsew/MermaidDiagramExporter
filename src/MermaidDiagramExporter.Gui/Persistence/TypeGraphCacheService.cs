@@ -112,7 +112,15 @@ public sealed class TypeGraphCacheService
             using var gzip = new GZipStream(fs, CompressionMode.Decompress);
             using var reader = new StreamReader(gzip, Encoding.UTF8);
             string graphJson = reader.ReadToEnd();
-            return DeserializeTypeGraph(graphJson);
+            var graph = DeserializeTypeGraph(graphJson);
+
+            // Coherence guard: the cached graph must claim the same source folder
+            // as the one we're scanning. If not, the cache is stale (folder moved,
+            // settings copied from another project, etc.) and must be ignored.
+            if (!string.Equals(graph.Metadata.SourceDescription, settings.SourceFolderPath, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            return graph;
         }
         catch { return null; }
     }
@@ -180,6 +188,22 @@ public sealed class TypeGraphCacheService
             Converters = { new Vector2JsonConverter() }
         });
         File.WriteAllText(path, json);
+    }
+
+    /// <summary>
+    /// Deletes the cached TypeGraph and its manifest so a fresh scan can
+    /// proceed without resurrecting stale state.
+    /// </summary>
+    public void ClearCache(ProjectSettings settings)
+    {
+        string cacheDir = _settingsService.ResolveCacheDirectory(settings);
+        string cachePath = Path.Combine(cacheDir, CacheFileName);
+        string manifestPath = Path.Combine(cacheDir, ManifestFileName);
+
+        if (File.Exists(cachePath))
+            File.Delete(cachePath);
+        if (File.Exists(manifestPath))
+            File.Delete(manifestPath);
     }
 
     /// <summary>
