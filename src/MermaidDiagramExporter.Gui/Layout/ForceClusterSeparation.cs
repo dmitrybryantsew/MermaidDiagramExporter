@@ -30,7 +30,8 @@ public static class ForceClusterSeparation
     {
         if (clusters == null || clusters.Count == 0) return;
 
-        var depthById = clusters.ToDictionary(c => c.Id, c => Depth(c, clusters));
+        var clusterById = clusters.ToDictionary(c => c.Id);
+        var depthById = clusters.ToDictionary(c => c.Id, c => Depth(c, clusterById));
         int maxDepth = depthById.Count > 0 ? depthById.Values.Max() : 0;
 
         for (int depth = maxDepth; depth >= 0; depth--)
@@ -157,14 +158,13 @@ public static class ForceClusterSeparation
             ShiftSubtree(clusters, childId, delta, nodeBounds, clusterBounds);
     }
 
-    private static int Depth(LayoutCluster cluster, IReadOnlyList<LayoutCluster> all)
+    private static int Depth(LayoutCluster cluster, Dictionary<string, LayoutCluster> all)
     {
         int depth = 0;
         var current = cluster;
         for (int guard = 0; guard < 64 && !string.IsNullOrEmpty(current.ParentClusterId); guard++)
         {
-            var parent = all.FirstOrDefault(c => c.Id == current.ParentClusterId);
-            if (parent == null) break;
+            if (!all.TryGetValue(current.ParentClusterId, out var parent)) break;
             depth++;
             current = parent;
         }
