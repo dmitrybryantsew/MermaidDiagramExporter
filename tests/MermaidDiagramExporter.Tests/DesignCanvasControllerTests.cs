@@ -13,6 +13,28 @@ namespace MermaidDiagramExporter.Tests;
 /// </summary>
 public class DesignCanvasControllerTests
 {
+    [Theory]
+    [InlineData(DesignTool.Class, true)]
+    [InlineData(DesignTool.Interface, true)]
+    [InlineData(DesignTool.Enum, true)]
+    [InlineData(DesignTool.Struct, true)]
+    [InlineData(DesignTool.AbstractClass, true)]
+    [InlineData(DesignTool.StaticClass, true)]
+    [InlineData(DesignTool.Namespace, true)]
+    [InlineData(DesignTool.Select, false)]
+    [InlineData(DesignTool.EdgeInheritance, false)]
+    [InlineData(DesignTool.EdgeImplements, false)]
+    [InlineData(DesignTool.EdgeAssociation, false)]
+    [InlineData(DesignTool.EdgeDependency, false)]
+    [InlineData(DesignTool.EdgeAggregation, false)]
+    [InlineData(DesignTool.EdgeComposition, false)]
+    [InlineData(DesignTool.Pan, false)]
+    public void IsCreationTool_ReturnsExpectedResult(DesignTool tool, bool expected)
+    {
+        var result = DesignCanvasController.IsCreationTool(tool);
+        Assert.Equal(expected, result);
+    }
+
     private static DesignGraph CreateGraphWith(params DesignClass[] classes)
     {
         var graph = new DesignGraph { Title = "Test" };
