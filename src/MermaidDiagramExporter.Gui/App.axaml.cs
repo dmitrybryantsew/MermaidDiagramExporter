@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using MermaidDiagramExporter.Core;
 using MermaidDiagramExporter.Extraction;
 using MermaidDiagramExporter.Gui.Settings;
 using MermaidDiagramExporter.Gui.Theming;
@@ -21,7 +22,8 @@ public partial class App : Application
             var settingsService = new SettingsService();
             var appSettingsService = new AppSettingsService();
             var layoutEngine = new LayoutEngine();
-            var scanner = new RoslynTypeScanner();
+            // Default scanner for initialization, will be overwritten by dynamically loaded ones
+            ITypeScanner scanner = new RoslynTypeScanner();
 
             // Load and apply the saved theme BEFORE creating the main window so
             // the first frame is already themed (avoids a Light→Dark flash).

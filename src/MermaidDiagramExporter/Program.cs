@@ -31,7 +31,7 @@ public static class Program
             Console.WriteLine($"Scanning: {opts.FolderPath}");
             var sw = Stopwatch.StartNew();
 
-            var scanner = new RoslynTypeScanner();
+            ITypeScanner scanner = ScannerFactory.CreateScanner(opts.FolderPath);
             TypeGraph graph = scanner.ScanFolder(opts.FolderPath, opts.BuildOptions);
 
             Console.WriteLine($"Found {graph.Nodes.Count} types, {graph.Edges.Count} edges in {sw.ElapsedMilliseconds}ms");
