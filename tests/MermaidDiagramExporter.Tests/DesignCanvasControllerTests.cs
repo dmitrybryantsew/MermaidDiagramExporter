@@ -33,7 +33,8 @@ public class DesignCanvasControllerTests
     public void ClassRectangle_PointInsideBody_ReturnsBody()
     {
         var graph = new DesignGraph();
-        var rect = new ClassRectangle("c1", graph) { X = 100, Y = 100, Width = 200, Height = 100 };
+        graph.Classes.Add(new DesignClass { Id = "c1" });
+        var rect = new ClassRectangle(graph.Classes[0], graph) { X = 100, Y = 100, Width = 200, Height = 100 };
         var hit = rect.HitTest(new SKPoint(150, 200)); // inside body
         Assert.Equal(ClassRectangleHitTest.Body, hit);
     }
@@ -42,7 +43,8 @@ public class DesignCanvasControllerTests
     public void ClassRectangle_PointInsideHeader_ReturnsHeader()
     {
         var graph = new DesignGraph();
-        var rect = new ClassRectangle("c1", graph) { X = 100, Y = 100, Width = 200, Height = 100 };
+        graph.Classes.Add(new DesignClass { Id = "c1" });
+        var rect = new ClassRectangle(graph.Classes[0], graph) { X = 100, Y = 100, Width = 200, Height = 100 };
         var hit = rect.HitTest(new SKPoint(150, 110)); // inside header (top 24px)
         Assert.Equal(ClassRectangleHitTest.Header, hit);
     }
@@ -51,7 +53,8 @@ public class DesignCanvasControllerTests
     public void ClassRectangle_PointOutside_ReturnsNone()
     {
         var graph = new DesignGraph();
-        var rect = new ClassRectangle("c1", graph) { X = 100, Y = 100, Width = 200, Height = 100 };
+        graph.Classes.Add(new DesignClass { Id = "c1" });
+        var rect = new ClassRectangle(graph.Classes[0], graph) { X = 100, Y = 100, Width = 200, Height = 100 };
         var hit = rect.HitTest(new SKPoint(50, 50)); // outside
         Assert.Equal(ClassRectangleHitTest.None, hit);
     }
@@ -60,7 +63,8 @@ public class DesignCanvasControllerTests
     public void ClassRectangle_PointOnResizeHandle_ReturnsResizeHandle()
     {
         var graph = new DesignGraph();
-        var rect = new ClassRectangle("c1", graph) { X = 100, Y = 100, Width = 200, Height = 100 };
+        graph.Classes.Add(new DesignClass { Id = "c1" });
+        var rect = new ClassRectangle(graph.Classes[0], graph) { X = 100, Y = 100, Width = 200, Height = 100 };
         // Resize handle is bottom-right 12x12 corner
         var hit = rect.HitTest(new SKPoint(295, 195)); // in the corner
         Assert.Equal(ClassRectangleHitTest.ResizeHandle, hit);
@@ -70,7 +74,8 @@ public class DesignCanvasControllerTests
     public void ClassRectangle_PointOnLeftPort_ReturnsLeftPort()
     {
         var graph = new DesignGraph();
-        var rect = new ClassRectangle("c1", graph) { X = 100, Y = 100, Width = 200, Height = 100 };
+        graph.Classes.Add(new DesignClass { Id = "c1" });
+        var rect = new ClassRectangle(graph.Classes[0], graph) { X = 100, Y = 100, Width = 200, Height = 100 };
         // Left port is at left-center (X=100, Y=150)
         var hit = rect.HitTest(new SKPoint(100, 150));
         Assert.Equal(ClassRectangleHitTest.LeftPort, hit);
@@ -80,7 +85,8 @@ public class DesignCanvasControllerTests
     public void ClassRectangle_PointOnRightPort_ReturnsRightPort()
     {
         var graph = new DesignGraph();
-        var rect = new ClassRectangle("c1", graph) { X = 100, Y = 100, Width = 200, Height = 100 };
+        graph.Classes.Add(new DesignClass { Id = "c1" });
+        var rect = new ClassRectangle(graph.Classes[0], graph) { X = 100, Y = 100, Width = 200, Height = 100 };
         // Right port is at right-center (X=300, Y=150)
         var hit = rect.HitTest(new SKPoint(300, 150));
         Assert.Equal(ClassRectangleHitTest.RightPort, hit);
@@ -92,10 +98,12 @@ public class DesignCanvasControllerTests
     public void DesignHitTestService_TopmostRectangleWins()
     {
         var graph = new DesignGraph();
+        graph.Classes.Add(new DesignClass { Id = "back" });
+        graph.Classes.Add(new DesignClass { Id = "front" });
         var rects = new[]
         {
-            new ClassRectangle("back", graph) { X = 0, Y = 0, Width = 100, Height = 100 },
-            new ClassRectangle("front", graph) { X = 0, Y = 0, Width = 100, Height = 100 }
+            new ClassRectangle(graph.Classes[0], graph) { X = 0, Y = 0, Width = 100, Height = 100 },
+            new ClassRectangle(graph.Classes[1], graph) { X = 0, Y = 0, Width = 100, Height = 100 }
         };
         // Reverse iteration: front (last in list) is checked first
         var hit = DesignHitTestService.HitTest(new SKPoint(50, 50), rects);
@@ -106,7 +114,8 @@ public class DesignCanvasControllerTests
     public void DesignHitTestService_NoHit_ReturnsNone()
     {
         var graph = new DesignGraph();
-        var rects = new[] { new ClassRectangle("c1", graph) { X = 0, Y = 0, Width = 100, Height = 100 } };
+        graph.Classes.Add(new DesignClass { Id = "c1" });
+        var rects = new[] { new ClassRectangle(graph.Classes[0], graph) { X = 0, Y = 0, Width = 100, Height = 100 } };
         var hit = DesignHitTestService.HitTest(new SKPoint(500, 500), rects);
         Assert.Equal(ClassRectangleHitTest.None, hit.Kind);
         Assert.Null(hit.Rectangle);

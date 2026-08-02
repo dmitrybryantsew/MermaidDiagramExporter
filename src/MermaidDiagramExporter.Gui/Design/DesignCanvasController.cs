@@ -262,7 +262,7 @@ public sealed class DesignCanvasController
         var list = new List<ClassRectangle>(graph.Classes.Count);
         foreach (var cls in graph.Classes)
         {
-            list.Add(new ClassRectangle(cls.Id, graph)
+            list.Add(new ClassRectangle(cls, graph)
             {
                 X = cls.X,
                 Y = cls.Y,
