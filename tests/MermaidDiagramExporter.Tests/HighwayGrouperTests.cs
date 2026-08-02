@@ -78,6 +78,36 @@ public class HighwayGrouperTests
     }
 
     [Fact]
+    public void IsInterZone_WithNullNodes_ReturnsFalse()
+    {
+        var a = Node("a", "Ns.A");
+
+        var edgeNullFrom = new GraphEdge { FromNode = null, ToNode = a };
+        var edgeNullTo = new GraphEdge { FromNode = a, ToNode = null };
+        var edgeBothNull = new GraphEdge { FromNode = null, ToNode = null };
+
+        Assert.False(HighwayGrouper.IsInterZone(edgeNullFrom));
+        Assert.False(HighwayGrouper.IsInterZone(edgeNullTo));
+        Assert.False(HighwayGrouper.IsInterZone(edgeBothNull));
+    }
+
+    [Fact]
+    public void IsInterZone_WithNullOrEmptyNamespaces_ReturnsFalse()
+    {
+        var a = Node("a", "Ns.A");
+        var nullNs = Node("nullNs", null!);
+        var emptyNs = Node("emptyNs", "");
+
+        Assert.False(HighwayGrouper.IsInterZone(Edge(a, nullNs)));
+        Assert.False(HighwayGrouper.IsInterZone(Edge(nullNs, a)));
+        Assert.False(HighwayGrouper.IsInterZone(Edge(nullNs, nullNs)));
+
+        Assert.False(HighwayGrouper.IsInterZone(Edge(a, emptyNs)));
+        Assert.False(HighwayGrouper.IsInterZone(Edge(emptyNs, a)));
+        Assert.False(HighwayGrouper.IsInterZone(Edge(emptyNs, emptyNs)));
+    }
+
+    [Fact]
     public void ComputeStrokeWidth_GrowsLogarithmically_CappedAt10()
     {
         Assert.True(HighwayGrouper.ComputeStrokeWidth(1) < HighwayGrouper.ComputeStrokeWidth(4));
