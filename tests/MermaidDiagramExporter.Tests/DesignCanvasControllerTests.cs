@@ -27,6 +27,30 @@ public class DesignCanvasControllerTests
         return new DesignCanvasController(modeController);
     }
 
+    // ── Tool Management ──
+
+    [Theory]
+    [InlineData(DesignTool.EdgeInheritance, true)]
+    [InlineData(DesignTool.EdgeImplements, true)]
+    [InlineData(DesignTool.EdgeAssociation, true)]
+    [InlineData(DesignTool.EdgeDependency, true)]
+    [InlineData(DesignTool.EdgeAggregation, true)]
+    [InlineData(DesignTool.EdgeComposition, true)]
+    [InlineData(DesignTool.Select, false)]
+    [InlineData(DesignTool.Class, false)]
+    [InlineData(DesignTool.Interface, false)]
+    [InlineData(DesignTool.Enum, false)]
+    [InlineData(DesignTool.Struct, false)]
+    [InlineData(DesignTool.AbstractClass, false)]
+    [InlineData(DesignTool.StaticClass, false)]
+    [InlineData(DesignTool.Namespace, false)]
+    [InlineData(DesignTool.Pan, false)]
+    public void IsEdgeTool_ReturnsExpectedResult(DesignTool tool, bool expectedResult)
+    {
+        var result = DesignCanvasController.IsEdgeTool(tool);
+        Assert.Equal(expectedResult, result);
+    }
+
     // ── ClassRectangle hit-testing ──
 
     [Fact]
