@@ -85,7 +85,7 @@ public partial class MainWindow : Window
         // Set window icon from embedded AvaloniaResource
         try
         {
-            var iconUri = new Uri("avares://MermaidDiagramExporter.Gui/Assets/app.ico");
+            var iconUri = new Uri("avares://MermaidDiagramExporter.Gui/Assets/icon.png");
             Icon = new Avalonia.Controls.WindowIcon(Avalonia.Platform.AssetLoader.Open(iconUri));
         }
         catch { /* non-critical: icon is cosmetic */ }
