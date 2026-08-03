@@ -580,6 +580,8 @@ public class GraphCanvas : Control
         Zoom = _zoom,
         PanX = _panX,
         PanY = _panY,
+        ViewportWidth = (float)Bounds.Width,
+        ViewportHeight = (float)Bounds.Height,
         ShowInheritanceEdges = _showInheritanceEdges,
         ShowImplementsEdges = _showImplementsEdges,
         ShowAssociationEdges = _showAssociationEdges,

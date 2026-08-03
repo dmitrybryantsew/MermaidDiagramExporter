@@ -18,6 +18,8 @@ public sealed class ViewportState
     public float Zoom { get; init; }
     public float PanX { get; init; }
     public float PanY { get; init; }
+    public float ViewportWidth { get; init; }
+    public float ViewportHeight { get; init; }
     public bool ShowInheritanceEdges { get; init; }
     public bool ShowImplementsEdges { get; init; }
     public bool ShowAssociationEdges { get; init; }
@@ -463,10 +465,45 @@ public sealed class CanvasRenderer
         var analyzeSelectedIds = vp.SelectedAnalyzeNodeIds;
         bool hasAnalyzeSelection = analyzeSelectedIds != null && analyzeSelectedIds.Count > 0;
 
+        // View frustum culling: calculate the visible rectangle in world coordinates
+        float visibleWorldX = -vp.PanX / vp.Zoom;
+        float visibleWorldY = -vp.PanY / vp.Zoom;
+        float visibleWorldW = vp.ViewportWidth / vp.Zoom;
+        float visibleWorldH = vp.ViewportHeight / vp.Zoom;
+
+        // Add some padding to ensure nodes slightly off-screen but casting shadows or overlapping are drawn
+        float cullPad = 100f;
+        var visibleWorldRect = SKRect.Create(
+            visibleWorldX - cullPad,
+            visibleWorldY - cullPad,
+            visibleWorldW + (cullPad * 2),
+            visibleWorldH + (cullPad * 2)
+        );
+
+        var nodesToRender = new List<GraphNode>();
+
+        // Pass 1: Culling and filtering
         foreach (var node in nodes)
         {
             if (excludeNodeId != null && node.Id == excludeNodeId)
                 continue;
+
+            var nodeRect = SKRect.Create(node.X, node.Y, node.Width, node.Height);
+            if (visibleWorldRect.IntersectsWith(nodeRect))
+            {
+                nodesToRender.Add(node);
+            }
+        }
+
+        // Pass 2: Draw all backgrounds
+        foreach (var node in nodesToRender)
+        {
+            canvas.DrawRoundRect(node.X, node.Y, node.Width, node.Height, 6, 6, NodeFillPaint);
+        }
+
+        // Pass 3: Draw all borders and headers
+        foreach (var node in nodesToRender)
+        {
             float x = node.X, y = node.Y, w = node.Width, h = node.Height;
 
             bool searchMatch = false;
@@ -488,21 +525,28 @@ public sealed class CanvasRenderer
                 ? vp.HoveredDesignNodeIds.Contains(node.Id)
                 : node == vp.HoveredNode;
 
-            canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeFillPaint);
-
             var strokeColor = searchActive && searchMatch ? ColorNodeStrokeSearchMatch
                            : isSelected ? ColorNodeStrokeSelected
                            : isHovered ? ColorNodeStrokeHover
                            : ColorNodeStroke;
+
             float strokeWidth = (isSelected || (searchActive && searchMatch)) ? 3 : 1.5f;
+
+            // Draw border
             NodeStrokePaint.Color = strokeColor;
             NodeStrokePaint.StrokeWidth = strokeWidth;
             canvas.DrawRoundRect(x, y, w, h, 6, 6, NodeStrokePaint);
 
+            // Draw header
             NodeHeaderPaint.Color = strokeColor.WithAlpha(40);
             canvas.DrawRoundRect(x, y, w, NodeHeaderHeight, 6, 6, NodeHeaderPaint);
             canvas.DrawRect(x, y + NodeHeaderHeight - 4, w, 4, NodeHeaderPaint);
+        }
 
+        // Pass 4: Draw all badges
+        foreach (var node in nodesToRender)
+        {
+            float x = node.X, y = node.Y, w = node.Width, h = node.Height;
             string? badge = GetBadgeText(node);
             if (badge != null)
             {
@@ -515,7 +559,7 @@ public sealed class CanvasRenderer
                 canvas.DrawText(badge, badgeX + 5, badgeY + 12, BadgeTextPaint);
             }
 
-            if (node.StereotypeBadges.Count > 0)
+            if (vp.Zoom >= 0.2f && node.StereotypeBadges.Count > 0)
             {
                 float badgeSpacing = 4;
                 float badgeH = 14;
@@ -537,31 +581,51 @@ public sealed class CanvasRenderer
                     currentBadgeX -= badgeSpacing;
                 }
             }
+        }
 
-            canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, NodeNamePaint);
-
-            float memberY = y + NodeHeaderHeight + 14;
-            int count = 0;
-            foreach (var member in node.Members)
+        // Pass 5: Draw text and members
+        if (vp.Zoom >= 0.2f)
+        {
+            foreach (var node in nodesToRender)
             {
-                if (count >= MaxMembersShownPerNode) break;
-                string prefix = member.Kind == "Method" ? "  " : "+ ";
-                string text = prefix + member.TypeName + " " + member.Name;
-                if (member.Kind == "Method") text += "()";
-                canvas.DrawText(text, x + NodePaddingX, memberY, NodeMemberPaint);
-                memberY += NodeMemberHeight;
-                count++;
+                float x = node.X, y = node.Y;
+                canvas.DrawText(node.DisplayName, x + NodePaddingX, y + NodeHeaderHeight - 8, NodeNamePaint);
+
+                if (vp.Zoom >= 0.4f)
+                {
+                    float memberY = y + NodeHeaderHeight + 14;
+                    int count = 0;
+                    foreach (var member in node.Members)
+                    {
+                        if (count >= MaxMembersShownPerNode) break;
+                        string prefix = member.Kind == "Method" ? "  " : "+ ";
+                        string text = prefix + member.TypeName + " " + member.Name;
+                        if (member.Kind == "Method") text += "()";
+                        canvas.DrawText(text, x + NodePaddingX, memberY, NodeMemberPaint);
+                        memberY += NodeMemberHeight;
+                        count++;
+                    }
+                }
             }
+        }
 
-            // ── Design Mode affordances: resize handles and connection ports ──
-            if (designMode && isSelected)
+        // Pass 6: Draw design mode affordances
+        if (designMode)
+        {
+            foreach (var node in nodesToRender)
             {
-                DrawResizeHandle(canvas, x, y, w, h);
-                DrawConnectionPorts(canvas, x, y, w, h);
-            }
-            else if (designMode && isHovered)
-            {
-                DrawConnectionPorts(canvas, x, y, w, h);
+                bool isSelected = hasDesignSelection ? designSelectedIds!.Contains(node.Id) : node == vp.SelectedNode;
+                bool isHovered = vp.HoveredDesignNodeIds != null ? vp.HoveredDesignNodeIds.Contains(node.Id) : node == vp.HoveredNode;
+
+                if (isSelected)
+                {
+                    DrawResizeHandle(canvas, node.X, node.Y, node.Width, node.Height);
+                    DrawConnectionPorts(canvas, node.X, node.Y, node.Width, node.Height);
+                }
+                else if (isHovered)
+                {
+                    DrawConnectionPorts(canvas, node.X, node.Y, node.Width, node.Height);
+                }
             }
         }
     }
