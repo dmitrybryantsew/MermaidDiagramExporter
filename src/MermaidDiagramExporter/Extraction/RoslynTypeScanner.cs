@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using MermaidDiagramExporter.Core;
 
@@ -34,20 +36,19 @@ public sealed class RoslynTypeScanner : ITypeScanner
         }
 
         CSharpCompilation compilation = BuildCompilation(sourceFiles);
-        Dictionary<INamedTypeSymbol, TypeNodeData> nodeBySymbol = new(SymbolEqualityComparer.Default);
-        List<TypeNodeData> nodes = new();
+        ConcurrentDictionary<INamedTypeSymbol, TypeNodeData> nodeBySymbol = new(SymbolEqualityComparer.Default);
 
-        foreach (INamedTypeSymbol type in CollectTypeSymbols(compilation))
+        var typesToInclude = CollectTypeSymbols(compilation)
+            .Where(ShouldIncludeType)
+            .ToList();
+
+        Parallel.ForEach(typesToInclude, type =>
         {
-            if (!ShouldIncludeType(type))
-                continue;
-
             TypeNodeData node = BuildNode(type, resolvedOptions);
-            nodes.Add(node);
             nodeBySymbol[type] = node;
-        }
+        });
 
-        List<TypeNodeData> orderedNodes = nodes
+        List<TypeNodeData> orderedNodes = nodeBySymbol.Values
             .OrderBy(n => n.Namespace)
             .ThenBy(n => n.DisplayName)
             .ToList();
@@ -123,9 +124,9 @@ public sealed class RoslynTypeScanner : ITypeScanner
 
     private IEnumerable<INamedTypeSymbol> CollectTypeSymbols(CSharpCompilation compilation)
     {
-        HashSet<INamedTypeSymbol> seen = new(SymbolEqualityComparer.Default);
+        ConcurrentBag<INamedTypeSymbol> collectedTypes = new();
 
-        foreach (SyntaxTree tree in compilation.SyntaxTrees)
+        Parallel.ForEach(compilation.SyntaxTrees, tree =>
         {
             SemanticModel semanticModel = compilation.GetSemanticModel(tree);
             IEnumerable<BaseTypeDeclarationSyntax> typeDeclarations = tree.GetRoot().DescendantNodes()
@@ -134,12 +135,14 @@ public sealed class RoslynTypeScanner : ITypeScanner
             foreach (BaseTypeDeclarationSyntax declaration in typeDeclarations)
             {
                 INamedTypeSymbol symbol = semanticModel.GetDeclaredSymbol(declaration);
-                if (symbol != null && seen.Add(symbol))
+                if (symbol != null)
                 {
-                    yield return symbol;
+                    collectedTypes.Add(symbol);
                 }
             }
-        }
+        });
+
+        return collectedTypes.Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>();
     }
 
     private bool ShouldIncludeType(INamedTypeSymbol type)
@@ -384,12 +387,12 @@ public sealed class RoslynTypeScanner : ITypeScanner
             .ToList();
     }
 
-    private List<TypeEdgeData> BuildEdges(Dictionary<INamedTypeSymbol, TypeNodeData> nodeBySymbol, GraphBuildOptions options)
+    private List<TypeEdgeData> BuildEdges(IDictionary<INamedTypeSymbol, TypeNodeData> nodeBySymbol, GraphBuildOptions options)
     {
-        HashSet<string> edgeKeys = new(StringComparer.Ordinal);
-        List<TypeEdgeData> edges = new();
+        ConcurrentDictionary<string, byte> edgeKeys = new(StringComparer.Ordinal);
+        ConcurrentBag<TypeEdgeData> edges = new();
 
-        foreach (var kvp in nodeBySymbol)
+        Parallel.ForEach(nodeBySymbol, kvp =>
         {
             INamedTypeSymbol type = kvp.Key;
             TypeNodeData currentNode = kvp.Value;
@@ -423,7 +426,7 @@ public sealed class RoslynTypeScanner : ITypeScanner
                     }
                 }
             }
-        }
+        });
 
         return edges
             .OrderBy(e => e.FromNodeId)
@@ -432,7 +435,7 @@ public sealed class RoslynTypeScanner : ITypeScanner
             .ToList();
     }
 
-    private IEnumerable<INamedTypeSymbol> GetAssociatedTypes(INamedTypeSymbol type, Dictionary<INamedTypeSymbol, TypeNodeData> nodeBySymbol)
+    private IEnumerable<INamedTypeSymbol> GetAssociatedTypes(INamedTypeSymbol type, IDictionary<INamedTypeSymbol, TypeNodeData> nodeBySymbol)
     {
         HashSet<INamedTypeSymbol> results = new(SymbolEqualityComparer.Default);
 
@@ -501,8 +504,8 @@ public sealed class RoslynTypeScanner : ITypeScanner
     }
 
     private static void TryAddEdge(
-        ICollection<TypeEdgeData> edges,
-        ISet<string> edgeKeys,
+        ConcurrentBag<TypeEdgeData> edges,
+        ConcurrentDictionary<string, byte> edgeKeys,
         string fromNodeId,
         string toNodeId,
         TypeEdgeKind kind,
@@ -510,7 +513,7 @@ public sealed class RoslynTypeScanner : ITypeScanner
         bool isStrongRelation)
     {
         string key = fromNodeId + "|" + toNodeId + "|" + kind + "|" + label;
-        if (!edgeKeys.Add(key))
+        if (!edgeKeys.TryAdd(key, 0))
             return;
 
         edges.Add(new TypeEdgeData
