@@ -1045,7 +1045,7 @@ public partial class MainWindow : Window
     /// This lets the user apply MSAGL or compound layout to their design
     /// diagram, just like the "Reset Layout" button in Analyze mode.
     /// </summary>
-    private void OnDesignResetLayout(object? sender, RoutedEventArgs e)
+    private async void OnDesignResetLayout(object? sender, RoutedEventArgs e)
     {
         if (_designGraph == null || _designGraph.Classes.Count == 0) return;
 
@@ -1055,7 +1055,9 @@ public partial class MainWindow : Window
         var options = _layoutEngine.LayoutOptions ?? LayoutOptionsFactory.FromSettings(_currentSettings);
         _layoutEngine.LayoutOptions = options;
 
-        var layoutResult = _layoutEngine.Layout(typeGraph);
+        LoadingOverlay.IsVisible = true;
+        var layoutResult = await System.Threading.Tasks.Task.Run(() => _layoutEngine.Layout(typeGraph));
+        LoadingOverlay.IsVisible = false;
 
         // Write computed positions back to the DesignClasses
         var (nodes, _) = layoutResult;
@@ -1530,7 +1532,7 @@ public partial class MainWindow : Window
         StatsText.Text = status;
     }
 
-    private void SetDisplayedGraph(TypeGraph? graph, string selectedNodeId = "", bool reloadManualOverridesFromDisk = true)
+    private async void SetDisplayedGraph(TypeGraph? graph, string selectedNodeId = "", bool reloadManualOverridesFromDisk = true)
     {
         if (graph == null)
         {
@@ -1559,7 +1561,10 @@ public partial class MainWindow : Window
         _layoutEngine.LayoutOptions = LayoutOptionsFactory.FromSettings(_currentSettings);
         AutoRedrawCheck.IsChecked = _currentSettings.AutoRedrawEdges;
 
-        var (nodes, edges) = _layoutEngine.Layout(graph);
+        LoadingOverlay.IsVisible = true;
+        var (nodes, edges) = await System.Threading.Tasks.Task.Run(() => _layoutEngine.Layout(graph));
+        LoadingOverlay.IsVisible = false;
+
         _allNodes = nodes;
         _allEdges = edges;
         _nodeMap = nodes.ToDictionary(n => n.Id);
