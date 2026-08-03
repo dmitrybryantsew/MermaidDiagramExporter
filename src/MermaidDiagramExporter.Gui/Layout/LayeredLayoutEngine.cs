@@ -24,15 +24,21 @@ public sealed class LayeredLayoutEngine : IGraphLayoutEngine
         var clusterIdByNodeId = graph.Nodes.ToDictionary(n => n.Id, n => n.ClusterId);
 
         var components = ComponentSplitter.SplitClusters(graph);
+
+        // Cluster-First Divide and Conquer: compute internal layouts in parallel
+        var componentLayouts = components
+            .AsParallel()
+            .AsOrdered()
+            .Select(component => BuildComponentLayout(component, graph, nodeById, clusterIdByNodeId, options))
+            .ToList();
+
         float currentX = options.OuterMarginX;
         float currentY = options.OuterMarginY;
         float rowHeight = 0f;
         float maxContentWidth = options.MinimumContentWidth;
 
-        foreach (var component in components)
+        foreach (var layout in componentLayouts)
         {
-            var layout = BuildComponentLayout(component, graph, nodeById, clusterIdByNodeId, options);
-
             if (currentX > options.OuterMarginX && currentX + layout.Size.X > options.Layered.TargetRowWidth)
             {
                 currentX = options.OuterMarginX;

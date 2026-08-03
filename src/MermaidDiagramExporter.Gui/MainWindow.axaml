@@ -574,5 +574,13 @@
       </Grid>
     </Border>
     </Grid>
+
+    <!-- Loading Overlay -->
+    <Border x:Name="LoadingOverlay" Grid.Row="2" Background="#80000000" IsVisible="False" ZIndex="1000">
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+        <TextBlock Text="Running Layout Engine..." Foreground="White" FontSize="18" FontWeight="SemiBold"/>
+        <TextBlock Text="This may take a moment for large graphs." Foreground="White" FontSize="12" Margin="0,4,0,0" HorizontalAlignment="Center"/>
+      </StackPanel>
+    </Border>
   </Grid>
 </Window>
