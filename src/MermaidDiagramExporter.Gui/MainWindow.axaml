@@ -371,9 +371,9 @@
                                   IsVisible="False"/>
       <!-- Zoom controls overlay -->
       <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Spacing="4">
-        <Button Content="Fit" Click="OnFit" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
-        <Button Content="+" Click="OnZoomIn" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
-        <Button Content="−" Click="OnZoomOut" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
+        <Button Content="Fit" Click="OnFit" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" ToolTip.Tip="Fit to screen (F)"/>
+        <Button Content="+" Click="OnZoomIn" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" ToolTip.Tip="Zoom in (+)"/>
+        <Button Content="−" Click="OnZoomOut" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" ToolTip.Tip="Zoom out (-)"/>
       </StackPanel>
     </Grid>
 
