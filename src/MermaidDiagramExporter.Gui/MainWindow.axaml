@@ -371,9 +371,9 @@
                                   IsVisible="False"/>
       <!-- Zoom controls overlay -->
       <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8" Spacing="4">
-        <Button Content="Fit" Click="OnFit" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
-        <Button Content="+" Click="OnZoomIn" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
-        <Button Content="−" Click="OnZoomOut" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White"/>
+        <Button Content="Fit" Click="OnFit" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" ToolTip.Tip="Fit to screen (F)"/>
+        <Button Content="+" Click="OnZoomIn" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" ToolTip.Tip="Zoom in (+)"/>
+        <Button Content="−" Click="OnZoomOut" MinWidth="40" Background="{DynamicResource ModeInactiveBgBrush}" Foreground="White" ToolTip.Tip="Zoom out (−)"/>
       </StackPanel>
     </Grid>
 
@@ -489,7 +489,7 @@
                   <Button Grid.Column="0" Content="{Binding VisibilityBadge}" MinWidth="22"
                           FontSize="10" Padding="2,0" Tag="{Binding}"
                           Click="OnInspectorCycleVisibility" Background="Transparent"
-                          Foreground="{Binding VisibilityColor}"/>
+                          Foreground="{Binding VisibilityColor}" ToolTip.Tip="Toggle visibility"/>
                   <!-- Kind label -->
                   <TextBlock Grid.Column="1" Text="{Binding KindBadge}" FontSize="10"
                              VerticalAlignment="Center" Opacity="0.6" Margin="2,0,4,0"/>
@@ -503,7 +503,7 @@
                            LostFocus="OnInspectorMemberTypeChanged" Tag="{Binding}"/>
                   <!-- Delete -->
                   <Button Grid.Column="4" Content="×" MinWidth="24" Padding="4,0"
-                          Tag="{Binding}" Click="OnInspectorDeleteMember"/>
+                          Tag="{Binding}" Click="OnInspectorDeleteMember" ToolTip.Tip="Delete member"/>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -522,7 +522,7 @@
                     <ComboBoxItem Content="Inheritance"/>
                     <ComboBoxItem Content="Implements"/>
                   </ComboBox>
-                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24"/>
+                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24" ToolTip.Tip="Jump to connected class"/>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -541,7 +541,7 @@
                     <ComboBoxItem Content="Inheritance"/>
                     <ComboBoxItem Content="Implements"/>
                   </ComboBox>
-                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24"/>
+                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24" ToolTip.Tip="Jump to connected class"/>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
