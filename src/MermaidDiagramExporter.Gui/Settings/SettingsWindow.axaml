@@ -173,7 +173,7 @@
                             <TextBox Grid.Column="0" Text="{Binding Pattern}" PlaceholderText="Regex pattern" Margin="0,0,4,0" />
                             <TextBox Grid.Column="1" Text="{Binding Label}" PlaceholderText="Label" Margin="0,0,4,0" />
                             <TextBox Grid.Column="2" Text="{Binding ColorHex}" PlaceholderText="#RRGGBB" Margin="0,0,4,0" />
-                            <Button Grid.Column="3" Content="x" Tag="{Binding}" Click="OnRemoveStereotypeRule" />
+                            <Button Grid.Column="3" Content="x" Tag="{Binding}" Click="OnRemoveStereotypeRule" ToolTip.Tip="Remove rule" />
                           </Grid>
                           <TextBlock x:Name="PatternErrorText" FontSize="10" Foreground="#FF6040" Margin="0,2,0,0" IsVisible="False" TextWrapping="Wrap" />
                         </StackPanel>

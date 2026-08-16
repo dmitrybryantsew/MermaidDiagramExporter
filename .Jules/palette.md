@@ -1,0 +1,1 @@
+## 2024-08-16 - Icon-Only Button Accessibility in Avalonia\n**Learning:** Icon-only buttons (like '+', '-', 'x', 'Fit', '→', '✕') across various Avalonia axaml windows lacked tooltips, making them inaccessible for screen readers and unclear for users unfamiliar with the UI.\n**Action:** Add ToolTip.Tip properties to all icon-only buttons to ensure they convey their purpose.

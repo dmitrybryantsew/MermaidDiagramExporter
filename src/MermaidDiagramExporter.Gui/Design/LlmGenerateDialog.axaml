@@ -33,7 +33,7 @@
               <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,1">
                 <TextBlock Grid.Column="0" Text="&#x1F4C4;" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0" />
                 <TextBlock Grid.Column="1" Text="{Binding FileName}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <Button Grid.Column="2" Content="x" FontSize="10" MinWidth="24" Padding="2,0" Tag="{Binding}" Click="OnRemoveContextFile" />
+                <Button Grid.Column="2" Content="x" FontSize="10" MinWidth="24" Padding="2,0" Tag="{Binding}" Click="OnRemoveContextFile" ToolTip.Tip="Remove context file" />
               </Grid>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
