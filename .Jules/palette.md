@@ -1,0 +1,3 @@
+## 2024-03-20 - Adding Accessible Tooltips in Avalonia
+**Learning:** Avalonia UI lacks implicit title or aria-label attributes for icon-only buttons (like `+`, `-`, `×`, or `→`). Without a dedicated text label, these controls become opaque to screen readers and visually confusing for some users.
+**Action:** Use the `ToolTip.Tip` attached property on all icon-only or ambiguous `Button` elements to provide clear, actionable descriptions and ensure accessibility and discoverability.
