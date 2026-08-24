@@ -488,6 +488,7 @@
                   <!-- Visibility badge — click to cycle -->
                   <Button Grid.Column="0" Content="{Binding VisibilityBadge}" MinWidth="22"
                           FontSize="10" Padding="2,0" Tag="{Binding}"
+                          ToolTip.Tip="Toggle member visibility" AutomationProperties.Name="Toggle member visibility"
                           Click="OnInspectorCycleVisibility" Background="Transparent"
                           Foreground="{Binding VisibilityColor}"/>
                   <!-- Kind label -->
@@ -495,14 +496,15 @@
                              VerticalAlignment="Center" Opacity="0.6" Margin="2,0,4,0"/>
                   <!-- Name — editable -->
                   <TextBox Grid.Column="2" Text="{Binding Name, Mode=TwoWay}" FontSize="11"
-                           FontFamily="Consolas,monospace" Padding="2,0"
+                           FontFamily="Consolas,monospace" Padding="2,0" AutomationProperties.Name="Member name"
                            LostFocus="OnInspectorMemberNameChanged" Tag="{Binding}"/>
                   <!-- Type — editable -->
                   <TextBox Grid.Column="3" Text="{Binding TypeName, Mode=TwoWay}" FontSize="11"
-                           FontFamily="Consolas,monospace" Padding="2,0" Opacity="0.8"
+                           FontFamily="Consolas,monospace" Padding="2,0" Opacity="0.8" AutomationProperties.Name="Member type"
                            LostFocus="OnInspectorMemberTypeChanged" Tag="{Binding}"/>
                   <!-- Delete -->
                   <Button Grid.Column="4" Content="×" MinWidth="24" Padding="4,0"
+                          ToolTip.Tip="Delete member" AutomationProperties.Name="Delete member"
                           Tag="{Binding}" Click="OnInspectorDeleteMember"/>
                 </Grid>
               </DataTemplate>
@@ -522,7 +524,8 @@
                     <ComboBoxItem Content="Inheritance"/>
                     <ComboBoxItem Content="Implements"/>
                   </ComboBox>
-                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24"/>
+                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24"
+                          ToolTip.Tip="Jump to connected class" AutomationProperties.Name="Jump to connected class"/>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -541,7 +544,8 @@
                     <ComboBoxItem Content="Inheritance"/>
                     <ComboBoxItem Content="Implements"/>
                   </ComboBox>
-                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24"/>
+                  <Button Grid.Column="2" Content="→" Click="OnInspectorJumpToClass" MinWidth="24"
+                          ToolTip.Tip="Jump to connected class" AutomationProperties.Name="Jump to connected class"/>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
