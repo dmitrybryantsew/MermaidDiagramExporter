@@ -173,7 +173,8 @@
                             <TextBox Grid.Column="0" Text="{Binding Pattern}" PlaceholderText="Regex pattern" Margin="0,0,4,0" />
                             <TextBox Grid.Column="1" Text="{Binding Label}" PlaceholderText="Label" Margin="0,0,4,0" />
                             <TextBox Grid.Column="2" Text="{Binding ColorHex}" PlaceholderText="#RRGGBB" Margin="0,0,4,0" />
-                            <Button Grid.Column="3" Content="x" Tag="{Binding}" Click="OnRemoveStereotypeRule" />
+                            <Button Grid.Column="3" Content="x" Tag="{Binding}" Click="OnRemoveStereotypeRule"
+                                    ToolTip.Tip="Remove Rule" AutomationProperties.Name="Remove Stereotype Rule" />
                           </Grid>
                           <TextBlock x:Name="PatternErrorText" FontSize="10" Foreground="#FF6040" Margin="0,2,0,0" IsVisible="False" TextWrapping="Wrap" />
                         </StackPanel>
@@ -262,7 +263,7 @@
                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Model:" VerticalAlignment="Center" Width="120" />
                 <Grid Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto">
                   <TextBox  Grid.Column="0" x:Name="LlmModelText" Watermark="e.g. nim:z-ai/glm-5.1" />
-                  <Button Grid.Column="1" x:Name="LlmRefreshModelsButton" Content="&#x1F504;" MinWidth="36" Margin="4,0,0,0" ToolTip.Tip="Refresh model list from provider" Click="OnLlmRefreshModels" />
+                  <Button Grid.Column="1" x:Name="LlmRefreshModelsButton" Content="&#x1F504;" MinWidth="36" Margin="4,0,0,0" ToolTip.Tip="Refresh model list from provider" AutomationProperties.Name="Refresh LLM Models" Click="OnLlmRefreshModels" />
                 </Grid>
 
                 <TextBlock Grid.Row="4" Grid.Column="0" Text="Temperature:" VerticalAlignment="Center" Width="120" />
